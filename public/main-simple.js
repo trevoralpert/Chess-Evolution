@@ -1896,6 +1896,134 @@ function displayGlobalStats(stats) {
   document.getElementById('global-stats-content').innerHTML = html;
 }
 
+// Evolution system functions
+function showEvolutionUI() {
+  document.getElementById('evolution-ui').style.display = 'block';
+  refreshEvolutionBank();
+}
+
+function hideEvolutionUI() {
+  document.getElementById('evolution-ui').style.display = 'none';
+}
+
+function refreshEvolutionBank() {
+  socket.emit('get-evolution-bank');
+}
+
+function updateEvolutionBank(bankInfo) {
+  playerEvolutionBank = bankInfo;
+  document.getElementById('evolution-points').textContent = bankInfo.points;
+  document.getElementById('evolution-total-earned').textContent = bankInfo.totalEarned;
+}
+
+function showEvolutionChoice(data) {
+  currentEvolutionChoice = data;
+  
+  // Show evolution choice panel
+  document.getElementById('evolution-choice-panel').style.display = 'block';
+  
+  // Update piece info
+  document.getElementById('evolution-piece-name').textContent = `${data.piece.type} (${data.piece.symbol})`;
+  document.getElementById('evolution-piece-age').textContent = `Age: ${Math.floor(data.availablePaths[0]?.currentAliveTime || 0)}s`;
+  
+  // Display available paths
+  const pathsContainer = document.getElementById('evolution-paths');
+  pathsContainer.innerHTML = '';
+  
+  data.availablePaths.forEach(path => {
+    const pathDiv = document.createElement('div');
+    pathDiv.style.cssText = `
+      margin-bottom: 5px; 
+      padding: 8px; 
+      background: rgba(0, 0, 0, 0.2); 
+      border-radius: 3px; 
+      border: 1px solid ${path.canAfford && path.meetsRequirements ? '#00aa00' : '#666'};
+      cursor: ${path.canAfford && path.meetsRequirements ? 'pointer' : 'default'};
+    `;
+    
+    const rarityColors = {
+      'common': '#ffffff',
+      'uncommon': '#1eff00',
+      'rare': '#0070dd',
+      'epic': '#a335ee',
+      'legendary': '#ff8000'
+    };
+    
+    pathDiv.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center;">
+          <span style="font-size: 16px; margin-right: 8px;">${path.icon}</span>
+          <div>
+            <div style="color: ${rarityColors[path.rarity]}; font-weight: bold; font-size: 12px;">${path.name}</div>
+            <div style="color: #ccc; font-size: 10px;">${path.description}</div>
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <div style="color: #ffd700; font-size: 12px; font-weight: bold;">Cost: ${path.cost}</div>
+          <div style="color: #888; font-size: 10px;">
+            ${path.timeRequirement > 0 ? `Time: ${Math.floor(path.timeRequirement)}s` : 'No time req'}
+          </div>
+          ${!path.canAfford ? '<div style="color: #ff0000; font-size: 10px;">Not enough points</div>' : ''}
+          ${!path.meetsRequirements ? '<div style="color: #ff0000; font-size: 10px;">Requirements not met</div>' : ''}
+        </div>
+      </div>
+    `;
+    
+    if (path.canAfford && path.meetsRequirements) {
+      pathDiv.addEventListener('click', () => {
+        socket.emit('make-evolution-choice', { 
+          pieceId: data.pieceId, 
+          pathId: path.id 
+        });
+      });
+    }
+    
+    pathsContainer.appendChild(pathDiv);
+  });
+  
+  // Start timer
+  let timeLeft = data.timeLeft || 30;
+  evolutionTimer = setInterval(() => {
+    timeLeft--;
+    document.getElementById('evolution-timer').textContent = `Time left: ${timeLeft}s`;
+    
+    if (timeLeft <= 0) {
+      clearInterval(evolutionTimer);
+      hideEvolutionChoice();
+    }
+  }, 1000);
+}
+
+function hideEvolutionChoice() {
+  document.getElementById('evolution-choice-panel').style.display = 'none';
+  if (evolutionTimer) {
+    clearInterval(evolutionTimer);
+    evolutionTimer = null;
+  }
+  currentEvolutionChoice = null;
+}
+
+function handleEvolutionCompleted(data) {
+  // Hide choice panel
+  hideEvolutionChoice();
+  
+  // Show evolution notification
+  showNotification('Evolution Complete!', 
+    `${data.oldType} evolved to ${data.newType} for ${data.cost} points!`, 
+    'success');
+  
+  // Update bank
+  updateEvolutionBank({ 
+    points: data.newPoints, 
+    totalEarned: playerEvolutionBank.totalEarned 
+  });
+  
+  // Update game state if needed
+  if (gameState.pieces[data.pieceId]) {
+    gameState.pieces[data.pieceId].type = data.newType;
+  }
+}
+
 function startGameCountdown(countdown) {
   const countdownEl = document.getElementById('game-starting-countdown');
   const timerEl = document.getElementById('countdown-timer');
@@ -2219,6 +2347,9 @@ const mouse = new THREE.Vector2();
 function onMouseClick(event) {
   console.log('Click event triggered');
   
+  // Check if this is a right-click
+  const isRightClick = event.button === 2;
+  
   // For now, just allow all clicks - we can add drag detection later if needed
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -2252,15 +2383,20 @@ function onMouseClick(event) {
       console.log('Player ID match:', currentPlayer && piece.playerId === currentPlayer.id);
       
       if (currentPlayer && piece.playerId === currentPlayer.id) {
-        // Select this piece
-        selectedPieceId = piece.id;
-        highlightSelectedPiece(piece.id);
-        
-        // Request valid moves for this piece
-        socket.emit('get-valid-moves', { pieceId: piece.id });
-        
-        // Update UI
-        gameInfoEl.textContent = `Selected: ${piece.symbol} ${piece.type}`;
+        if (isRightClick) {
+          // Right-click: Request evolution options
+          socket.emit('request-evolution-choice', { pieceId: piece.id });
+        } else {
+          // Left-click: Select piece and show moves
+          selectedPieceId = piece.id;
+          highlightSelectedPiece(piece.id);
+          
+          // Request valid moves for this piece
+          socket.emit('get-valid-moves', { pieceId: piece.id });
+          
+          // Update UI
+          gameInfoEl.textContent = `Selected: ${piece.symbol} ${piece.type}`;
+        }
       } else {
         console.log('Cannot select opponent piece');
         gameInfoEl.textContent = 'Cannot select opponent piece';
@@ -2351,6 +2487,10 @@ function onMouseClick(event) {
 }
 
 window.addEventListener('click', onMouseClick);
+window.addEventListener('contextmenu', (event) => {
+  event.preventDefault(); // Prevent context menu on right-click
+});
+window.addEventListener('mousedown', onMouseClick);
 
 // Handle window resize
 window.addEventListener('resize', () => {
@@ -2444,6 +2584,40 @@ document.getElementById('leave-lobby-btn').addEventListener('click', () => {
 
 document.getElementById('ready-toggle-btn').addEventListener('click', () => {
   toggleReady();
+});
+
+// Evolution system functionality
+let currentEvolutionChoice = null;
+let evolutionTimer = null;
+let playerEvolutionBank = { points: 0, totalEarned: 0 };
+
+// Evolution event handlers
+document.getElementById('evolution-toggle').addEventListener('click', () => {
+  const evolutionUI = document.getElementById('evolution-ui');
+  if (evolutionUI.style.display === 'none') {
+    showEvolutionUI();
+  } else {
+    hideEvolutionUI();
+  }
+});
+
+document.getElementById('refresh-evolution-bank').addEventListener('click', () => {
+  refreshEvolutionBank();
+});
+
+document.getElementById('show-evolution-help').addEventListener('click', () => {
+  const helpDiv = document.getElementById('evolution-help');
+  if (helpDiv.style.display === 'none') {
+    helpDiv.style.display = 'block';
+  } else {
+    helpDiv.style.display = 'none';
+  }
+});
+
+document.getElementById('cancel-evolution').addEventListener('click', () => {
+  if (currentEvolutionChoice) {
+    socket.emit('cancel-evolution-choice', { pieceId: currentEvolutionChoice.pieceId });
+  }
 });
 
 // Statistics system functionality
@@ -3138,6 +3312,66 @@ socket.on('player-rank', (data) => {
 
 socket.on('game-history', (data) => {
   console.log('Game history:', data.history);
+});
+
+// Evolution system socket handlers
+socket.on('evolution-bank-info', (data) => {
+  updateEvolutionBank(data.bankInfo);
+});
+
+socket.on('evolution-choice-available', (data) => {
+  showEvolutionChoice(data);
+  showEvolutionUI(); // Auto-show evolution UI when choice is available
+});
+
+socket.on('evolution-choice-success', (data) => {
+  handleEvolutionCompleted(data);
+});
+
+socket.on('evolution-choice-failed', (data) => {
+  hideEvolutionChoice();
+  showNotification('Evolution Failed', data.error, 'error');
+});
+
+socket.on('evolution-choice-cancelled', (data) => {
+  hideEvolutionChoice();
+  showNotification('Evolution Cancelled', 'Evolution choice was cancelled', 'info');
+});
+
+socket.on('evolution-completed', (data) => {
+  // Handle evolution completed by other players
+  if (data.playerId !== socket.id) {
+    const playerName = gameState.players[data.playerId]?.name || 'Unknown';
+    showNotification('Player Evolution', 
+      `${playerName}'s ${data.oldType} evolved to ${data.newType}!`, 
+      'info');
+  }
+});
+
+socket.on('evolution-point-gained', (data) => {
+  if (data.playerId === socket.id) {
+    showNotification('Evolution Points', 
+      `+${data.points} points (${data.reason.replace('_', ' ')})`, 
+      'success');
+    
+    // Update evolution bank display if UI is open
+    if (document.getElementById('evolution-ui').style.display === 'block') {
+      refreshEvolutionBank();
+    }
+  }
+});
+
+socket.on('evolution-point-award', (data) => {
+  if (data.playerId === socket.id) {
+    showNotification('Evolution Points', 
+      `+${data.points} points (${data.reason.replace('_', ' ')})`, 
+      'success');
+    
+    // Update evolution bank display if UI is open
+    if (document.getElementById('evolution-ui').style.display === 'block') {
+      refreshEvolutionBank();
+    }
+  }
 });
 
 // Start animation

@@ -9,6 +9,7 @@ const SpectatorManager = require('./spectatorManager');
 const { AIManager, AI_DIFFICULTY } = require('./aiManager');
 const LobbyManager = require('./lobbyManager');
 const StatisticsManager = require('./statisticsManager');
+const EvolutionManager = require('./evolutionManager');
 
 const app = express();
 const server = http.createServer(app);
@@ -45,6 +46,12 @@ const lobbyManager = new LobbyManager();
 // Statistics and leaderboard management
 const statisticsManager = new StatisticsManager();
 
+// Evolution banking and choice management
+const evolutionManager = new EvolutionManager();
+
+// Setup cleanup intervals
+evolutionManager.setupCleanupInterval();
+
 io.on('connection', (socket) => {
   console.log(`New client connected: ${socket.id}`);
   
@@ -65,14 +72,25 @@ io.on('connection', (socket) => {
   const spawnArea = GAME_CONFIG.SPAWN_AREAS[playerIndex];
   const player = {
     id: socket.id,
+    name: `Player ${playerIndex + 1}`,
     index: playerIndex,
     color: getPlayerColor(playerIndex),
     spawnArea: spawnArea,
-    pieces: []
+    pieces: [],
+    stats: {
+      piecesLost: 0,
+      piecesEvolved: 0,
+      battlesWon: 0,
+      battlesLost: 0
+    }
   };
   
   gameState.players[socket.id] = player;
   gameState.playerCount = Object.keys(gameState.players).length;
+  
+  // Initialize evolution bank with starting points
+  evolutionManager.initializePlayerBank(socket.id);
+  evolutionManager.addEvolutionPoints(socket.id, 5, 'game_start'); // Starting with 5 evolution points
   
   // Start recording if this is the first player
   if (gameState.playerCount === 1) {
@@ -557,6 +575,110 @@ io.on('connection', (socket) => {
     socket.emit('achievements', { playerId: targetId, achievements });
   });
 
+  // Evolution system handlers
+  socket.on('request-evolution-choice', (data) => {
+    const { pieceId } = data;
+    const piece = gameState.pieces[pieceId];
+    
+    if (!piece || piece.playerId !== socket.id) {
+      socket.emit('evolution-choice-failed', { error: 'Invalid piece or not your piece' });
+      return;
+    }
+    
+    const choice = evolutionManager.createEvolutionChoice(pieceId, piece, socket.id);
+    
+    if (!choice) {
+      socket.emit('evolution-choice-failed', { error: 'No evolution paths available for this piece' });
+      return;
+    }
+    
+    socket.emit('evolution-choice-available', {
+      pieceId: pieceId,
+      piece: piece,
+      availablePaths: choice.availablePaths,
+      bankInfo: evolutionManager.getPlayerBankInfo(socket.id),
+      timeLeft: 30
+    });
+  });
+
+  socket.on('make-evolution-choice', (data) => {
+    const { pieceId, pathId } = data;
+    const result = evolutionManager.processEvolutionChoice(socket.id, pieceId, pathId);
+    
+    if (!result.success) {
+      socket.emit('evolution-choice-failed', { error: result.error });
+      return;
+    }
+    
+    // Apply the evolution to the piece
+    const piece = gameState.pieces[pieceId];
+    if (piece) {
+      const oldType = piece.type;
+      const newType = result.evolution.toType;
+      
+      // Update piece type and properties
+      const newPieceData = PIECE_TYPES[newType];
+      if (newPieceData) {
+        piece.type = newType;
+        piece.symbol = newPieceData.symbol;
+        piece.value = newPieceData.points;
+        
+        // Update game state
+        gameState.pieces[pieceId] = piece;
+        
+        // Record evolution in statistics
+        statisticsManager.recordEvolution(socket.id, oldType, newType, result.evolution.cost);
+        
+        // Broadcast evolution event
+        io.emit('evolution-completed', {
+          pieceId: pieceId,
+          playerId: socket.id,
+          oldType: oldType,
+          newType: newType,
+          cost: result.evolution.cost,
+          newPoints: result.evolution.newPoints,
+          position: { row: piece.row, col: piece.col }
+        });
+        
+        // Update game state
+        broadcastGameState();
+      }
+    }
+    
+    socket.emit('evolution-choice-success', {
+      pieceId: pieceId,
+      evolution: result.evolution,
+      bankInfo: evolutionManager.getPlayerBankInfo(socket.id)
+    });
+  });
+
+  socket.on('cancel-evolution-choice', (data) => {
+    const { pieceId } = data;
+    const success = evolutionManager.cancelEvolutionChoice(socket.id, pieceId);
+    
+    if (success) {
+      socket.emit('evolution-choice-cancelled', { pieceId });
+    } else {
+      socket.emit('evolution-choice-failed', { error: 'No pending choice to cancel' });
+    }
+  });
+
+  socket.on('get-evolution-bank', () => {
+    const bankInfo = evolutionManager.getPlayerBankInfo(socket.id);
+    socket.emit('evolution-bank-info', { bankInfo });
+  });
+
+  socket.on('get-evolution-leaderboard', (data) => {
+    const { limit = 10 } = data;
+    const leaderboard = evolutionManager.getEvolutionLeaderboard(limit);
+    socket.emit('evolution-leaderboard', { leaderboard });
+  });
+
+  socket.on('get-evolution-stats', () => {
+    const stats = evolutionManager.getEvolutionStats();
+    socket.emit('evolution-stats', { stats });
+  });
+
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`);
     
@@ -729,7 +851,7 @@ function startGameFromLobby(lobbyId) {
       index: index,
       name: lobbyPlayer.name,
       color: getPlayerColor(index),
-      evolutionPoints: GAME_CONFIG.STARTING_EVOLUTION_POINTS,
+
       pieces: [],
       spawnArea: spawnArea,
       isAI: false,
@@ -767,6 +889,10 @@ function startGameFromLobby(lobbyId) {
   Object.values(gameState.players).forEach(player => {
     statisticsManager.recordGameStart(player.id, gameId, gameState.gameMode);
     statisticsManager.initPlayerStats(player.id, player.name);
+    
+    // Initialize evolution bank with starting points
+    evolutionManager.initializePlayerBank(player.id);
+    evolutionManager.addEvolutionPoints(player.id, 5, 'game_start'); // Starting with 5 evolution points
   });
   
   // Start recording for spectators
@@ -818,6 +944,9 @@ function createStartingPieces(player) {
   gameState.grid[GridUtils.getPositionKey(kingRow, kingCol)] = king.id;
   player.pieces.push(king.id);
   
+  // Track piece birth for evolution system
+  evolutionManager.trackPieceBirth(king.id, king);
+  
   // Create Pawns
   GAME_CONFIG.STARTING_FORMATION.PAWNS.forEach((pawnPos, index) => {
     const pawnRow = baseRow + pawnPos.row;
@@ -838,6 +967,9 @@ function createStartingPieces(player) {
     gameState.pieces[pawn.id] = pawn;
     gameState.grid[GridUtils.getPositionKey(pawnRow, pawnCol)] = pawn.id;
     player.pieces.push(pawn.id);
+    
+    // Track piece birth for evolution system
+    evolutionManager.trackPieceBirth(pawn.id, pawn);
   });
 }
 
@@ -1170,14 +1302,16 @@ function handlePieceMove(playerId, moveData) {
   
   // Check for circumnavigation bonus (pawns and splitters reaching opposite pole)
   if ((piece.type === 'PAWN' || piece.type === 'SPLITTER') && checkCircumnavigation(piece)) {
-    piece.evolutionPoints = (piece.evolutionPoints || 0) + 8;
-    console.log(`${piece.symbol} completed circumnavigation! +8 evolution points (${piece.evolutionPoints} total)`);
+    const bank = evolutionManager.addEvolutionPoints(piece.playerId, 8, 'circumnavigation');
+    console.log(`${piece.symbol} completed circumnavigation! +8 evolution points (${bank.points} total)`);
     
     // Broadcast evolution point award
     io.emit('evolution-point-award', {
       pieceId: piece.id,
       pieceType: piece.type,
-      points: piece.evolutionPoints,
+      playerId: piece.playerId,
+      points: 8,
+      totalPoints: bank.points,
       reason: 'circumnavigation',
       position: { row: piece.row, col: piece.col }
     });
@@ -1219,11 +1353,11 @@ function checkSplitterBalance(piece, playerId) {
   }
   
   // Check evolution point cost: 2 points required
-  const evolutionPoints = piece.evolutionPoints || 0;
-  if (evolutionPoints < 2) {
+  const bank = evolutionManager.getPlayerBankInfo(playerId);
+  if (bank.points < 2) {
     return { 
       allowed: false, 
-      reason: `Splitter needs 2 evolution points to split (has ${evolutionPoints})` 
+      reason: `Splitter needs 2 evolution points to split (has ${bank.points})` 
     };
   }
   
@@ -1245,8 +1379,9 @@ function checkSplitterBalance(piece, playerId) {
 function applySplitCosts(piece, playerId) {
   const currentTurn = gameState.currentTurn || 0;
   
-  // Deduct evolution points
-  piece.evolutionPoints = (piece.evolutionPoints || 0) - 2;
+  // Deduct evolution points from bank
+  const bank = evolutionManager.getPlayerBankInfo(playerId);
+  evolutionManager.addEvolutionPoints(playerId, -2, 'splitter_split_cost');
   
   // Set cooldown
   piece.lastSplitTurn = currentTurn;
@@ -1258,9 +1393,10 @@ function applySplitCosts(piece, playerId) {
   console.log(`Splitter split cost applied: -2 evolution points, cooldown until turn ${currentTurn + 3}`);
   
   // Broadcast split cost event
+  const updatedBank = evolutionManager.getPlayerBankInfo(playerId);
   io.emit('split-cost-applied', {
     pieceId: piece.id,
-    evolutionPoints: piece.evolutionPoints,
+    evolutionPoints: updatedBank.points,
     cooldownTurns: 3,
     weakenedTurns: 2
   });
@@ -1288,15 +1424,17 @@ function checkEquatorBonus(piece) {
   // Check if this is the first time reaching the equator
   if (isOnEquator && !piece.hasReachedEquator) {
     piece.hasReachedEquator = true;
-    piece.evolutionPoints = (piece.evolutionPoints || 0) + 1;
+    const bank = evolutionManager.addEvolutionPoints(piece.playerId, 1, 'equator_bonus');
     
-    console.log(`${piece.symbol} reached the equator! +1 evolution point (${piece.evolutionPoints} total)`);
+    console.log(`${piece.symbol} reached the equator! +1 evolution point (${bank.points} total)`);
     
     // Broadcast equator bonus event
     io.emit('equator-bonus', {
       pieceId: piece.id,
       pieceType: piece.type,
-      points: piece.evolutionPoints,
+      playerId: piece.playerId,
+      points: 1,
+      totalPoints: bank.points,
       position: { row: piece.row, col: piece.col }
     });
   }
@@ -1423,6 +1561,9 @@ function handlePieceSplit(playerId, splitData) {
   gameState.grid[targetPosKey] = splitPieceId;
   player.pieces.push(splitPieceId);
   
+  // Track birth of new split piece
+  evolutionManager.trackPieceBirth(splitPieceId, splitPiece);
+  
   // Apply split costs and cooldown
   applySplitCosts(piece, playerId);
   
@@ -1431,6 +1572,9 @@ function handlePieceSplit(playerId, splitData) {
     originalPosition: { row: piece.row, col: piece.col },
     newPosition: { row: targetRow, col: targetCol }
   });
+  
+  // Update evolution manager piece stats
+  evolutionManager.updatePieceStats(pieceId, 'splits');
   
   const successMsg = `Splitter ${piece.symbol} split to (${targetRow}, ${targetCol})`;
   console.log(successMsg);
@@ -1685,6 +1829,11 @@ function completeBattleResolution(winner, loser) {
     statisticsManager.recordBattle(winner.playerId, 'combat', 'win', loser.playerId);
     statisticsManager.recordBattle(loser.playerId, 'combat', 'loss', winner.playerId);
     
+    // Update evolution manager piece stats
+    evolutionManager.updatePieceStats(winner.id, 'battlesWon');
+    evolutionManager.updatePieceStats(winner.id, 'piecesKilled');
+    evolutionManager.updatePieceStats(loser.id, 'battlesLost');
+    
     // Update session stats if available
     if (battleWinnerPlayer.stats.currentSession) {
       battleWinnerPlayer.stats.currentSession.battles++;
@@ -1699,13 +1848,15 @@ function completeBattleResolution(winner, loser) {
   
   // Award evolution points for attacking splitters
   if (loser.type === 'SPLITTER') {
-    winner.evolutionPoints = (winner.evolutionPoints || 0) + 1;
-    console.log(`${winner.symbol} gains evolution point for defeating Splitter! (${winner.evolutionPoints} total)`);
+    const bank = evolutionManager.addEvolutionPoints(winner.playerId, 1, 'defeated_splitter');
+    console.log(`${winner.symbol} gains evolution point for defeating Splitter! (${bank.points} total)`);
     
     // Broadcast evolution point gain
     io.emit('evolution-point-gained', {
       winnerId: winner.id,
-      points: winner.evolutionPoints,
+      playerId: winner.playerId,
+      points: 1,
+      totalPoints: bank.points,
       reason: 'defeated_splitter'
     });
   }
@@ -1714,6 +1865,9 @@ function completeBattleResolution(winner, loser) {
   const loserPosKey = GridUtils.getPositionKey(loser.row, loser.col);
   delete gameState.grid[loserPosKey];
   delete gameState.pieces[loser.id];
+  
+  // Clean up evolution tracking for dead piece
+  evolutionManager.handlePieceDeath(loser.id);
   
   // Remove from player's pieces array
   const loserPlayer = gameState.players[loser.playerId];
@@ -2297,12 +2451,21 @@ function initializeTournamentPlayers(gameState, player1, player2) {
       index: index,
       pieces: [],
       spawnArea: spawnArea,
-      evolutionPoints: 0,
-      isInTournament: true
+      isInTournament: true,
+      stats: {
+        piecesLost: 0,
+        piecesEvolved: 0,
+        battlesWon: 0,
+        battlesLost: 0
+      }
     };
     
     gameState.players[player.id] = playerData;
     gameState.playerCount++;
+    
+    // Initialize evolution bank with starting points
+    evolutionManager.initializePlayerBank(player.id);
+    evolutionManager.addEvolutionPoints(player.id, 5, 'tournament_start');
     
     // Create pieces for this player
     const pieceIds = createPiecesForPlayer(gameState, player.id, spawnArea);

@@ -48,6 +48,7 @@
     <div id="game-info">Waiting for players...</div>
     <div style="margin-top: 10px;">
       <button id="lobby-toggle" style="padding: 5px 10px; background: #00aaff; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">🏠 Lobby System</button>
+      <button id="evolution-toggle" style="padding: 5px 10px; background: #6600cc; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; margin-left: 5px;">🧬 Evolution</button>
       <button id="stats-toggle" style="padding: 5px 10px; background: #cc00cc; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; margin-left: 5px;">📊 Statistics</button>
       <button id="tournament-toggle" style="padding: 5px 10px; background: #4444ff; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; margin-left: 5px;">🏆 Tournament Mode</button>
       <button id="spectator-toggle" style="padding: 5px 10px; background: #ff6600; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; margin-left: 5px;">👁️ Spectator Mode</button>
@@ -216,10 +217,49 @@
          <div id="global-stats-content" style="color: #fff; font-size: 11px; max-height: 250px; overflow-y: auto; padding: 5px; background: rgba(0, 0, 0, 0.3); border-radius: 3px;">
            <div style="color: #888;">Loading global statistics...</div>
          </div>
-       </div>
-     </div>
-     
-     <div id="spectator-ui" style="display: none; margin-top: 10px; padding: 10px; background: rgba(100, 50, 0, 0.3); border-radius: 5px; border: 1px solid #ff6600;">
+             </div>
+    </div>
+    
+    <div id="evolution-ui" style="display: none; margin-top: 10px; padding: 10px; background: rgba(100, 0, 200, 0.3); border-radius: 5px; border: 1px solid #6600cc;">
+      <div style="font-size: 14px; margin-bottom: 10px; color: #6600cc;">🧬 Evolution System</div>
+      <div id="evolution-bank" style="margin-bottom: 10px; padding: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 3px;">
+        <div style="color: #6600cc; font-size: 12px; margin-bottom: 5px;">Evolution Bank</div>
+        <div style="display: flex; justify-content: space-between; color: #fff; font-size: 11px;">
+          <span>Available Points: <span id="evolution-points">0</span></span>
+          <span>Total Earned: <span id="evolution-total-earned">0</span></span>
+        </div>
+      </div>
+      
+      <div id="evolution-choice-panel" style="display: none; margin-bottom: 10px; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; border: 1px solid #6600cc;">
+        <div style="color: #6600cc; font-size: 13px; margin-bottom: 8px;">Choose Evolution Path</div>
+        <div id="evolution-piece-info" style="margin-bottom: 8px; color: #fff; font-size: 11px;">
+          <span id="evolution-piece-name">Piece</span> - <span id="evolution-piece-age">Age: 0s</span>
+        </div>
+        <div id="evolution-paths" style="margin-bottom: 8px;">
+          <!-- Evolution paths will be populated here -->
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div id="evolution-timer" style="color: #ff6600; font-size: 10px;">Time left: 30s</div>
+          <button id="cancel-evolution" style="padding: 3px 8px; background: #cc0000; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">Cancel</button>
+        </div>
+      </div>
+      
+      <div id="evolution-controls" style="display: flex; gap: 10px; margin-bottom: 10px;">
+        <button id="refresh-evolution-bank" style="padding: 5px 10px; background: #6600cc; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">Refresh Bank</button>
+        <button id="show-evolution-help" style="padding: 5px 10px; background: #4400aa; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">Help</button>
+      </div>
+      
+      <div id="evolution-help" style="display: none; padding: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; color: #ccc; font-size: 10px;">
+        <div style="color: #6600cc; font-weight: bold; margin-bottom: 5px;">Evolution System Guide:</div>
+        <div>• Right-click pieces to see available evolution paths</div>
+        <div>• Different pieces have different evolution costs and time requirements</div>
+        <div>• Pieces must survive for a certain time to unlock advanced evolutions</div>
+        <div>• Some evolutions require battle experience or special achievements</div>
+        <div>• You have 30 seconds to choose when evolution options appear</div>
+      </div>
+    </div>
+    
+    <div id="spectator-ui" style="display: none; margin-top: 10px; padding: 10px; background: rgba(100, 50, 0, 0.3); border-radius: 5px; border: 1px solid #ff6600;">
       <div style="font-size: 14px; margin-bottom: 10px; color: #ff6600;">👁️ Spectator Mode</div>
       <div id="spectator-lobby" style="display: block;">
         <div style="display: flex; gap: 10px; margin-bottom: 10px;">
