@@ -204,17 +204,22 @@ const MOVEMENT_PATTERNS = {
   splitter: {
     type: 'enhanced_pawn',
     directions: [
-      { row: -1, col: 0 }, // Forward
+      { row: 1, col: 0 }, // Forward (adjusted for spherical geometry)
       { row: 0, col: -1 }, // Left
       { row: 0, col: 1 }   // Right
     ],
     attackDirections: [
-      { row: -1, col: -1 }, { row: -1, col: 1 },
+      { row: 1, col: -1 }, { row: 1, col: 1 },
       { row: 0, col: -1 },  { row: 0, col: 1 }
+    ],
+    splitDirections: [
+      { row: 1, col: 0 }, // Can split forward
+      { row: 0, col: -1 }, // Can split left
+      { row: 0, col: 1 }   // Can split right
     ],
     maxDistance: 1,
     jumpOver: false,
-    specialAbility: 'split' // Can create a copy when attacking
+    specialAbility: 'split' // Can create a copy when splitting
   },
   
   jumper: {

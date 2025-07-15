@@ -149,22 +149,20 @@ const statusEl = document.getElementById('status');
 const modelCache = {};
 const modelLoader = new THREE.GLTFLoader();
 
-// Model file mappings - temporarily disabled since GLB files don't exist
+// Model file mappings - using finalized GLB files from Final pieces folder
 const MODEL_PATHS = {
-  // GLB files don't exist yet, so we'll use geometric shapes as fallback
-  // When GLB files are added, uncomment these paths:
-  // 'KING': './chess piece models/King_0715002803_texture.glb',
-  // 'QUEEN': './chess piece models/Queen_0715002143_texture.glb',
-  // 'ROOK': './chess piece models/Rook_0715001113_texture.glb',
-  // 'KNIGHT': './chess piece models/Knight_0715000805_texture.glb',
-  // 'BISHOP': './chess piece models/Bishop_0715000145_texture.glb',
-  // 'PAWN': './chess piece models/uploads_files_6234231_Chess.glb',
-  // 'SPLITTER': './chess piece models/Splitter_0714232449_texture.glb',
-  // 'JUMPER': './chess piece models/JUMPER.glb',
-  // 'SUPER_JUMPER': './chess piece models/SUPER_JUMPER.glb',
-  // 'HYPER_JUMPER': './chess piece models/HYPER_JUMPER.glb',
-  // 'MISTRESS_JUMPER': './chess piece models/MISTRESS_JUMPER.glb',
-  // 'HYBRID_QUEEN': './chess piece models/Queen_0715002143_texture.glb'
+  'KING': './chess piece models/Final pieces/KING.glb',
+  'QUEEN': './chess piece models/Final pieces/QUEEN.glb',
+  'ROOK': './chess piece models/Final pieces/ROOK.glb',
+  'KNIGHT': './chess piece models/Final pieces/KNIGHT.glb',
+  'BISHOP': './chess piece models/Final pieces/BISHOP.glb',
+  'PAWN': './chess piece models/Final pieces/PAWN.glb',
+  'SPLITTER': './chess piece models/Final pieces/SPLITTER.glb',
+  'JUMPER': './chess piece models/Final pieces/JUMPER.glb',
+  'SUPER_JUMPER': './chess piece models/Final pieces/SUPER_JUMPER.glb',
+  'HYPER_JUMPER': './chess piece models/Final pieces/HYPER_JUMPER.glb',
+  'MISTRESS_JUMPER': './chess piece models/Final pieces/MISTRESS_JUMPER.glb',
+  'HYBRID_QUEEN': './chess piece models/Final pieces/HYBRID_QUEEN.glb'
 };
 
 // Load a 3D model with caching
@@ -490,6 +488,74 @@ socket.on('game-victory', (data) => {
   // Disable further interactions
   selectedPieceId = null;
   clearValidMoveHighlights();
+});
+
+socket.on('piece-split', (data) => {
+  const { originalPieceId, newPieceId, originalPosition, newPosition, playerId } = data;
+  console.log(`Piece split: ${originalPieceId} created copy ${newPieceId} at (${newPosition.row}, ${newPosition.col})`);
+  
+  // Show split notification
+  const player = gameState.players[playerId];
+  const playerIndex = Object.keys(gameState.players).indexOf(playerId) + 1;
+  showNotification(`Player ${playerIndex} Splitter Split!`, player.color, 2000);
+  
+  // Create split effect animation
+  const originalWorldPos = getWorldPosition(originalPosition.row, originalPosition.col);
+  const newWorldPos = getWorldPosition(newPosition.row, newPosition.col);
+  
+  // Create splitting effect - line between original and new position
+  const splitLineGeometry = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(originalWorldPos.x, originalWorldPos.y, originalWorldPos.z),
+    new THREE.Vector3(newWorldPos.x, newWorldPos.y, newWorldPos.z)
+  ]);
+  
+  const splitLineMaterial = new THREE.LineBasicMaterial({
+    color: 0xFF6B6B, // Red color for splitter
+    linewidth: 3,
+    transparent: true,
+    opacity: 0.8
+  });
+  
+  const splitLine = new THREE.Line(splitLineGeometry, splitLineMaterial);
+  scene.add(splitLine);
+  
+  // Animate the split line
+  let opacity = 0.8;
+  const animateSplitLine = () => {
+    opacity -= 0.05;
+    splitLine.material.opacity = opacity;
+    
+    if (opacity > 0) {
+      requestAnimationFrame(animateSplitLine);
+    } else {
+      scene.remove(splitLine);
+      splitLineGeometry.dispose();
+      splitLineMaterial.dispose();
+    }
+  };
+  
+  // Start animation after a short delay
+  setTimeout(() => {
+    animateSplitLine();
+  }, 500);
+});
+
+socket.on('split-result', (data) => {
+  const { success, message } = data;
+  if (success) {
+    console.log('Split successful:', message);
+    gameInfoEl.textContent = 'Split successful!';
+    gameInfoEl.style.color = '#4CAF50';
+  } else {
+    console.log('Split failed:', message);
+    gameInfoEl.textContent = `Split failed: ${message}`;
+    gameInfoEl.style.color = '#f44336';
+  }
+  
+  // Reset UI color after 3 seconds
+  setTimeout(() => {
+    gameInfoEl.style.color = '#ffffff';
+  }, 3000);
 });
 
 function showNotification(message, color, duration) {
@@ -911,15 +977,25 @@ function highlightValidMoves() {
   validMoves.forEach(move => {
     const position = getWorldPosition(move.row, move.col);
     
-    // Different colors for different move types
-    const isAttack = move.type === 'attack';
-    const highlightColor = isAttack ? 0xff4444 : 0x44ff44; // Red for attack, green for move
+    // Different colors and shapes for different move types
+    let highlightColor, highlightGeometry;
     
-    const highlightGeometry = new THREE.SphereGeometry(0.15, 8, 8); // Bigger for easier clicking
+    if (move.type === 'attack') {
+      highlightColor = 0xff4444; // Red for attack
+      highlightGeometry = new THREE.SphereGeometry(0.15, 8, 8);
+    } else if (move.type === 'split') {
+      highlightColor = 0xff6b6b; // Lighter red for split
+      highlightGeometry = new THREE.OctahedronGeometry(0.12); // Different shape for split
+    } else {
+      highlightColor = 0x44ff44; // Green for regular move
+      highlightGeometry = new THREE.SphereGeometry(0.15, 8, 8);
+    }
+    
     const highlightMaterial = new THREE.MeshBasicMaterial({
       color: highlightColor,
       transparent: true,
-      opacity: 0.8
+      opacity: 0.8,
+      wireframe: move.type === 'split' // Wireframe for split moves to make them distinctive
     });
     
     const highlight = new THREE.Mesh(highlightGeometry, highlightMaterial);
@@ -927,7 +1003,7 @@ function highlightValidMoves() {
     highlight.userData = { isValidMoveHighlight: true, move: move };
     
     scene.add(highlight);
-    console.log(`Added move highlight at (${move.row}, ${move.col}) - ${move.type}`);
+    console.log(`Added ${move.type} highlight at (${move.row}, ${move.col})`);
   });
 }
 
@@ -1076,21 +1152,33 @@ function onMouseClick(event) {
       // Find the currently selected piece by checking which piece has valid moves displayed
       const currentSelectedPieceId = getCurrentlySelectedPieceId();
       if (currentSelectedPieceId) {
-        // Send move command to server
-        socket.emit('move-piece', {
-          pieceId: currentSelectedPieceId,
-          targetRow: move.row,
-          targetCol: move.col
-        });
+        if (move.type === 'split') {
+          // Send split command to server
+          socket.emit('split-piece', {
+            pieceId: currentSelectedPieceId,
+            targetRow: move.row,
+            targetCol: move.col
+          });
+          
+          // Update UI
+          gameInfoEl.textContent = `Splitting piece...`;
+          console.log(`Splitting piece ${currentSelectedPieceId} to (${move.row}, ${move.col})`);
+        } else {
+          // Send regular move command to server
+          socket.emit('move-piece', {
+            pieceId: currentSelectedPieceId,
+            targetRow: move.row,
+            targetCol: move.col
+          });
+          
+          // Update UI
+          gameInfoEl.textContent = `Moving piece...`;
+          console.log(`Moving piece ${currentSelectedPieceId} to (${move.row}, ${move.col})`);
+        }
         
-        // Clear highlights after moving
+        // Clear highlights after action
         clearValidMoveHighlights();
         selectedPieceId = null;
-        
-        // Update UI
-        gameInfoEl.textContent = `Moving piece...`;
-        
-        console.log(`Moving piece ${currentSelectedPieceId} to (${move.row}, ${move.col})`);
       }
     }
     

@@ -66,6 +66,14 @@ io.on('connection', (socket) => {
     }
   });
   
+  socket.on('split-piece', (data) => {
+    const result = handlePieceSplit(socket.id, data);
+    if (result) {
+      // Send confirmation back to the client
+      socket.emit('split-result', { success: true, message: result.message });
+    }
+  });
+  
   socket.on('get-valid-moves', (data) => {
     const validMoves = getValidMoves(data.pieceId);
     socket.emit('valid-moves', { pieceId: data.pieceId, moves: validMoves });
@@ -229,6 +237,110 @@ function handlePieceMove(playerId, moveData) {
   return { success: true, message: successMsg };
 }
 
+function handlePieceSplit(playerId, splitData) {
+  const { pieceId, targetRow, targetCol } = splitData;
+  const piece = gameState.pieces[pieceId];
+  
+  // Validate split
+  if (!piece || piece.playerId !== playerId) {
+    const errorMsg = `Invalid split: piece ${pieceId} does not belong to player ${playerId}`;
+    console.log(errorMsg);
+    const playerSocket = io.sockets.sockets.get(playerId);
+    if (playerSocket) {
+      playerSocket.emit('split-result', { success: false, message: errorMsg });
+    }
+    return null;
+  }
+  
+  // Only splitters can split
+  if (piece.type !== 'SPLITTER') {
+    const errorMsg = `Invalid split: only Splitters can split`;
+    console.log(errorMsg);
+    const playerSocket = io.sockets.sockets.get(playerId);
+    if (playerSocket) {
+      playerSocket.emit('split-result', { success: false, message: errorMsg });
+    }
+    return null;
+  }
+  
+  if (!GridUtils.isValidPosition(targetRow, targetCol)) {
+    const errorMsg = `Invalid split: target position (${targetRow}, ${targetCol}) is out of bounds`;
+    console.log(errorMsg);
+    const playerSocket = io.sockets.sockets.get(playerId);
+    if (playerSocket) {
+      playerSocket.emit('split-result', { success: false, message: errorMsg });
+    }
+    return null;
+  }
+  
+  // Check if this split is valid according to piece split rules
+  const validMoves = getValidMoves(pieceId);
+  const isValidSplit = validMoves.some(move => 
+    move.row === targetRow && move.col === targetCol && move.type === 'split'
+  );
+  
+  if (!isValidSplit) {
+    const errorMsg = `Invalid split: (${targetRow}, ${targetCol}) is not a valid split position for piece ${pieceId}`;
+    console.log(errorMsg);
+    const playerSocket = io.sockets.sockets.get(playerId);
+    if (playerSocket) {
+      playerSocket.emit('split-result', { success: false, message: errorMsg });
+    }
+    return null;
+  }
+  
+  // Check if target position is occupied
+  const targetPosKey = GridUtils.getPositionKey(targetRow, targetCol);
+  const targetPieceId = gameState.grid[targetPosKey];
+  
+  if (targetPieceId) {
+    const errorMsg = `Invalid split: target position is occupied`;
+    console.log(errorMsg);
+    const playerSocket = io.sockets.sockets.get(playerId);
+    if (playerSocket) {
+      playerSocket.emit('split-result', { success: false, message: errorMsg });
+    }
+    return null;
+  }
+  
+  // Create the split piece (duplicate)
+  const player = gameState.players[playerId];
+  const splitPieceId = `${playerId}-splitter-split-${Date.now()}`;
+  const splitPiece = {
+    id: splitPieceId,
+    playerId: playerId,
+    type: 'SPLITTER',
+    value: PIECE_TYPES.SPLITTER.points,
+    symbol: PIECE_TYPES.SPLITTER.symbol,
+    row: targetRow,
+    col: targetCol,
+    kills: 0,
+    timeAlive: 0,
+    isSplitCopy: true // Mark this as a split copy
+  };
+  
+  // Add the split piece to the game
+  gameState.pieces[splitPieceId] = splitPiece;
+  gameState.grid[targetPosKey] = splitPieceId;
+  player.pieces.push(splitPieceId);
+  
+  const successMsg = `Splitter ${piece.symbol} split to (${targetRow}, ${targetCol})`;
+  console.log(successMsg);
+  
+  // Broadcast split event
+  io.emit('piece-split', {
+    originalPieceId: pieceId,
+    newPieceId: splitPieceId,
+    originalPosition: { row: piece.row, col: piece.col },
+    newPosition: { row: targetRow, col: targetCol },
+    playerId: playerId
+  });
+  
+  broadcastGameState();
+  
+  return { success: true, message: successMsg };
+}
+
 function handleBattle(attackingPiece, defendingPiece) {
   console.log(`Battle: ${attackingPiece.symbol} (${attackingPiece.value}pts) vs ${defendingPiece.symbol} (${defendingPiece.value}pts)`);
   
@@ -344,6 +456,19 @@ function resolveBattleImmediate(attackingPiece, defendingPiece) {
 function completeBattleResolution(winner, loser) {
   // Increment winner's kill count
   winner.kills = (winner.kills || 0) + 1;
+  
+  // Award evolution points for attacking splitters
+  if (loser.type === 'SPLITTER') {
+    winner.evolutionPoints = (winner.evolutionPoints || 0) + 1;
+    console.log(`${winner.symbol} gains evolution point for defeating Splitter! (${winner.evolutionPoints} total)`);
+    
+    // Broadcast evolution point gain
+    io.emit('evolution-point-gained', {
+      winnerId: winner.id,
+      points: winner.evolutionPoints,
+      reason: 'defeated_splitter'
+    });
+  }
   
   // Remove loser from game
   const loserPosKey = GridUtils.getPositionKey(loser.row, loser.col);
@@ -519,6 +644,24 @@ function getValidMoves(pieceId) {
         }
       }
     });
+    
+    // Check split directions (SPLITTER only)
+    if (piece.type === 'SPLITTER' && movementPattern.splitDirections) {
+      movementPattern.splitDirections.forEach(dir => {
+        const targetRow = piece.row + dir.row;
+        const targetCol = GridUtils.normalizeCol(piece.col + dir.col);
+        
+        if (GridUtils.isValidPosition(targetRow, targetCol)) {
+          const posKey = GridUtils.getPositionKey(targetRow, targetCol);
+          const occupyingPieceId = gameState.grid[posKey];
+          
+          if (!occupyingPieceId) {
+            // Only allow split to empty squares
+            validMoves.push({ row: targetRow, col: targetCol, type: 'split' });
+          }
+        }
+      });
+    }
     
   } else {
     // Standard movement patterns (omnidirectional, diagonal, orthogonal, etc.)
