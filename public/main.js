@@ -45,6 +45,61 @@ const sphereMaterial = new THREE.MeshStandardMaterial({
 const globe = new THREE.Mesh(sphereGeometry, sphereMaterial);
 scene.add(globe);
 
+// Grid overlay
+const gridSquares = [];
+const poleMarkers = [];
+
+function createGridOverlay() {
+  // Create grid squares
+  for (let row = 0; row < 20; row++) {
+    for (let col = 0; col < 8; col++) {
+      const position = getWorldPosition(row, col);
+      
+      // Calculate square size based on latitude (larger at equator)
+      const latFactor = Math.sin(THREE.MathUtils.degToRad(90 - (row / 19) * 180));
+      const squareSize = 0.15 + (latFactor * 0.1);
+      
+      // Check if this is a pole position
+      const isPole = (row === 0 || row === 19);
+      
+      if (isPole) {
+        // Create special pole marker (octagon/circle)
+        const poleGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.02, 8);
+        const poleMaterial = new THREE.MeshBasicMaterial({ 
+          color: row === 0 ? 0xffd700 : 0xff4500, // Gold for north, orange for south
+          transparent: true,
+          opacity: 0.3
+        });
+        const poleMarker = new THREE.Mesh(poleGeometry, poleMaterial);
+        poleMarker.position.set(position.x, position.y, position.z);
+        poleMarker.lookAt(0, 0, 0);
+        scene.add(poleMarker);
+        poleMarkers.push(poleMarker);
+      } else {
+        // Create regular grid square
+        const squareGeometry = new THREE.PlaneGeometry(squareSize, squareSize);
+        const squareMaterial = new THREE.MeshBasicMaterial({ 
+          color: 0x666666,
+          transparent: true,
+          opacity: 0.1,
+          side: THREE.DoubleSide
+        });
+        const square = new THREE.Mesh(squareGeometry, squareMaterial);
+        square.position.set(position.x, position.y, position.z);
+        square.lookAt(0, 0, 0);
+        square.userData = { gridRow: row, gridCol: col };
+        scene.add(square);
+        gridSquares.push(square);
+      }
+    }
+  }
+  
+  console.log(`Created ${gridSquares.length} grid squares and ${poleMarkers.length} pole markers`);
+}
+
+// Create grid overlay on startup
+createGridOverlay();
+
 console.log('Globe created and added to scene');
 
 // Lighting

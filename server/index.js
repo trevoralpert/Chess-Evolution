@@ -257,16 +257,16 @@ function checkCircumnavigation(piece) {
   const player = gameState.players[piece.playerId];
   if (!player) return false;
   
-  const playerSpawnArea = GAME_CONFIG.SPAWN_AREAS[player.index];
-  const spawnRow = playerSpawnArea.baseRow;
+  const spawnRow = player.spawnArea.baseRow;
+  const isNorthPole = spawnRow <= 9; // North half of sphere
   
   // Determine opposite pole based on spawn position
   let oppositeRow;
-  if (spawnRow === 0) {
-    // Spawned at north pole (row 0), opposite is south pole (row 19)
+  if (isNorthPole) {
+    // Spawned at north pole, opposite is south pole (row 19)
     oppositeRow = GAME_CONFIG.GRID_ROWS - 1;
   } else {
-    // Spawned at south pole or other position, opposite is north pole (row 0)
+    // Spawned at south pole, opposite is north pole (row 0)
     oppositeRow = 0;
   }
   
@@ -646,8 +646,27 @@ function getValidMoves(pieceId) {
   // Handle different movement pattern types
   if (movementPattern.type === 'directional' || movementPattern.type === 'enhanced_pawn' || movementPattern.type === 'latitude_based') {
     // Pawn and Splitter movement - separate move and attack directions
-    const moveDirections = movementPattern.directions || [];
-    const attackDirections = movementPattern.attackDirections || movementPattern.directions;
+    let moveDirections = movementPattern.directions || [];
+    let attackDirections = movementPattern.attackDirections || movementPattern.directions;
+    
+    // For pawns, determine movement direction based on player's spawn position
+    if (piece.type === 'PAWN') {
+      const player = gameState.players[piece.playerId];
+      if (player) {
+        const spawnRow = player.spawnArea.baseRow;
+        const isNorthPole = spawnRow <= 9; // North half of sphere
+        
+        if (isNorthPole) {
+          // North pole pawns move toward south (+1 row)
+          moveDirections = [{ row: 1, col: 0 }];
+          attackDirections = [{ row: 1, col: -1 }, { row: 1, col: 1 }];
+        } else {
+          // South pole pawns move toward north (-1 row)
+          moveDirections = [{ row: -1, col: 0 }];
+          attackDirections = [{ row: -1, col: -1 }, { row: -1, col: 1 }];
+        }
+      }
+    }
     
     // Check regular movement directions
     moveDirections.forEach(dir => {
@@ -702,34 +721,61 @@ function getValidMoves(pieceId) {
     
   } else {
     // Standard movement patterns (omnidirectional, diagonal, orthogonal, etc.)
-    movementPattern.directions.forEach(dir => {
-      const maxDistance = movementPattern.maxDistance || 1;
+    
+    // Special handling for King at poles
+    if (piece.type === 'KING' && (piece.row === 0 || piece.row === GAME_CONFIG.GRID_ROWS - 1)) {
+      // King at north pole (row 0) or south pole (row 19)
+      const isPoleNorth = piece.row === 0;
+      const targetRow = isPoleNorth ? 1 : GAME_CONFIG.GRID_ROWS - 2;
       
-      for (let distance = 1; distance <= maxDistance; distance++) {
-        const targetRow = piece.row + (dir.row * distance);
-        const targetCol = GridUtils.normalizeCol(piece.col + (dir.col * distance));
-        
-        if (!GridUtils.isValidPosition(targetRow, targetCol)) break;
-        
-        const posKey = GridUtils.getPositionKey(targetRow, targetCol);
+      // At poles, king can move to any column at the adjacent row (full 360° movement)
+      for (let col = 0; col < GAME_CONFIG.GRID_COLS; col++) {
+        const posKey = GridUtils.getPositionKey(targetRow, col);
         const occupyingPieceId = gameState.grid[posKey];
         
         if (!occupyingPieceId) {
           // Empty position - can move here
-          validMoves.push({ row: targetRow, col: targetCol, type: 'move' });
+          validMoves.push({ row: targetRow, col: col, type: 'move' });
         } else {
           // Position occupied
           const occupyingPiece = gameState.pieces[occupyingPieceId];
           if (occupyingPiece.playerId !== piece.playerId) {
             // Enemy piece - can attack
-            validMoves.push({ row: targetRow, col: targetCol, type: 'attack' });
+            validMoves.push({ row: targetRow, col: col, type: 'attack' });
           }
-          
-          // Cannot continue further in this direction unless piece can jump
-          if (!movementPattern.jumpOver) break;
         }
       }
-    });
+    } else {
+      // Standard movement for all other pieces and king not at poles
+      movementPattern.directions.forEach(dir => {
+        const maxDistance = movementPattern.maxDistance || 1;
+        
+        for (let distance = 1; distance <= maxDistance; distance++) {
+          const targetRow = piece.row + (dir.row * distance);
+          const targetCol = GridUtils.normalizeCol(piece.col + (dir.col * distance));
+          
+          if (!GridUtils.isValidPosition(targetRow, targetCol)) break;
+          
+          const posKey = GridUtils.getPositionKey(targetRow, targetCol);
+          const occupyingPieceId = gameState.grid[posKey];
+          
+          if (!occupyingPieceId) {
+            // Empty position - can move here
+            validMoves.push({ row: targetRow, col: targetCol, type: 'move' });
+          } else {
+            // Position occupied
+            const occupyingPiece = gameState.pieces[occupyingPieceId];
+            if (occupyingPiece.playerId !== piece.playerId) {
+              // Enemy piece - can attack
+              validMoves.push({ row: targetRow, col: targetCol, type: 'attack' });
+            }
+            
+            // Cannot continue further in this direction unless piece can jump
+            if (!movementPattern.jumpOver) break;
+          }
+        }
+      });
+    }
   }
   
   return validMoves;
