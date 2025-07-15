@@ -232,7 +232,12 @@ const MOVEMENT_PATTERNS = {
       { row: 2, col: -1 },  { row: 2, col: 1 }
     ],
     maxDistance: 1,
-    jumpOver: true
+    jumpOver: true,
+    multiCapture: {
+      maxCaptures: 1,
+      canLandOnEnemy: false,
+      captureArea: '2x3' // 2x3 area that jumper passes over
+    }
   },
   
   superJumper: {
@@ -250,35 +255,125 @@ const MOVEMENT_PATTERNS = {
       { row: 3, col: -1 },  { row: 3, col: 1 }
     ],
     maxDistance: 1,
-    jumpOver: true
+    jumpOver: true,
+    multiCapture: {
+      maxCaptures: 2,
+      canLandOnEnemy: false,
+      captureArea: '2x3' // 2x3 area that jumper passes over
+    }
   },
   
   hyperJumper: {
     type: 'sphere_jumper',
-    directions: [], // Calculated dynamically based on sphere geometry
-    maxDistance: 3,
+    directions: [
+      // Standard knight moves
+      { row: -2, col: -1 }, { row: -2, col: 1 },
+      { row: -1, col: -2 }, { row: -1, col: 2 },
+      { row: 1, col: -2 },  { row: 1, col: 2 },
+      { row: 2, col: -1 },  { row: 2, col: 1 },
+      // Extended jumps
+      { row: -3, col: -1 }, { row: -3, col: 1 },
+      { row: -1, col: -3 }, { row: -1, col: 3 },
+      { row: 1, col: -3 },  { row: 1, col: 3 },
+      { row: 3, col: -1 },  { row: 3, col: 1 },
+      // Hyper-extended jumps
+      { row: -4, col: -1 }, { row: -4, col: 1 },
+      { row: -1, col: -4 }, { row: -1, col: 4 },
+      { row: 1, col: -4 },  { row: 1, col: 4 },
+      { row: 4, col: -1 },  { row: 4, col: 1 }
+    ],
+    maxDistance: 1,
     jumpOver: true,
-    specialAbility: 'sphere_wrap' // Can wrap around sphere
+    multiCapture: {
+      maxCaptures: 3,
+      canLandOnEnemy: false,
+      captureArea: '2x3' // 2x3 area that jumper passes over
+    }
   },
   
   mistressJumper: {
     type: 'master_jumper',
-    directions: [], // Calculated dynamically
-    maxDistance: 4,
+    directions: [
+      // Standard knight moves
+      { row: -2, col: -1 }, { row: -2, col: 1 },
+      { row: -1, col: -2 }, { row: -1, col: 2 },
+      { row: 1, col: -2 },  { row: 1, col: 2 },
+      { row: 2, col: -1 },  { row: 2, col: 1 },
+      // Extended jumps
+      { row: -3, col: -1 }, { row: -3, col: 1 },
+      { row: -1, col: -3 }, { row: -1, col: 3 },
+      { row: 1, col: -3 },  { row: 1, col: 3 },
+      { row: 3, col: -1 },  { row: 3, col: 1 },
+      // Hyper-extended jumps
+      { row: -4, col: -1 }, { row: -4, col: 1 },
+      { row: -1, col: -4 }, { row: -1, col: 4 },
+      { row: 1, col: -4 },  { row: 1, col: 4 },
+      { row: 4, col: -1 },  { row: 4, col: 1 },
+      // Master jumps
+      { row: -5, col: -1 }, { row: -5, col: 1 },
+      { row: -1, col: -5 }, { row: -1, col: 5 },
+      { row: 1, col: -5 },  { row: 1, col: 5 },
+      { row: 5, col: -1 },  { row: 5, col: 1 }
+    ],
+    maxDistance: 1,
     jumpOver: true,
-    specialAbility: 'teleport' // Can teleport to any empty square
+    multiCapture: {
+      maxCaptures: 3,
+      canLandOnEnemy: true, // Can land on enemy pieces and capture them
+      captureArea: '2x3+landing' // 2x3 area plus landing square
+    }
   },
   
   hybridQueen: {
-    type: 'queen_like',
-    directions: [
-      { row: -1, col: -1 }, { row: -1, col: 0 }, { row: -1, col: 1 },
-      { row: 0, col: -1 },                        { row: 0, col: 1 },
-      { row: 1, col: -1 },  { row: 1, col: 0 },  { row: 1, col: 1 }
-    ],
-    maxDistance: 8, // Can move across significant distances
-    jumpOver: false,
-    specialAbility: 'evolution_boost' // Can help other pieces evolve
+    type: 'hybrid_queen_dual',
+    dualMovement: true,
+    modes: {
+      queen: {
+        type: 'omnidirectional',
+        directions: [
+          { row: -1, col: -1 }, { row: -1, col: 0 }, { row: -1, col: 1 },
+          { row: 0, col: -1 },                        { row: 0, col: 1 },
+          { row: 1, col: -1 },  { row: 1, col: 0 },  { row: 1, col: 1 }
+        ],
+        maxDistance: 8, // Can move across significant distances like a queen
+        continuous: true
+      },
+      jumper: {
+        type: 'jumper_evolved',
+        directions: [
+          { row: -2, col: -1 }, { row: -2, col: 1 },
+          { row: -1, col: -2 }, { row: -1, col: 2 },
+          { row: 1, col: -2 },  { row: 1, col: 2 },
+          { row: 2, col: -1 },  { row: 2, col: 1 },
+          // Extended jumps
+          { row: -3, col: -1 }, { row: -3, col: 1 },
+          { row: -1, col: -3 }, { row: -1, col: 3 },
+          { row: 1, col: -3 },  { row: 1, col: 3 },
+          { row: 3, col: -1 },  { row: 3, col: 1 },
+          // Hyper-extended jumps
+          { row: -4, col: -1 }, { row: -4, col: 1 },
+          { row: -1, col: -4 }, { row: -1, col: 4 },
+          { row: 1, col: -4 },  { row: 1, col: 4 },
+          { row: 4, col: -1 },  { row: 4, col: 1 },
+          // Master jumps
+          { row: -5, col: -1 }, { row: -5, col: 1 },
+          { row: -1, col: -5 }, { row: -1, col: 5 },
+          { row: 1, col: -5 },  { row: 1, col: 5 },
+          { row: 5, col: -1 },  { row: 5, col: 1 },
+          // Ultimate jumps
+          { row: -6, col: -1 }, { row: -6, col: 1 },
+          { row: -1, col: -6 }, { row: -1, col: 6 },
+          { row: 1, col: -6 },  { row: 1, col: 6 },
+          { row: 6, col: -1 },  { row: 6, col: 1 }
+        ],
+        jumpOver: true,
+        maxDistance: 1,
+        multiCapture: {
+          maxCaptures: 7, // Can capture up to 7 pieces (ALL in 2x3 area + landing)
+          canLandOnEnemy: true
+        }
+      }
+    }
   }
 };
 
@@ -346,8 +441,16 @@ function rollDice(numDice) {
 }
 
 function resolveDiceBattle(attackerPiece, defenderPiece) {
-  const attackerPoints = PIECE_TYPES[attackerPiece.type].points;
-  const defenderPoints = PIECE_TYPES[defenderPiece.type].points;
+  let attackerPoints = PIECE_TYPES[attackerPiece.type].points;
+  let defenderPoints = PIECE_TYPES[defenderPiece.type].points;
+  
+  // Apply splitter weakening effect
+  if (attackerPiece.splitWeakened) {
+    attackerPoints = Math.max(1, attackerPoints - 1); // Reduce by 1, minimum 1
+  }
+  if (defenderPiece.splitWeakened) {
+    defenderPoints = Math.max(1, defenderPoints - 1); // Reduce by 1, minimum 1
+  }
   
   let attackerDice = rollDice(attackerPoints);
   let defenderDice = rollDice(defenderPoints);

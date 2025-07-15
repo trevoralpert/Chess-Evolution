@@ -177,20 +177,31 @@ function createGridOverlay() {
           scene.add(poleMarker);
           poleMarkers.push(poleMarker);
         } else {
-          // Create regular grid square
+          // Create regular grid square with special equator highlighting
           const squareGeometry = new THREE.PlaneGeometry(squareSize, squareSize);
+          
+          // Check if this is the equator (row 10 in 0-19 grid)
+          const isEquator = (row === 10);
+          
           const squareMaterial = new THREE.MeshBasicMaterial({ 
-            color: 0x00ff00, // Bright green for visibility
+            color: isEquator ? 0xffd700 : 0x00ff00, // Gold for equator, green for regular
             transparent: true,
-            opacity: 0.6, // Made more opaque
+            opacity: isEquator ? 0.8 : 0.6, // More opaque for equator
             side: THREE.DoubleSide
           });
+          
           const square = new THREE.Mesh(squareGeometry, squareMaterial);
           square.position.set(position.x, position.y, position.z);
           square.lookAt(0, 0, 0);
-          square.userData = { gridRow: row, gridCol: col };
+          square.userData = { gridRow: row, gridCol: col, isEquator: isEquator };
           scene.add(square);
           gridSquares.push(square);
+          
+          // Add pulsing animation for equator squares
+          if (isEquator) {
+            square.userData.originalOpacity = 0.8;
+            square.userData.isEquatorSquare = true;
+          }
         }
       } catch (error) {
         console.error(`❌ Error creating grid square at (${row}, ${col}):`, error);
@@ -369,8 +380,20 @@ socket.on('valid-moves', (data) => {
   // Only show moves if this is for the currently selected piece
   if (data.pieceId === selectedPieceId) {
     validMoves = data.moves;
-    highlightValidMoves();
-    console.log(`Showing ${validMoves.length} valid moves for piece ${data.pieceId}`);
+    
+    // Check if this is a Hybrid Queen with dual movement
+    const selectedPiece = gameState.pieces[selectedPieceId];
+    const isDualMovement = selectedPiece && selectedPiece.type === 'HYBRID_QUEEN';
+    
+    if (isDualMovement) {
+      showDualMovementUI();
+      // Don't highlight moves yet - wait for mode selection
+      console.log(`Hybrid Queen selected - showing dual movement UI`);
+    } else {
+      hideDualMovementUI();
+      highlightValidMoves();
+      console.log(`Showing ${validMoves.length} valid moves for piece ${data.pieceId}`);
+    }
   }
 });
 
@@ -501,6 +524,174 @@ socket.on('evolution-point-award', (data) => {
   }
 });
 
+socket.on('equator-bonus', (data) => {
+  const { pieceId, pieceType, points, position } = data;
+  console.log(`Equator bonus: ${pieceType} piece ${pieceId} reached the equator (+1 evolution point, ${points} total)`);
+  
+  // Visual feedback for equator bonus
+  const worldPosition = getWorldPosition(position.row, position.col);
+  
+  // Create golden ring effect around the piece
+  const ringGeometry = new THREE.RingGeometry(0.2, 0.3, 16);
+  const ringMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffd700,
+    transparent: true,
+    opacity: 0.9,
+    side: THREE.DoubleSide
+  });
+  
+  const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+  ring.position.set(worldPosition.x, worldPosition.y, worldPosition.z);
+  ring.lookAt(0, 0, 0);
+  scene.add(ring);
+  
+  // Animate ring expansion
+  let scale = 1;
+  const ringAnimation = () => {
+    scale += 0.08;
+    ring.scale.set(scale, scale, scale);
+    ring.material.opacity -= 0.03;
+    
+    if (ring.material.opacity > 0) {
+      requestAnimationFrame(ringAnimation);
+    } else {
+      scene.remove(ring);
+    }
+  };
+  
+  ringAnimation();
+  
+  // Update UI
+  gameInfoEl.textContent = `Pawn reached equator! +1 evolution point`;
+  gameInfoEl.style.color = '#ffd700';
+  setTimeout(() => {
+    gameInfoEl.style.color = '#ffffff';
+  }, 2000);
+});
+
+socket.on('split-cost-applied', (data) => {
+  const { pieceId, evolutionPoints, cooldownTurns, weakenedTurns } = data;
+  console.log(`Split cost applied to piece ${pieceId}: -2 evolution points, ${cooldownTurns} turn cooldown, ${weakenedTurns} turn weakness`);
+  
+  // Update UI
+  gameInfoEl.textContent = `Splitter split! -2 evolution points, ${cooldownTurns} turn cooldown`;
+  gameInfoEl.style.color = '#ff9900';
+  setTimeout(() => {
+    gameInfoEl.style.color = '#ffffff';
+  }, 3000);
+});
+
+// Tournament socket handlers
+socket.on('tournament-created', (data) => {
+  const { tournament } = data;
+  console.log(`Tournament created: ${tournament.name}`);
+  gameInfoEl.textContent = `Tournament created: ${tournament.name}`;
+  gameInfoEl.style.color = '#4444ff';
+  setTimeout(() => {
+    gameInfoEl.style.color = '#ffffff';
+  }, 3000);
+});
+
+socket.on('tournament-list', (data) => {
+  tournaments = data.tournaments;
+  updateTournamentList();
+});
+
+socket.on('tournament-list-updated', (data) => {
+  tournaments = data.tournaments;
+  updateTournamentList();
+});
+
+socket.on('tournament-joined', (data) => {
+  const { tournament, player } = data;
+  console.log(`Joined tournament: ${tournament.name} as ${player.name}`);
+  gameInfoEl.textContent = `Joined tournament: ${tournament.name}`;
+  gameInfoEl.style.color = '#44ff44';
+  setTimeout(() => {
+    gameInfoEl.style.color = '#ffffff';
+  }, 3000);
+  
+  updateTournamentStatus(tournament);
+});
+
+socket.on('tournament-join-failed', (data) => {
+  const { error } = data;
+  console.log(`Failed to join tournament: ${error}`);
+  gameInfoEl.textContent = `Failed to join tournament: ${error}`;
+  gameInfoEl.style.color = '#ff4444';
+  setTimeout(() => {
+    gameInfoEl.style.color = '#ffffff';
+  }, 3000);
+});
+
+socket.on('tournament-started', (data) => {
+  const { tournament } = data;
+  console.log(`Tournament started: ${tournament.name}`);
+  gameInfoEl.textContent = `Tournament started: ${tournament.name}`;
+  gameInfoEl.style.color = '#ffd700';
+  setTimeout(() => {
+    gameInfoEl.style.color = '#ffffff';
+  }, 3000);
+  
+  updateTournamentStatus(tournament);
+});
+
+socket.on('tournament-updated', (data) => {
+  const { tournament } = data;
+  updateTournamentStatus(tournament);
+});
+
+socket.on('tournament-match-started', (data) => {
+  const { tournamentId, match, tournament } = data;
+  console.log(`Tournament match started: ${match.player1.name} vs ${match.player2.name}`);
+  gameInfoEl.textContent = `Match started: ${match.player1.name} vs ${match.player2.name}`;
+  gameInfoEl.style.color = '#ffd700';
+  setTimeout(() => {
+    gameInfoEl.style.color = '#ffffff';
+  }, 3000);
+  
+  updateTournamentStatus(tournament);
+});
+
+socket.on('tournament-match-completed', (data) => {
+  const { match, tournament } = data;
+  console.log(`Tournament match completed: ${match.winner.name} wins!`);
+  gameInfoEl.textContent = `Match completed: ${match.winner.name} wins!`;
+  gameInfoEl.style.color = '#44ff44';
+  setTimeout(() => {
+    gameInfoEl.style.color = '#ffffff';
+  }, 3000);
+  
+  updateTournamentStatus(tournament);
+});
+
+socket.on('tournament-completed', (data) => {
+  const { tournament, winner, prizes, leaderboard } = data;
+  console.log(`Tournament completed: ${winner.name} is the champion!`);
+  gameInfoEl.textContent = `🏆 Tournament Champion: ${winner.name}! 🏆`;
+  gameInfoEl.style.color = '#ffd700';
+  setTimeout(() => {
+    gameInfoEl.style.color = '#ffffff';
+  }, 10000);
+  
+  updateTournamentStatus(tournament);
+  
+  // Display championship celebration
+  if (leaderboard && leaderboard.length > 0) {
+    const championInfo = leaderboard.find(p => p.isChampion);
+    if (championInfo) {
+      setTimeout(() => {
+        alert(`🏆 TOURNAMENT CHAMPION 🏆\n\n${championInfo.name}\n\nWins: ${championInfo.wins}\nWin Rate: ${championInfo.winRate}%\n\nCongratulations!`);
+      }, 1000);
+    }
+  }
+});
+
+socket.on('tournament-info', (data) => {
+  const { tournament } = data;
+  updateTournamentStatus(tournament);
+});
+
 socket.on('battle-contest-prompt', (data) => {
   const { battleId, attackingPiece, defendingPiece, timeLimit } = data;
   console.log(`Battle contest prompt: ${attackingPiece.symbol} attacking ${defendingPiece.symbol}`);
@@ -557,6 +748,7 @@ socket.on('game-victory', (data) => {
   // Disable further interactions
   selectedPieceId = null;
   clearValidMoveHighlights();
+  hideDualMovementUI();
 });
 
 socket.on('piece-split', (data) => {
@@ -708,6 +900,94 @@ socket.on('jump-capture', (data) => {
   };
   
   animateJumpCapture();
+});
+
+socket.on('multi-jump-capture', (data) => {
+  const { jumperId, capturedPieceIds, capturedPieces, jumperPosition, captureArea, playerId } = data;
+  console.log(`Multi-jump capture: ${jumperId} captured ${capturedPieces.length} pieces`);
+  
+  // Show multi-jump capture notification
+  const player = gameState.players[playerId];
+  if (player) {
+    const playerIndex = Object.keys(gameState.players).indexOf(playerId) + 1;
+    showNotification(`Player ${playerIndex} Multi-Capture! ${capturedPieces.length} pieces!`, player.color, 3000);
+  }
+  
+  // Create multi-capture visual effects
+  const jumperWorldPos = getWorldPosition(jumperPosition.row, jumperPosition.col);
+  
+  // Create effects for each captured piece
+  capturedPieces.forEach((capturedPiece, index) => {
+    const capturedWorldPos = getWorldPosition(capturedPiece.row, capturedPiece.col);
+    
+    // Create lightning effect from captured piece to jumper
+    const lightningGeometry = new THREE.BufferGeometry();
+    const lightningPoints = [];
+    
+    // Create jagged lightning path
+    for (let i = 0; i <= 10; i++) {
+      const t = i / 10;
+      const x = capturedWorldPos.x + (jumperWorldPos.x - capturedWorldPos.x) * t + (Math.random() - 0.5) * 0.1;
+      const y = capturedWorldPos.y + (jumperWorldPos.y - capturedWorldPos.y) * t + (Math.random() - 0.5) * 0.1;
+      const z = capturedWorldPos.z + (jumperWorldPos.z - capturedWorldPos.z) * t + (Math.random() - 0.5) * 0.1;
+      lightningPoints.push(new THREE.Vector3(x, y, z));
+    }
+    
+    lightningGeometry.setFromPoints(lightningPoints);
+    
+    const lightningMaterial = new THREE.LineBasicMaterial({
+      color: 0xaa00ff, // Purple color for multi-capture
+      linewidth: 2,
+      transparent: true,
+      opacity: 0.8
+    });
+    
+    const lightning = new THREE.Line(lightningGeometry, lightningMaterial);
+    scene.add(lightning);
+    
+    // Create explosion effect at captured position
+    const explosionGeometry = new THREE.SphereGeometry(0.15, 8, 8);
+    const explosionMaterial = new THREE.MeshBasicMaterial({
+      color: 0xaa00ff,
+      transparent: true,
+      opacity: 0.6,
+      wireframe: true
+    });
+    
+    const explosion = new THREE.Mesh(explosionGeometry, explosionMaterial);
+    explosion.position.set(capturedWorldPos.x, capturedWorldPos.y, capturedWorldPos.z);
+    scene.add(explosion);
+    
+    // Animate the effects with staggered timing
+    let animationTime = 0;
+    const animateMultiCapture = () => {
+      animationTime += 0.04;
+      
+      // Fade out lightning
+      lightning.material.opacity = 0.8 - animationTime;
+      
+      // Expand and fade explosion
+      explosion.scale.set(1 + animationTime * 3, 1 + animationTime * 3, 1 + animationTime * 3);
+      explosion.material.opacity = 0.6 - animationTime;
+      
+      if (animationTime < 1) {
+        requestAnimationFrame(animateMultiCapture);
+      } else {
+        // Clean up
+        scene.remove(lightning);
+        scene.remove(explosion);
+        lightningGeometry.dispose();
+        lightningMaterial.dispose();
+        explosionGeometry.dispose();
+        explosionMaterial.dispose();
+      }
+    };
+    
+    // Start animation with slight delay for each piece
+    setTimeout(() => {
+      animateMultiCapture();
+    }, index * 100);
+  });
 });
 
 function showNotification(message, color, duration) {
@@ -1121,6 +1401,651 @@ function updateUI() {
   gameInfoEl.textContent = `${pieceCount} pieces on board`;
 }
 
+let selectedMovementMode = null;
+
+function showDualMovementUI() {
+  const dualMovementUI = document.getElementById('dual-movement-ui');
+  const modeDescription = document.getElementById('mode-description');
+  
+  dualMovementUI.style.display = 'block';
+  modeDescription.textContent = 'Click a mode to see movement options';
+  
+  // Clear previous mode selection
+  selectedMovementMode = null;
+  updateModeButtons();
+}
+
+function hideDualMovementUI() {
+  const dualMovementUI = document.getElementById('dual-movement-ui');
+  dualMovementUI.style.display = 'none';
+  selectedMovementMode = null;
+}
+
+function updateModeButtons() {
+  const queenBtn = document.getElementById('queen-mode-btn');
+  const jumperBtn = document.getElementById('jumper-mode-btn');
+  
+  // Reset button styles
+  queenBtn.style.opacity = selectedMovementMode === 'queen' ? '1' : '0.7';
+  jumperBtn.style.opacity = selectedMovementMode === 'jumper' ? '1' : '0.7';
+  
+  queenBtn.style.border = selectedMovementMode === 'queen' ? '2px solid #fff' : 'none';
+  jumperBtn.style.border = selectedMovementMode === 'jumper' ? '2px solid #fff' : 'none';
+}
+
+function selectMovementMode(mode) {
+  selectedMovementMode = mode;
+  updateModeButtons();
+  
+  // Update mode description
+  const modeDescription = document.getElementById('mode-description');
+  if (mode === 'queen') {
+    modeDescription.textContent = 'Queen Mode: Move like a queen (gold cubes)';
+  } else if (mode === 'jumper') {
+    modeDescription.textContent = 'Jumper Mode: Jump and capture multiple pieces (orange cones)';
+  }
+  
+  // Highlight moves for selected mode
+  highlightValidMovesForMode(mode);
+}
+
+function highlightValidMovesForMode(mode) {
+  // Clear previous highlights
+  clearValidMoveHighlights();
+  
+  // Filter moves by selected mode
+  const filteredMoves = validMoves.filter(move => 
+    (mode === 'queen' && move.type === 'dual-move-queen') ||
+    (mode === 'jumper' && move.type === 'dual-move-jumper')
+  );
+  
+  // Add highlights for filtered moves
+  filteredMoves.forEach(move => {
+    const position = getWorldPosition(move.row, move.col);
+    
+    let highlightColor, highlightGeometry;
+    
+    if (move.type === 'dual-move-queen') {
+      highlightColor = 0xffd700; // Gold for dual queen movement
+      highlightGeometry = new THREE.BoxGeometry(0.18, 0.18, 0.18); // Cube shape for queen mode
+    } else if (move.type === 'dual-move-jumper') {
+      highlightColor = 0xff6600; // Orange-red for dual jumper movement
+      highlightGeometry = new THREE.ConeGeometry(0.12, 0.25, 6); // Cone shape for jumper mode
+      
+      // Add multi-capture area visualization for jumper moves
+      if (move.multiCapture && move.multiCapture.length > 0) {
+        // Add purple wireframe octahedrons for captured pieces
+        move.multiCapture.forEach(capturedPieceId => {
+          const capturedPiece = gameState.pieces[capturedPieceId];
+          if (capturedPiece) {
+            const capturedPosition = getWorldPosition(capturedPiece.row, capturedPiece.col);
+            
+            const captureGeometry = new THREE.OctahedronGeometry(0.1);
+            const captureMaterial = new THREE.MeshBasicMaterial({
+              color: 0xaa00ff, // Purple for captures
+              transparent: true,
+              opacity: 0.6,
+              wireframe: true
+            });
+            
+            const captureHighlight = new THREE.Mesh(captureGeometry, captureMaterial);
+            captureHighlight.position.set(capturedPosition.x, capturedPosition.y, capturedPosition.z);
+            captureHighlight.userData = { isValidMoveHighlight: true, isCaptureIndicator: true };
+            
+            scene.add(captureHighlight);
+          }
+        });
+      }
+    }
+    
+    const highlightMaterial = new THREE.MeshBasicMaterial({
+      color: highlightColor,
+      transparent: true,
+      opacity: 0.8,
+      wireframe: true
+    });
+    
+    const highlight = new THREE.Mesh(highlightGeometry, highlightMaterial);
+    highlight.position.set(position.x, position.y, position.z);
+    highlight.userData = { isValidMoveHighlight: true, move: move };
+    
+    scene.add(highlight);
+  });
+  
+  console.log(`Highlighted ${filteredMoves.length} moves for ${mode} mode`);
+}
+
+// Lobby management
+let lobbies = [];
+
+function showLobbyUI() {
+  document.getElementById('lobby-ui').style.display = 'block';
+  refreshLobbies();
+}
+
+function hideLobbyUI() {
+  document.getElementById('lobby-ui').style.display = 'none';
+  document.getElementById('lobby-browser').style.display = 'block';
+  document.getElementById('lobby-creation').style.display = 'none';
+  document.getElementById('lobby-room').style.display = 'none';
+}
+
+function showLobbyCreation() {
+  document.getElementById('lobby-browser').style.display = 'none';
+  document.getElementById('lobby-creation').style.display = 'block';
+  document.getElementById('lobby-room').style.display = 'none';
+  
+  // Set default lobby name
+  document.getElementById('lobby-name').value = `${getPlayerName()}'s Lobby`;
+}
+
+function hideLobbyCreation() {
+  document.getElementById('lobby-browser').style.display = 'block';
+  document.getElementById('lobby-creation').style.display = 'none';
+  document.getElementById('lobby-room').style.display = 'none';
+}
+
+function showLobbyRoom(lobby) {
+  document.getElementById('lobby-browser').style.display = 'none';
+  document.getElementById('lobby-creation').style.display = 'none';
+  document.getElementById('lobby-room').style.display = 'block';
+  
+  updateLobbyRoomDisplay(lobby);
+}
+
+function updateLobbyRoomDisplay(lobby) {
+  document.getElementById('lobby-room-name').textContent = lobby.name;
+  
+  // Update players list
+  const playersHtml = lobby.players.map(p => 
+    `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+      <span>${p.name}${p.isCreator ? ' (Creator)' : ''}</span>
+      <span style="color: ${p.ready ? '#00ff00' : '#ff6600'};">${p.ready ? 'Ready' : 'Not Ready'}</span>
+    </div>`
+  ).join('');
+  document.getElementById('lobby-players-list').innerHTML = playersHtml;
+  
+  // Update settings display
+  const settingsHtml = `
+    <div>Max Players: ${lobby.settings.maxPlayers}</div>
+    <div>Game Mode: ${lobby.settings.gameMode}</div>
+    <div>Time Limit: ${lobby.settings.timeLimit}s</div>
+    <div>Evolution Mode: ${lobby.settings.evolutionMode}</div>
+  `;
+  document.getElementById('lobby-settings-display').innerHTML = settingsHtml;
+  
+  // Update ready button and status
+  const currentPlayer = lobby.players.find(p => p.id === socket.id);
+  if (currentPlayer) {
+    const readyBtn = document.getElementById('ready-toggle-btn');
+    const readyStatus = document.getElementById('ready-status');
+    
+    if (currentPlayer.ready) {
+      readyBtn.textContent = 'Not Ready';
+      readyBtn.style.background = '#cc0000';
+      readyStatus.textContent = 'Ready';
+      readyStatus.style.color = '#00ff00';
+    } else {
+      readyBtn.textContent = 'Ready';
+      readyBtn.style.background = '#00cc00';
+      readyStatus.textContent = 'Not Ready';
+      readyStatus.style.color = '#ff6600';
+    }
+  }
+}
+
+function createLobby() {
+  const name = document.getElementById('lobby-name').value.trim();
+  const maxPlayers = parseInt(document.getElementById('lobby-max-players').value);
+  const gameMode = document.getElementById('lobby-game-mode').value;
+  const timeLimit = parseInt(document.getElementById('lobby-time-limit').value);
+  
+  if (!name) {
+    alert('Please enter a lobby name');
+    return;
+  }
+  
+  const settings = {
+    name: name,
+    maxPlayers: maxPlayers,
+    gameMode: gameMode,
+    timeLimit: timeLimit,
+    evolutionMode: 'standard'
+  };
+  
+  socket.emit('create-lobby', { name, settings });
+}
+
+function joinLobby(lobbyId) {
+  socket.emit('join-lobby', { lobbyId });
+}
+
+function leaveLobby() {
+  if (currentLobby) {
+    socket.emit('leave-lobby', { lobbyId: currentLobby.id });
+  }
+}
+
+function toggleReady() {
+  if (currentLobby) {
+    socket.emit('toggle-ready', { lobbyId: currentLobby.id });
+  }
+}
+
+function refreshLobbies() {
+  socket.emit('get-lobbies');
+}
+
+function updateLobbyList(lobbies) {
+  const lobbyList = document.getElementById('lobby-list');
+  
+  if (lobbies.length === 0) {
+    lobbyList.innerHTML = '<div style="color: #888; font-size: 12px;">No lobbies available</div>';
+    return;
+  }
+  
+  const lobbiesHtml = lobbies.map(lobby => 
+    `<div style="display: flex; justify-content: space-between; align-items: center; padding: 5px; margin-bottom: 5px; background: rgba(255, 255, 255, 0.1); border-radius: 3px;">
+      <div>
+        <div style="font-weight: bold; color: #00aaff;">${lobby.name}</div>
+        <div style="font-size: 10px; color: #ccc;">by ${lobby.creator} • ${lobby.playerCount}/${lobby.maxPlayers} players • ${lobby.gameMode}</div>
+      </div>
+      <button onclick="joinLobby('${lobby.id}')" style="padding: 3px 8px; background: #00aaff; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">Join</button>
+    </div>`
+  ).join('');
+  
+  lobbyList.innerHTML = lobbiesHtml;
+}
+
+function getPlayerName() {
+  // Try to get player name from game state or use default
+  const playerKeys = Object.keys(gameState?.players || {});
+  const currentPlayer = playerKeys.find(key => key === socket.id);
+  return currentPlayer ? gameState.players[currentPlayer].name : 'Player';
+}
+
+// Statistics management functions
+function showStatisticsUI() {
+  document.getElementById('stats-ui').style.display = 'block';
+  showPersonalStats();
+}
+
+function hideStatisticsUI() {
+  document.getElementById('stats-ui').style.display = 'none';
+}
+
+function showPersonalStats() {
+  // Hide other sections
+  document.getElementById('personal-stats').style.display = 'block';
+  document.getElementById('leaderboard').style.display = 'none';
+  document.getElementById('achievements').style.display = 'none';
+  document.getElementById('global-stats').style.display = 'none';
+  
+  // Update button styles
+  updateStatsButtonStyles('show-personal-stats');
+  
+  // Request personal stats
+  socket.emit('get-player-stats', {});
+}
+
+function showLeaderboard() {
+  // Hide other sections
+  document.getElementById('personal-stats').style.display = 'none';
+  document.getElementById('leaderboard').style.display = 'block';
+  document.getElementById('achievements').style.display = 'none';
+  document.getElementById('global-stats').style.display = 'none';
+  
+  // Update button styles
+  updateStatsButtonStyles('show-leaderboard');
+  
+  // Request leaderboard
+  refreshLeaderboard();
+}
+
+function showAchievements() {
+  // Hide other sections
+  document.getElementById('personal-stats').style.display = 'none';
+  document.getElementById('leaderboard').style.display = 'none';
+  document.getElementById('achievements').style.display = 'block';
+  document.getElementById('global-stats').style.display = 'none';
+  
+  // Update button styles
+  updateStatsButtonStyles('show-achievements');
+  
+  // Request achievements
+  socket.emit('get-achievements', {});
+}
+
+function showGlobalStats() {
+  // Hide other sections
+  document.getElementById('personal-stats').style.display = 'none';
+  document.getElementById('leaderboard').style.display = 'none';
+  document.getElementById('achievements').style.display = 'none';
+  document.getElementById('global-stats').style.display = 'block';
+  
+  // Update button styles
+  updateStatsButtonStyles('show-global-stats');
+  
+  // Request global stats
+  socket.emit('get-global-stats');
+}
+
+function updateStatsButtonStyles(activeButtonId) {
+  const buttons = ['show-personal-stats', 'show-leaderboard', 'show-achievements', 'show-global-stats'];
+  buttons.forEach(buttonId => {
+    const button = document.getElementById(buttonId);
+    if (buttonId === activeButtonId) {
+      button.style.background = '#cc00cc';
+    } else {
+      button.style.background = '#6600aa';
+    }
+  });
+}
+
+function refreshLeaderboard() {
+  const category = document.getElementById('leaderboard-category').value;
+  socket.emit('get-leaderboard', { category, limit: 50 });
+}
+
+function displayPersonalStats(stats) {
+  if (!stats) {
+    document.getElementById('personal-stats-content').innerHTML = '<div style="color: #888;">No statistics available. Play some games to see your stats!</div>';
+    return;
+  }
+  
+  const html = `
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+      <div style="padding: 8px; background: rgba(0, 0, 0, 0.2); border-radius: 3px;">
+        <div style="color: #cc00cc; font-size: 12px; font-weight: bold;">Game Performance</div>
+        <div>Games Played: ${stats.gamesPlayed}</div>
+        <div>Games Won: ${stats.gamesWon}</div>
+        <div>Win Rate: ${(stats.winRate * 100).toFixed(1)}%</div>
+        <div>Current Rating: ${stats.currentRank}</div>
+        <div>Best Rating: ${stats.bestRank}</div>
+      </div>
+      <div style="padding: 8px; background: rgba(0, 0, 0, 0.2); border-radius: 3px;">
+        <div style="color: #cc00cc; font-size: 12px; font-weight: bold;">Battle Stats</div>
+        <div>Battles Won: ${stats.battlesWon}</div>
+        <div>Battle Win Rate: ${(stats.battleWinRate * 100).toFixed(1)}%</div>
+        <div>Pieces Killed: ${stats.piecesKilled}</div>
+        <div>Pieces Lost: ${stats.piecesLost}</div>
+        <div>K/D Ratio: ${stats.killDeathRatio.toFixed(2)}</div>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+      <div style="padding: 8px; background: rgba(0, 0, 0, 0.2); border-radius: 3px;">
+        <div style="color: #cc00cc; font-size: 12px; font-weight: bold;">Evolution & Abilities</div>
+        <div>Pieces Evolved: ${stats.piecesEvolved}</div>
+        <div>Splitter Uses: ${stats.splitterUses}</div>
+        <div>Multi-Captures: ${stats.jumperMultiCaptures}</div>
+        <div>Hybrid Mode Changes: ${stats.hybridQueenModeChanges}</div>
+        <div>Equator Bonuses: ${stats.equatorBonuses}</div>
+      </div>
+      <div style="padding: 8px; background: rgba(0, 0, 0, 0.2); border-radius: 3px;">
+        <div style="color: #cc00cc; font-size: 12px; font-weight: bold;">Tournaments</div>
+        <div>Tournaments Joined: ${stats.tournamentsJoined}</div>
+        <div>Tournament Wins: ${stats.tournamentWins}</div>
+        <div>Finals Reached: ${stats.tournamentFinals}</div>
+        <div>Win Streak: ${stats.currentWinStreak}</div>
+        <div>Best Streak: ${stats.bestWinStreak}</div>
+      </div>
+    </div>
+    <div style="padding: 8px; background: rgba(0, 0, 0, 0.2); border-radius: 3px;">
+      <div style="color: #cc00cc; font-size: 12px; font-weight: bold;">Recent Games</div>
+      ${stats.recentGames.map(game => `
+        <div style="display: flex; justify-content: space-between; padding: 2px; border-bottom: 1px solid #333;">
+          <span style="color: ${game.result === 'win' ? '#00ff00' : '#ff6600'};">${game.result.toUpperCase()}</span>
+          <span>${game.gameMode}</span>
+          <span>${game.moves} moves</span>
+          <span>${Math.round(game.duration / 60)}m ${game.duration % 60}s</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  
+  document.getElementById('personal-stats-content').innerHTML = html;
+}
+
+function displayLeaderboard(leaderboard, category) {
+  if (!leaderboard || leaderboard.length === 0) {
+    document.getElementById('leaderboard-content').innerHTML = '<div style="color: #888;">No leaderboard data available.</div>';
+    return;
+  }
+  
+  const categoryNames = {
+    'rating': 'Rating',
+    'wins': 'Wins',
+    'winRate': 'Win Rate',
+    'battles': 'Battles Won',
+    'evolution': 'Evolutions',
+    'tournaments': 'Tournaments'
+  };
+  
+  const html = `
+    <div style="display: flex; justify-content: space-between; padding: 5px; border-bottom: 2px solid #cc00cc; margin-bottom: 5px; font-weight: bold;">
+      <span>Rank</span>
+      <span>Player</span>
+      <span>${categoryNames[category]}</span>
+    </div>
+    ${leaderboard.map(entry => `
+      <div style="display: flex; justify-content: space-between; padding: 3px; border-bottom: 1px solid #333; ${entry.playerId === socket.id ? 'background: rgba(204, 0, 204, 0.2);' : ''}">
+        <span style="color: ${entry.rank <= 3 ? '#ffd700' : '#fff'};">#${entry.rank}</span>
+        <span style="color: ${entry.playerId === socket.id ? '#cc00cc' : '#fff'};">${entry.playerName}</span>
+        <span style="color: ${entry.rank <= 3 ? '#ffd700' : '#fff'};">${entry.value}</span>
+      </div>
+    `).join('')}
+  `;
+  
+  document.getElementById('leaderboard-content').innerHTML = html;
+}
+
+function displayAchievements(achievements) {
+  if (!achievements || achievements.length === 0) {
+    document.getElementById('achievements-content').innerHTML = '<div style="color: #888;">No achievements unlocked yet. Keep playing to earn achievements!</div>';
+    return;
+  }
+  
+  const rarityColors = {
+    'common': '#ffffff',
+    'uncommon': '#1eff00',
+    'rare': '#0070dd',
+    'epic': '#a335ee',
+    'legendary': '#ff8000'
+  };
+  
+  const html = achievements.map(achievement => `
+    <div style="display: flex; align-items: center; padding: 8px; margin-bottom: 5px; background: rgba(0, 0, 0, 0.2); border-radius: 3px; border-left: 3px solid ${rarityColors[achievement.rarity]};">
+      <div style="font-size: 20px; margin-right: 10px;">${achievement.icon}</div>
+      <div style="flex: 1;">
+        <div style="color: ${rarityColors[achievement.rarity]}; font-weight: bold;">${achievement.name}</div>
+        <div style="color: #ccc; font-size: 10px;">${achievement.description}</div>
+        <div style="color: #888; font-size: 10px;">Earned: ${new Date(achievement.earned).toLocaleDateString()}</div>
+      </div>
+      <div style="color: ${rarityColors[achievement.rarity]}; font-size: 10px; text-transform: uppercase;">${achievement.rarity}</div>
+    </div>
+  `).join('');
+  
+  document.getElementById('achievements-content').innerHTML = html;
+}
+
+function displayGlobalStats(stats) {
+  if (!stats) {
+    document.getElementById('global-stats-content').innerHTML = '<div style="color: #888;">No global statistics available.</div>';
+    return;
+  }
+  
+  const html = `
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+      <div style="padding: 8px; background: rgba(0, 0, 0, 0.2); border-radius: 3px;">
+        <div style="color: #cc00cc; font-size: 12px; font-weight: bold;">Player Statistics</div>
+        <div>Total Players: ${stats.totalPlayers.toLocaleString()}</div>
+        <div>Average Rating: ${stats.averageRating.toFixed(0)}</div>
+        <div>Top Player: ${stats.topPlayer ? stats.topPlayer.playerName : 'None'}</div>
+        <div>Top Rating: ${stats.topPlayer ? stats.topPlayer.currentRank : 'N/A'}</div>
+      </div>
+      <div style="padding: 8px; background: rgba(0, 0, 0, 0.2); border-radius: 3px;">
+        <div style="color: #cc00cc; font-size: 12px; font-weight: bold;">Game Statistics</div>
+        <div>Total Games: ${stats.totalGames.toLocaleString()}</div>
+        <div>Total Battles: ${stats.totalBattles.toLocaleString()}</div>
+        <div>Total Evolutions: ${stats.totalEvolutions.toLocaleString()}</div>
+        <div>Total Tournaments: ${stats.totalTournaments.toLocaleString()}</div>
+      </div>
+    </div>
+  `;
+  
+  document.getElementById('global-stats-content').innerHTML = html;
+}
+
+function startGameCountdown(countdown) {
+  const countdownEl = document.getElementById('game-starting-countdown');
+  const timerEl = document.getElementById('countdown-timer');
+  
+  countdownEl.style.display = 'block';
+  timerEl.textContent = countdown;
+  
+  const interval = setInterval(() => {
+    countdown--;
+    timerEl.textContent = countdown;
+    
+    if (countdown <= 0) {
+      clearInterval(interval);
+      countdownEl.style.display = 'none';
+    }
+  }, 1000);
+}
+
+// Tournament management
+let currentTournament = null;
+let tournaments = [];
+
+function showTournamentUI() {
+  document.getElementById('tournament-ui').style.display = 'block';
+  socket.emit('get-tournaments');
+}
+
+function hideTournamentUI() {
+  document.getElementById('tournament-ui').style.display = 'none';
+}
+
+function showTournamentCreation() {
+  document.getElementById('tournament-lobby').style.display = 'none';
+  document.getElementById('tournament-creation').style.display = 'block';
+}
+
+function hideTournamentCreation() {
+  document.getElementById('tournament-lobby').style.display = 'block';
+  document.getElementById('tournament-creation').style.display = 'none';
+}
+
+function createTournament() {
+  const name = document.getElementById('tournament-name').value || 'Globe Chess Tournament';
+  const maxPlayers = parseInt(document.getElementById('tournament-max-players').value);
+  
+  const settings = {
+    name: name,
+    maxPlayers: maxPlayers,
+    minPlayers: 2,
+    autoStart: false
+  };
+  
+  socket.emit('create-tournament', { settings });
+  hideTournamentCreation();
+}
+
+function showTournamentList() {
+  socket.emit('get-tournaments');
+  updateTournamentList();
+}
+
+function updateTournamentList() {
+  const listElement = document.getElementById('tournament-list');
+  
+  if (tournaments.length === 0) {
+    listElement.innerHTML = '<div style="color: #888; font-size: 12px;">No tournaments available</div>';
+    return;
+  }
+  
+  listElement.innerHTML = tournaments.map(tournament => `
+    <div style="margin-bottom: 5px; padding: 5px; background: rgba(255, 255, 255, 0.1); border-radius: 3px;">
+      <div style="font-size: 13px; color: #fff; margin-bottom: 3px;">${tournament.name}</div>
+      <div style="font-size: 11px; color: #ccc;">
+        Players: ${tournament.players.length}/${tournament.maxPlayers} | 
+        Status: ${tournament.status.toUpperCase()}
+      </div>
+      <div style="margin-top: 5px;">
+        ${tournament.status === 'waiting' ? 
+          `<button onclick="joinTournament('${tournament.id}')" style="padding: 3px 8px; background: #44ff44; color: #000; border: none; border-radius: 2px; cursor: pointer; font-size: 11px;">Join</button>` : 
+          `<button onclick="viewTournament('${tournament.id}')" style="padding: 3px 8px; background: #888; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 11px;">View</button>`
+        }
+        ${tournament.status === 'waiting' && tournament.players.length >= tournament.minPlayers ? 
+          `<button onclick="startTournament('${tournament.id}')" style="padding: 3px 8px; background: #ff4444; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 11px; margin-left: 5px;">Start</button>` : 
+          ''
+        }
+      </div>
+    </div>
+  `).join('');
+}
+
+window.joinTournament = function(tournamentId) {
+  const playerName = prompt('Enter your name:') || 'Anonymous Player';
+  socket.emit('join-tournament', { tournamentId, playerName });
+};
+
+window.startTournament = function(tournamentId) {
+  if (confirm('Start this tournament?')) {
+    socket.emit('start-tournament', { tournamentId });
+  }
+};
+
+window.viewTournament = function(tournamentId) {
+  socket.emit('get-tournament', { tournamentId });
+};
+
+function updateTournamentStatus(tournament) {
+  currentTournament = tournament;
+  
+  document.getElementById('tournament-lobby').style.display = 'none';
+  document.getElementById('tournament-creation').style.display = 'none';
+  document.getElementById('tournament-status').style.display = 'block';
+  
+  const infoElement = document.getElementById('tournament-info');
+  infoElement.innerHTML = `
+    <strong>${tournament.name}</strong><br>
+    Status: ${tournament.status.toUpperCase()}<br>
+    Players: ${tournament.players.length}/${tournament.maxPlayers}<br>
+    Round: ${tournament.currentRound}/${tournament.brackets.length}
+  `;
+  
+  // Update brackets display
+  updateBracketsDisplay(tournament);
+}
+
+function updateBracketsDisplay(tournament) {
+  const bracketsElement = document.getElementById('tournament-brackets');
+  
+  if (!tournament.brackets || tournament.brackets.length === 0) {
+    bracketsElement.innerHTML = 'Brackets will be generated when tournament starts';
+    return;
+  }
+  
+  bracketsElement.innerHTML = tournament.brackets.map(round => `
+    <div style="margin-bottom: 10px; padding: 5px; background: rgba(255, 255, 255, 0.05); border-radius: 3px;">
+      <div style="font-weight: bold; margin-bottom: 5px;">${round.name}</div>
+      ${round.matches.map(match => `
+        <div style="margin-bottom: 3px; padding: 3px; background: rgba(0, 0, 0, 0.3); border-radius: 2px;">
+          ${match.isBye ? 
+            `<span style="color: #888;">${match.player1.name} (BYE)</span>` :
+            `<span style="color: ${match.winner && match.winner.id === match.player1.id ? '#44ff44' : '#fff'};">${match.player1 ? match.player1.name : 'TBD'}</span> vs 
+             <span style="color: ${match.winner && match.winner.id === match.player2.id ? '#44ff44' : '#fff'};">${match.player2 ? match.player2.name : 'TBD'}</span>
+             ${match.status === 'completed' ? ` - Winner: ${match.winner.name}` : ''}
+             ${match.status === 'active' ? ' - IN PROGRESS' : ''}`
+          }
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
 function highlightValidMoves() {
   // Clear previous highlights
   clearValidMoveHighlights();
@@ -1142,6 +2067,15 @@ function highlightValidMoves() {
     } else if (move.type === 'jump-capture') {
       highlightColor = 0xff8800; // Orange for jump capture
       highlightGeometry = new THREE.TetrahedronGeometry(0.12); // Pyramid shape for jump
+    } else if (move.type === 'multi-jump-capture') {
+      highlightColor = 0xaa00ff; // Purple for multi-jump capture
+      highlightGeometry = new THREE.OctahedronGeometry(0.15); // Larger octahedron for multi-capture
+    } else if (move.type === 'dual-move-queen') {
+      highlightColor = 0xffd700; // Gold for dual queen movement
+      highlightGeometry = new THREE.BoxGeometry(0.18, 0.18, 0.18); // Cube shape for queen mode
+    } else if (move.type === 'dual-move-jumper') {
+      highlightColor = 0xff6600; // Orange-red for dual jumper movement
+      highlightGeometry = new THREE.ConeGeometry(0.12, 0.25, 6); // Cone shape for jumper mode
     } else {
       highlightColor = 0x44ff44; // Green for regular move
       highlightGeometry = new THREE.SphereGeometry(0.15, 8, 8);
@@ -1151,7 +2085,7 @@ function highlightValidMoves() {
       color: highlightColor,
       transparent: true,
       opacity: 0.8,
-      wireframe: move.type === 'split' || move.type === 'jump-capture' // Wireframe for special moves
+      wireframe: move.type === 'split' || move.type === 'jump-capture' || move.type === 'multi-jump-capture' || move.type === 'dual-move-queen' || move.type === 'dual-move-jumper' // Wireframe for special moves
     });
     
     const highlight = new THREE.Mesh(highlightGeometry, highlightMaterial);
@@ -1193,21 +2127,53 @@ function highlightSelectedPiece(pieceId) {
   
   const position = getWorldPosition(piece.row, piece.col);
   
-  // Create a selection ring around the piece
-  const ringGeometry = new THREE.RingGeometry(0.15, 0.2, 16);
-  const ringMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffff00,
-    transparent: true,
-    opacity: 0.8,
-    side: THREE.DoubleSide
-  });
-  
-  const selectionRing = new THREE.Mesh(ringGeometry, ringMaterial);
-  selectionRing.position.set(position.x, position.y, position.z);
-  selectionRing.lookAt(0, 0, 0); // Face the center of the sphere
-  selectionRing.userData = { isSelectionHighlight: true, pieceId: pieceId };
-  
-  scene.add(selectionRing);
+  // Create different selection highlights for different piece types
+  if (piece.type === 'HYBRID_QUEEN') {
+    // Special dual-ring highlight for Hybrid Queen
+    const outerRingGeometry = new THREE.RingGeometry(0.18, 0.23, 16);
+    const outerRingMaterial = new THREE.MeshBasicMaterial({
+      color: 0xf39c12, // Orange for Hybrid Queen
+      transparent: true,
+      opacity: 0.8,
+      side: THREE.DoubleSide
+    });
+    
+    const outerRing = new THREE.Mesh(outerRingGeometry, outerRingMaterial);
+    outerRing.position.set(position.x, position.y, position.z);
+    outerRing.lookAt(0, 0, 0);
+    outerRing.userData = { isSelectionHighlight: true, pieceId: pieceId };
+    scene.add(outerRing);
+    
+    // Add inner ring with different color
+    const innerRingGeometry = new THREE.RingGeometry(0.12, 0.17, 16);
+    const innerRingMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffd700, // Gold inner ring
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide
+    });
+    
+    const innerRing = new THREE.Mesh(innerRingGeometry, innerRingMaterial);
+    innerRing.position.set(position.x, position.y, position.z);
+    innerRing.lookAt(0, 0, 0);
+    innerRing.userData = { isSelectionHighlight: true, pieceId: pieceId };
+    scene.add(innerRing);
+  } else {
+    // Standard selection highlight (yellow ring)
+    const ringGeometry = new THREE.RingGeometry(0.15, 0.2, 16);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffff00,
+      transparent: true,
+      opacity: 0.8,
+      side: THREE.DoubleSide
+    });
+    
+    const selectionRing = new THREE.Mesh(ringGeometry, ringMaterial);
+    selectionRing.position.set(position.x, position.y, position.z);
+    selectionRing.lookAt(0, 0, 0); // Face the center of the sphere
+    selectionRing.userData = { isSelectionHighlight: true, pieceId: pieceId };
+    scene.add(selectionRing);
+  }
 }
 
 function getCurrentlySelectedPieceId() {
@@ -1310,6 +2276,31 @@ function onMouseClick(event) {
       // Find the currently selected piece by checking which piece has valid moves displayed
       const currentSelectedPieceId = getCurrentlySelectedPieceId();
       if (currentSelectedPieceId) {
+        // Check if this is a dual movement piece and requires mode selection
+        const selectedPiece = gameState.pieces[currentSelectedPieceId];
+        const isDualMovement = selectedPiece && selectedPiece.type === 'HYBRID_QUEEN';
+        
+        if (isDualMovement && (move.type === 'dual-move-queen' || move.type === 'dual-move-jumper')) {
+          // For dual movement, validate that the mode matches the selected movement mode
+          if (!selectedMovementMode) {
+            gameInfoEl.textContent = `Select movement mode first!`;
+            gameInfoEl.style.color = '#ff6b6b';
+            setTimeout(() => {
+              gameInfoEl.style.color = '#ffffff';
+            }, 2000);
+            return;
+          }
+          
+          const expectedMoveType = selectedMovementMode === 'queen' ? 'dual-move-queen' : 'dual-move-jumper';
+          if (move.type !== expectedMoveType) {
+            gameInfoEl.textContent = `Move doesn't match selected mode!`;
+            gameInfoEl.style.color = '#ff6b6b';
+            setTimeout(() => {
+              gameInfoEl.style.color = '#ffffff';
+            }, 2000);
+            return;
+          }
+        }
         if (move.type === 'split') {
           // Send split command to server
           socket.emit('split-piece', {
@@ -1337,6 +2328,7 @@ function onMouseClick(event) {
         
         // Clear highlights after action
         clearValidMoveHighlights();
+        hideDualMovementUI();
         selectedPieceId = null;
       }
     }
@@ -1346,12 +2338,14 @@ function onMouseClick(event) {
       // Clear selection when clicking on empty space
       selectedPieceId = null;
       clearValidMoveHighlights();
+      hideDualMovementUI();
       gameInfoEl.textContent = 'Click on your pieces to select them';
     }
   } else {
     // Clicked on empty space - clear selection
     selectedPieceId = null;
     clearValidMoveHighlights();
+    hideDualMovementUI();
     gameInfoEl.textContent = 'Click on your pieces to select them';
   }
 }
@@ -1376,8 +2370,775 @@ function animate() {
   // Rotate globe slowly
   globe.rotation.y += 0.001;
   
+  // Animate equator squares with pulsing effect
+  const time = Date.now() * 0.002;
+  gridSquares.forEach(square => {
+    if (square.userData.isEquatorSquare) {
+      // Pulsing opacity effect for equator squares
+      square.material.opacity = square.userData.originalOpacity + Math.sin(time) * 0.2;
+    }
+  });
+  
   renderer.render(scene, camera);
 }
+
+// Add event listeners for dual movement mode selection
+document.getElementById('queen-mode-btn').addEventListener('click', () => {
+  selectMovementMode('queen');
+});
+
+document.getElementById('jumper-mode-btn').addEventListener('click', () => {
+  selectMovementMode('jumper');
+});
+
+// Tournament UI event listeners
+document.getElementById('create-tournament-btn').addEventListener('click', () => {
+  showTournamentCreation();
+});
+
+document.getElementById('join-tournament-btn').addEventListener('click', () => {
+  showTournamentList();
+});
+
+document.getElementById('create-tournament-confirm').addEventListener('click', () => {
+  createTournament();
+});
+
+document.getElementById('create-tournament-cancel').addEventListener('click', () => {
+  hideTournamentCreation();
+});
+
+// Lobby system functionality
+let currentLobby = null;
+let isInLobby = false;
+
+// Lobby event handlers
+document.getElementById('lobby-toggle').addEventListener('click', () => {
+  const lobbyUI = document.getElementById('lobby-ui');
+  if (lobbyUI.style.display === 'none') {
+    showLobbyUI();
+  } else {
+    hideLobbyUI();
+  }
+});
+
+document.getElementById('create-lobby-btn').addEventListener('click', () => {
+  showLobbyCreation();
+});
+
+document.getElementById('create-lobby-confirm').addEventListener('click', () => {
+  createLobby();
+});
+
+document.getElementById('create-lobby-cancel').addEventListener('click', () => {
+  hideLobbyCreation();
+});
+
+document.getElementById('refresh-lobbies-btn').addEventListener('click', () => {
+  refreshLobbies();
+});
+
+document.getElementById('leave-lobby-btn').addEventListener('click', () => {
+  leaveLobby();
+});
+
+document.getElementById('ready-toggle-btn').addEventListener('click', () => {
+  toggleReady();
+});
+
+// Statistics system functionality
+let playerStats = null;
+let currentLeaderboard = [];
+let playerAchievements = [];
+let globalStats = null;
+
+// Statistics event handlers
+document.getElementById('stats-toggle').addEventListener('click', () => {
+  const statsUI = document.getElementById('stats-ui');
+  if (statsUI.style.display === 'none') {
+    showStatisticsUI();
+  } else {
+    hideStatisticsUI();
+  }
+});
+
+document.getElementById('show-personal-stats').addEventListener('click', () => {
+  showPersonalStats();
+});
+
+document.getElementById('show-leaderboard').addEventListener('click', () => {
+  showLeaderboard();
+});
+
+document.getElementById('show-achievements').addEventListener('click', () => {
+  showAchievements();
+});
+
+document.getElementById('show-global-stats').addEventListener('click', () => {
+  showGlobalStats();
+});
+
+document.getElementById('refresh-leaderboard').addEventListener('click', () => {
+  refreshLeaderboard();
+});
+
+document.getElementById('leaderboard-category').addEventListener('change', () => {
+  refreshLeaderboard();
+});
+
+document.getElementById('tournament-toggle').addEventListener('click', () => {
+  const tournamentUI = document.getElementById('tournament-ui');
+  if (tournamentUI.style.display === 'none') {
+    showTournamentUI();
+  } else {
+    hideTournamentUI();
+  }
+});
+
+// Spectator mode functionality
+let isSpectating = false;
+let spectatorCount = 0;
+let currentReplay = null;
+let replayPlaying = false;
+let replaySpeed = 1;
+let replayCurrentMove = 0;
+
+// Spectator event handlers
+document.getElementById('spectator-toggle').addEventListener('click', () => {
+  const spectatorUI = document.getElementById('spectator-ui');
+  if (spectatorUI.style.display === 'none') {
+    showSpectatorUI();
+  } else {
+    hideSpectatorUI();
+  }
+});
+
+document.getElementById('join-spectator-btn').addEventListener('click', () => {
+  joinSpectator();
+});
+
+document.getElementById('leave-spectator-btn').addEventListener('click', () => {
+  leaveSpectator();
+});
+
+// Replay event handlers
+document.getElementById('replay-toggle').addEventListener('click', () => {
+  const replayUI = document.getElementById('replay-ui');
+  if (replayUI.style.display === 'none') {
+    showReplayUI();
+  } else {
+    hideReplayUI();
+  }
+});
+
+document.getElementById('refresh-replays-btn').addEventListener('click', () => {
+  socket.emit('get-replays');
+});
+
+document.getElementById('stop-replay-btn').addEventListener('click', () => {
+  stopReplay();
+});
+
+document.getElementById('replay-play-pause').addEventListener('click', () => {
+  toggleReplayPlayback();
+});
+
+document.getElementById('replay-step-back').addEventListener('click', () => {
+  stepReplayBackward();
+});
+
+document.getElementById('replay-step-forward').addEventListener('click', () => {
+  stepReplayForward();
+});
+
+document.getElementById('replay-speed').addEventListener('change', (e) => {
+  replaySpeed = parseFloat(e.target.value);
+});
+
+document.getElementById('replay-timeline').addEventListener('input', (e) => {
+  seekReplayToPosition(parseFloat(e.target.value));
+});
+
+// Spectator functions
+function showSpectatorUI() {
+  document.getElementById('spectator-ui').style.display = 'block';
+  document.getElementById('tournament-ui').style.display = 'none';
+  document.getElementById('replay-ui').style.display = 'none';
+  socket.emit('get-spectatable-games');
+}
+
+function hideSpectatorUI() {
+  document.getElementById('spectator-ui').style.display = 'none';
+  if (isSpectating) {
+    leaveSpectator();
+  }
+}
+
+function joinSpectator() {
+  socket.emit('join-spectator', { gameId: 'main' });
+}
+
+function leaveSpectator() {
+  socket.emit('leave-spectator', { gameId: 'main' });
+}
+
+// Replay functions
+function showReplayUI() {
+  document.getElementById('replay-ui').style.display = 'block';
+  document.getElementById('tournament-ui').style.display = 'none';
+  document.getElementById('spectator-ui').style.display = 'none';
+  socket.emit('get-replays');
+}
+
+function hideReplayUI() {
+  document.getElementById('replay-ui').style.display = 'none';
+  if (currentReplay) {
+    stopReplay();
+  }
+}
+
+function playReplay(gameId) {
+  socket.emit('get-replay', { gameId });
+}
+
+function stopReplay() {
+  currentReplay = null;
+  replayPlaying = false;
+  replayCurrentMove = 0;
+  document.getElementById('replay-controls').style.display = 'none';
+  document.getElementById('stop-replay-btn').style.display = 'none';
+  updateReplayUI();
+}
+
+function toggleReplayPlayback() {
+  if (!currentReplay) return;
+  
+  replayPlaying = !replayPlaying;
+  document.getElementById('replay-play-pause').textContent = replayPlaying ? '⏸️' : '▶️';
+  
+  if (replayPlaying) {
+    playReplayStep();
+  }
+}
+
+function playReplayStep() {
+  if (!replayPlaying || !currentReplay) return;
+  
+  if (replayCurrentMove < currentReplay.moves.length) {
+    replayCurrentMove++;
+    socket.emit('replay-seek', { 
+      gameId: currentReplay.gameId, 
+      moveIndex: replayCurrentMove - 1 
+    });
+    
+    setTimeout(() => {
+      playReplayStep();
+    }, 1000 / replaySpeed);
+  } else {
+    replayPlaying = false;
+    document.getElementById('replay-play-pause').textContent = '▶️';
+  }
+}
+
+function stepReplayBackward() {
+  if (!currentReplay || replayCurrentMove <= 0) return;
+  
+  replayCurrentMove--;
+  socket.emit('replay-seek', { 
+    gameId: currentReplay.gameId, 
+    moveIndex: replayCurrentMove - 1 
+  });
+}
+
+function stepReplayForward() {
+  if (!currentReplay || replayCurrentMove >= currentReplay.moves.length) return;
+  
+  replayCurrentMove++;
+  socket.emit('replay-seek', { 
+    gameId: currentReplay.gameId, 
+    moveIndex: replayCurrentMove - 1 
+  });
+}
+
+function seekReplayToPosition(position) {
+  if (!currentReplay) return;
+  
+  const targetMove = Math.floor((position / 100) * currentReplay.moves.length);
+  replayCurrentMove = targetMove;
+  socket.emit('replay-seek', { 
+    gameId: currentReplay.gameId, 
+    moveIndex: targetMove - 1 
+  });
+}
+
+function updateReplayUI() {
+  if (!currentReplay) return;
+  
+  document.getElementById('replay-current-move').textContent = replayCurrentMove;
+  document.getElementById('replay-total-moves').textContent = currentReplay.moves.length;
+  
+  const currentTime = currentReplay.moves[replayCurrentMove - 1]?.timestamp || 0;
+  const totalTime = currentReplay.duration || 0;
+  
+  document.getElementById('replay-current-time').textContent = formatTime(currentTime);
+  document.getElementById('replay-total-time').textContent = formatTime(totalTime);
+  
+  document.getElementById('replay-timeline').value = (replayCurrentMove / currentReplay.moves.length) * 100;
+  
+  document.getElementById('replay-game-id').textContent = currentReplay.gameId;
+  document.getElementById('replay-players').textContent = currentReplay.players.join(', ');
+  document.getElementById('replay-duration').textContent = formatTime(totalTime);
+}
+
+function formatTime(milliseconds) {
+  const seconds = Math.floor(milliseconds / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+}
+
+// Socket event handlers for spectator mode
+socket.on('spectator-joined', (data) => {
+  isSpectating = true;
+  document.getElementById('join-spectator-btn').style.display = 'none';
+  document.getElementById('leave-spectator-btn').style.display = 'block';
+  document.getElementById('spectator-game-status').textContent = 'Spectating';
+  console.log('Joined as spectator:', data);
+});
+
+socket.on('spectator-left', (data) => {
+  isSpectating = false;
+  document.getElementById('join-spectator-btn').style.display = 'block';
+  document.getElementById('leave-spectator-btn').style.display = 'none';
+  document.getElementById('spectator-game-status').textContent = 'Not spectating';
+  console.log('Left spectator mode:', data);
+});
+
+socket.on('spectator-count-updated', (data) => {
+  spectatorCount = data.count;
+  document.getElementById('spectator-count').textContent = spectatorCount;
+});
+
+socket.on('spectatable-games', (data) => {
+  updateSpectatorGamesList(data.games);
+});
+
+socket.on('replay-list', (data) => {
+  updateReplaysList(data.replays);
+});
+
+socket.on('replay-data', (data) => {
+  currentReplay = data.replay;
+  replayCurrentMove = 0;
+  document.getElementById('replay-controls').style.display = 'block';
+  document.getElementById('stop-replay-btn').style.display = 'block';
+  updateReplayUI();
+  console.log('Loaded replay:', data.replay);
+});
+
+socket.on('replay-state', (data) => {
+  if (data.gameState && data.moves) {
+    // Update the game visualization with replay state
+    updateGameVisualization(data.gameState, data.moves);
+    updateReplayUI();
+  }
+});
+
+function updateSpectatorGamesList(games) {
+  const gamesList = document.getElementById('spectator-games-list');
+  if (games.length === 0) {
+    gamesList.innerHTML = '<div style="color: #888; font-size: 12px;">No games available to spectate</div>';
+    return;
+  }
+  
+  gamesList.innerHTML = games.map(game => `
+    <div style="padding: 5px; margin: 2px 0; background: rgba(255, 255, 255, 0.1); border-radius: 3px; cursor: pointer;" 
+         onclick="joinSpectatorGame('${game.gameId}')">
+      <div style="font-weight: bold;">Game: ${game.gameId}</div>
+      <div style="font-size: 11px; color: #ccc;">Spectators: ${game.spectatorCount}</div>
+    </div>
+  `).join('');
+}
+
+function updateReplaysList(replays) {
+  const replaysList = document.getElementById('replay-list');
+  if (replays.length === 0) {
+    replaysList.innerHTML = '<div style="color: #888; font-size: 12px;">No replays available</div>';
+    return;
+  }
+  
+  replaysList.innerHTML = replays.map(replay => `
+    <div style="padding: 5px; margin: 2px 0; background: rgba(255, 255, 255, 0.1); border-radius: 3px; cursor: pointer;" 
+         onclick="playReplay('${replay.gameId}')">
+      <div style="font-weight: bold;">Game: ${replay.gameId}</div>
+      <div style="font-size: 11px; color: #ccc;">
+        Players: ${replay.players.join(', ')} | Duration: ${formatTime(replay.duration)} | Moves: ${replay.moveCount}
+      </div>
+      <div style="font-size: 10px; color: #888;">
+        Played: ${new Date(replay.metadata.created).toLocaleString()}
+      </div>
+    </div>
+  `).join('');
+}
+
+function joinSpectatorGame(gameId) {
+  socket.emit('join-spectator', { gameId });
+}
+
+function updateGameVisualization(gameState, moves) {
+  // Update the 3D visualization with replay data
+  // This would integrate with the existing game state update logic
+  console.log('Updating game visualization with replay state:', gameState, moves);
+}
+
+// AI opponent functionality
+let currentAIPlayers = [];
+let aiStats = {};
+
+// AI event handlers
+document.getElementById('ai-toggle').addEventListener('click', () => {
+  const aiUI = document.getElementById('ai-ui');
+  if (aiUI.style.display === 'none') {
+    showAIUI();
+  } else {
+    hideAIUI();
+  }
+});
+
+document.getElementById('add-ai-btn').addEventListener('click', () => {
+  addAIPlayer();
+});
+
+document.getElementById('remove-all-ai-btn').addEventListener('click', () => {
+  removeAllAI();
+});
+
+// AI functions
+function showAIUI() {
+  document.getElementById('ai-ui').style.display = 'block';
+  document.getElementById('tournament-ui').style.display = 'none';
+  document.getElementById('spectator-ui').style.display = 'none';
+  document.getElementById('replay-ui').style.display = 'none';
+  socket.emit('get-ai-difficulties');
+}
+
+function hideAIUI() {
+  document.getElementById('ai-ui').style.display = 'none';
+}
+
+function addAIPlayer() {
+  const difficulty = document.getElementById('ai-difficulty-select').value;
+  const personalityType = document.getElementById('ai-personality-select').value;
+  
+  const personality = getAIPersonality(personalityType);
+  
+  socket.emit('add-ai-player', {
+    difficulty,
+    personality
+  });
+}
+
+function removeAllAI() {
+  currentAIPlayers.forEach(aiPlayer => {
+    socket.emit('remove-ai-player', { aiPlayerId: aiPlayer.id });
+  });
+  currentAIPlayers = [];
+  updateAIPlayersList();
+}
+
+function getAIPersonality(personalityType) {
+  const personalities = {
+    balanced: {
+      preferredPieces: ['QUEEN', 'ROOK', 'BISHOP'],
+      playStyle: 'balanced',
+      riskTolerance: 0.5,
+      aggressiveness: 0.5
+    },
+    aggressive: {
+      preferredPieces: ['QUEEN', 'KNIGHT', 'JUMPER'],
+      playStyle: 'aggressive',
+      riskTolerance: 0.8,
+      aggressiveness: 0.8
+    },
+    defensive: {
+      preferredPieces: ['ROOK', 'BISHOP', 'KING'],
+      playStyle: 'defensive',
+      riskTolerance: 0.2,
+      aggressiveness: 0.2
+    },
+    evolution: {
+      preferredPieces: ['PAWN', 'SPLITTER', 'JUMPER'],
+      playStyle: 'evolution',
+      riskTolerance: 0.6,
+      aggressiveness: 0.4
+    }
+  };
+  
+  return personalities[personalityType] || personalities.balanced;
+}
+
+function updateAIPlayersList() {
+  const aiList = document.getElementById('ai-players-list');
+  
+  if (currentAIPlayers.length === 0) {
+    aiList.innerHTML = '<div style="color: #888; font-size: 12px;">No AI players active</div>';
+    return;
+  }
+  
+  aiList.innerHTML = currentAIPlayers.map(aiPlayer => `
+    <div style="padding: 5px; margin: 2px 0; background: rgba(255, 255, 255, 0.1); border-radius: 3px; display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <div style="font-weight: bold; color: ${aiPlayer.color};">🤖 ${aiPlayer.name}</div>
+        <div style="font-size: 11px; color: #ccc;">${aiPlayer.aiDifficulty} | ${aiPlayer.pieces.length} pieces</div>
+      </div>
+      <div style="display: flex; gap: 5px;">
+        <button onclick="showAIStats('${aiPlayer.id}')" style="padding: 2px 5px; background: #555; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 10px;">Stats</button>
+        <button onclick="removeAIPlayer('${aiPlayer.id}')" style="padding: 2px 5px; background: #cc0000; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 10px;">Remove</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function removeAIPlayer(aiPlayerId) {
+  socket.emit('remove-ai-player', { aiPlayerId });
+}
+
+function showAIStats(aiPlayerId) {
+  socket.emit('get-ai-stats', { aiPlayerId });
+  document.getElementById('ai-stats').style.display = 'block';
+}
+
+function updateAIStats(aiPlayerId, stats) {
+  if (stats) {
+    document.getElementById('ai-moves-played').textContent = stats.movesPlayed;
+    document.getElementById('ai-battles-won').textContent = stats.battlesWon;
+    document.getElementById('ai-battles-lost').textContent = stats.battlesLost;
+    document.getElementById('ai-pieces-evolved').textContent = stats.piecesEvolved;
+    document.getElementById('ai-avg-think-time').textContent = Math.round(stats.averageThinkTime) + 'ms';
+  }
+}
+
+// Socket event handlers for AI
+socket.on('ai-player-added', (data) => {
+  console.log('AI player added:', data);
+  currentAIPlayers.push(data.aiPlayer);
+  updateAIPlayersList();
+  
+  // Show notification
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+    position: fixed;
+    top: 50px;
+    right: 20px;
+    background: #00cc66;
+    color: white;
+    padding: 10px;
+    border-radius: 5px;
+    z-index: 1000;
+    font-size: 14px;
+  `;
+  notification.textContent = `🤖 AI Player Added: ${data.aiPlayer.name} (${data.difficulty})`;
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+    notification.remove();
+  }, 3000);
+});
+
+socket.on('ai-player-removed', (data) => {
+  console.log('AI player removed:', data);
+  currentAIPlayers = currentAIPlayers.filter(p => p.id !== data.aiPlayerId);
+  updateAIPlayersList();
+});
+
+socket.on('ai-add-failed', (data) => {
+  console.log('AI add failed:', data);
+  alert('Failed to add AI player: ' + data.error);
+});
+
+socket.on('ai-difficulties', (data) => {
+  console.log('AI difficulties:', data);
+  // Update difficulty select if needed
+});
+
+socket.on('ai-difficulty-updated', (data) => {
+  console.log('AI difficulty updated:', data);
+  const aiPlayer = currentAIPlayers.find(p => p.id === data.aiPlayerId);
+  if (aiPlayer) {
+    aiPlayer.aiDifficulty = data.newDifficulty;
+    updateAIPlayersList();
+  }
+});
+
+socket.on('ai-stats', (data) => {
+  console.log('AI stats:', data);
+  updateAIStats(data.aiPlayerId, data.stats);
+});
+
+socket.on('ai-move-completed', (data) => {
+  console.log('AI move completed:', data);
+  
+  // Show AI move notification
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    background: rgba(0, 204, 102, 0.9);
+    color: white;
+    padding: 8px;
+    border-radius: 3px;
+    z-index: 1000;
+    font-size: 12px;
+    max-width: 300px;
+  `;
+  notification.textContent = `🤖 ${data.aiName}: ${data.moveResult}`;
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+    notification.remove();
+  }, 2000);
+});
+
+// Update currentAIPlayers when game state changes
+socket.on('game-state-update', (data) => {
+  // Update AI players list based on game state
+  const aiPlayersInGame = Object.values(data.players).filter(p => p.isAI);
+  currentAIPlayers = aiPlayersInGame;
+  updateAIPlayersList();
+});
+
+// Lobby system socket handlers
+socket.on('lobby-created', (data) => {
+  currentLobby = data.lobby;
+  isInLobby = true;
+  showLobbyRoom(data.lobby);
+  console.log('Lobby created:', data.lobby.name);
+});
+
+socket.on('lobby-joined', (data) => {
+  currentLobby = data.lobby;
+  isInLobby = true;
+  showLobbyRoom(data.lobby);
+  console.log('Joined lobby:', data.lobby.name);
+});
+
+socket.on('lobby-left', (data) => {
+  currentLobby = null;
+  isInLobby = false;
+  hideLobbyCreation();
+  refreshLobbies();
+  console.log('Left lobby:', data.lobbyId);
+});
+
+socket.on('lobby-updated', (data) => {
+  if (currentLobby && currentLobby.id === data.lobby.id) {
+    currentLobby = data.lobby;
+    updateLobbyRoomDisplay(data.lobby);
+  }
+});
+
+socket.on('lobby-list', (data) => {
+  lobbies = data.lobbies;
+  updateLobbyList(lobbies);
+});
+
+socket.on('lobby-list-update', (data) => {
+  lobbies = data.lobbies;
+  updateLobbyList(lobbies);
+});
+
+socket.on('lobby-creation-failed', (data) => {
+  alert('Failed to create lobby: ' + data.error);
+});
+
+socket.on('lobby-join-failed', (data) => {
+  alert('Failed to join lobby: ' + data.error);
+});
+
+socket.on('lobby-leave-failed', (data) => {
+  alert('Failed to leave lobby: ' + data.error);
+});
+
+socket.on('ready-toggled', (data) => {
+  console.log('Ready status toggled:', data.ready);
+});
+
+socket.on('ready-toggle-failed', (data) => {
+  alert('Failed to toggle ready status: ' + data.error);
+});
+
+socket.on('game-starting', (data) => {
+  console.log('Game starting in 3 seconds...');
+  startGameCountdown(data.countdown);
+});
+
+socket.on('game-started', (data) => {
+  console.log('Game started!', data);
+  currentLobby = null;
+  isInLobby = false;
+  hideLobbyUI();
+  
+  // The game state will be updated through the normal game-state-update event
+  showNotification('Game Started!', 'The game has begun. Good luck!');
+});
+
+socket.on('lobby-settings-updated', (data) => {
+  console.log('Lobby settings updated:', data.settings);
+});
+
+socket.on('lobby-settings-update-failed', (data) => {
+  alert('Failed to update lobby settings: ' + data.error);
+});
+
+socket.on('lobby-info', (data) => {
+  console.log('Lobby info:', data.lobby);
+});
+
+socket.on('lobby-not-found', (data) => {
+  alert('Lobby not found: ' + data.lobbyId);
+});
+
+socket.on('player-lobby', (data) => {
+  if (data.lobby) {
+    currentLobby = data.lobby;
+    isInLobby = true;
+    showLobbyRoom(data.lobby);
+  }
+});
+
+socket.on('lobby-stats', (data) => {
+  console.log('Lobby stats:', data.stats);
+});
+
+// Statistics system socket handlers
+socket.on('player-stats', (data) => {
+  playerStats = data.stats;
+  displayPersonalStats(playerStats);
+});
+
+socket.on('leaderboard', (data) => {
+  currentLeaderboard = data.leaderboard;
+  displayLeaderboard(currentLeaderboard, data.category);
+});
+
+socket.on('achievements', (data) => {
+  playerAchievements = data.achievements;
+  displayAchievements(playerAchievements);
+});
+
+socket.on('global-stats', (data) => {
+  globalStats = data.stats;
+  displayGlobalStats(globalStats);
+});
+
+socket.on('player-rank', (data) => {
+  console.log(`Player rank in ${data.category}: ${data.rank}`);
+});
+
+socket.on('game-history', (data) => {
+  console.log('Game history:', data.history);
+});
 
 // Start animation
 animate();
