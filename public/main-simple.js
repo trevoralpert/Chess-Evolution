@@ -307,7 +307,7 @@ createGridOverlay();
 let gameState = {
   players: {},
   pieces: {},
-  gridConfig: { rows: 20, cols: 32 }
+  gridConfig: { rows: 20, cols: 8 }
 };
 
 // Visual elements
@@ -430,6 +430,56 @@ socket.on('piece-evolution', (data) => {
     }
   };
   animateEvolution();
+});
+
+socket.on('evolution-point-award', (data) => {
+  const { pieceId, pieceType, points, reason, position } = data;
+  console.log(`Evolution points awarded: ${pieceType} gained ${points} points for ${reason}`);
+  
+  // Create special effect for circumnavigation
+  if (reason === 'circumnavigation') {
+    const worldPos = getWorldPosition(position.row, position.col);
+    
+    // Create golden ring effect for circumnavigation
+    const ringGeometry = new THREE.RingGeometry(0.2, 0.4, 16);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: 0xFFD700, // Gold color
+      transparent: true,
+      opacity: 0.8,
+      side: THREE.DoubleSide
+    });
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring.position.set(worldPos.x, worldPos.y, worldPos.z);
+    ring.lookAt(0, 0, 0); // Face toward center of globe
+    scene.add(ring);
+    
+    // Show circumnavigation notification
+    const player = gameState.players[gameState.pieces[pieceId]?.playerId];
+    if (player) {
+      const playerIndex = Object.keys(gameState.players).indexOf(player.id) + 1;
+      showNotification(`🌍 Player ${playerIndex} Circumnavigation! +8 Evolution Points! 🌍`, '#FFD700', 3000);
+    }
+    
+    // Animate ring effect
+    let scale = 0.5;
+    let rotation = 0;
+    const animateRing = () => {
+      scale += 0.05;
+      rotation += 0.1;
+      ring.scale.set(scale, scale, scale);
+      ring.rotation.z = rotation;
+      ring.material.opacity = 0.8 - (scale * 0.3);
+      
+      if (scale < 3) {
+        requestAnimationFrame(animateRing);
+      } else {
+        scene.remove(ring);
+        ringGeometry.dispose();
+        ringMaterial.dispose();
+      }
+    };
+    animateRing();
+  }
 });
 
 socket.on('battle-contest-prompt', (data) => {

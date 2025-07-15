@@ -134,24 +134,25 @@ const PIECE_TYPES = {
 // Movement patterns for each piece type
 const MOVEMENT_PATTERNS = {
   pawn: {
-    type: 'directional',
+    type: 'latitude_based',
     directions: [
-      { row: 1, col: 0 }, // Forward (outward from pole on spherical board)
+      { row: 1, col: 0 }, // Forward along latitude line toward opposite pole
     ],
     attackDirections: [
-      { row: 1, col: 0 }, // Same as move direction - can attack straight outward too
+      { row: 1, col: -1 }, { row: 1, col: 1 }, // Diagonal attacks (can change latitude line)
     ],
     maxDistance: 1,
-    jumpOver: false
+    jumpOver: false,
+    specialAbility: 'circumnavigation' // Can get +8 evolution points for reaching opposite pole
   },
   
   king: {
     type: 'omnidirectional',
     directions: [
-      // For spherical geometry, king can move to adjacent squares in all directions
-      // but not backwards off the board (no row -1 when at pole)
-      { row: 0, col: -1 }, { row: 0, col: 1 },  // Lateral movement around the pole
-      { row: 1, col: -1 }, { row: 1, col: 0 }, { row: 1, col: 1 }  // Forward movement from pole
+      // King can move one space in any direction (including backwards)
+      { row: -1, col: -1 }, { row: -1, col: 0 }, { row: -1, col: 1 }, // Backward movement
+      { row: 0, col: -1 },                        { row: 0, col: 1 },  // Lateral movement
+      { row: 1, col: -1 },  { row: 1, col: 0 },  { row: 1, col: 1 }   // Forward movement
     ],
     maxDistance: 1,
     jumpOver: false

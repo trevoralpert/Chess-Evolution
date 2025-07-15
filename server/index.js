@@ -230,11 +230,48 @@ function handlePieceMove(playerId, moveData) {
   piece.col = targetCol;
   gameState.grid[targetPosKey] = pieceId;
   
+  // Check for circumnavigation bonus (pawns and splitters reaching opposite pole)
+  if ((piece.type === 'PAWN' || piece.type === 'SPLITTER') && checkCircumnavigation(piece)) {
+    piece.evolutionPoints = (piece.evolutionPoints || 0) + 8;
+    console.log(`${piece.symbol} completed circumnavigation! +8 evolution points (${piece.evolutionPoints} total)`);
+    
+    // Broadcast evolution point award
+    io.emit('evolution-point-award', {
+      pieceId: piece.id,
+      pieceType: piece.type,
+      points: piece.evolutionPoints,
+      reason: 'circumnavigation',
+      position: { row: piece.row, col: piece.col }
+    });
+  }
+  
   const successMsg = `Piece ${piece.symbol} moved to (${targetRow}, ${targetCol})`;
   console.log(successMsg);
   broadcastGameState();
   
   return { success: true, message: successMsg };
+}
+
+function checkCircumnavigation(piece) {
+  // Check if a pawn or splitter has reached the opposite pole
+  const player = gameState.players[piece.playerId];
+  if (!player) return false;
+  
+  const playerSpawnArea = GAME_CONFIG.SPAWN_AREAS[player.index];
+  const spawnRow = playerSpawnArea.baseRow;
+  
+  // Determine opposite pole based on spawn position
+  let oppositeRow;
+  if (spawnRow === 0) {
+    // Spawned at north pole (row 0), opposite is south pole (row 19)
+    oppositeRow = GAME_CONFIG.GRID_ROWS - 1;
+  } else {
+    // Spawned at south pole or other position, opposite is north pole (row 0)
+    oppositeRow = 0;
+  }
+  
+  // Check if piece has reached the opposite pole
+  return piece.row === oppositeRow;
 }
 
 function handlePieceSplit(playerId, splitData) {
@@ -607,7 +644,7 @@ function getValidMoves(pieceId) {
   const validMoves = [];
   
   // Handle different movement pattern types
-  if (movementPattern.type === 'directional' || movementPattern.type === 'enhanced_pawn') {
+  if (movementPattern.type === 'directional' || movementPattern.type === 'enhanced_pawn' || movementPattern.type === 'latitude_based') {
     // Pawn and Splitter movement - separate move and attack directions
     const moveDirections = movementPattern.directions || [];
     const attackDirections = movementPattern.attackDirections || movementPattern.directions;
