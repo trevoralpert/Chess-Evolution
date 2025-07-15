@@ -135,7 +135,7 @@ console.log('Lighting added to scene');
 let gameState = {
   players: {},
   pieces: {},
-  gridConfig: { rows: 20, cols: 32 }
+  gridConfig: { rows: 20, cols: 8 }  // Fixed: Use correct 8 columns
 };
 
 // Visual elements
