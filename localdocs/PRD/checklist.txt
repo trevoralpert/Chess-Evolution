@@ -4,7 +4,7 @@
 - [x] Fix syntax error in server/index.js: require('('path') → require('path')
 - [x] Set up proper project structure (package.json, separate files)
 - [x] Implement discrete grid system on sphere surface with defined squares
-- [x] Add visual grid overlay on sphere surface (so you can see the board!)
+- [x] Add visual grid overlay on sphere surface with pole markers (JUST COMPLETED!)
 - [x] Define piece types and point values together (1-12 points as per evolution chart)
 - [x] Implement 3x3 starting formation logic (King center, 8 pawns around)
 - [x] Add player color assignment system (beyond just red/blue/green)
@@ -128,8 +128,9 @@
 
 ---
 
-## 🎯 CURRENT PRIORITY: Phase 3 Complete ✅ → Phase 4
-**Next Action:** Begin Advanced Movement Mechanics (Splitter splitting mechanics)
+## 🎯 CURRENT PRIORITY: Phase 4 - Advanced Movement Mechanics
+**Next Action:** Implement Splitter splitting mechanics (can move forward OR split, not both)
+**Recent Achievement:** ✅ Visual grid overlay with pole markers now working perfectly!
 
 ## 📊 PROGRESS TRACKING
 - Phase 1: 8/8 complete ✅
@@ -174,13 +175,13 @@
 ---
 
 ## 🎮 **MAJOR BREAKTHROUGHS THIS SESSION:**
-- **Fixed Click Detection:** Grid lines no longer interfere with move selection
-- **Spherical Geometry:** Pawns move outward from poles, kings can't move backwards off board
-- **Working Movement:** Players can now actually play chess on the globe!
-- **GitHub Integration:** Project safely backed up and version controlled
-- **Real-time Multiplayer:** Multiple players can join and make moves simultaneously
-- **Checkmate Detection:** King capture triggers player elimination and victory conditions
-- **Complete Phase 3:** Full movement and interaction system with proper game endings
+- **Visual Grid Overlay:** ✅ Bright green grid squares with gold/orange pole markers now display perfectly!
+- **Fixed Duplicate Function Bug:** Removed conflicting createGridOverlay functions that were preventing grid display
+- **Browser Cache Resolution:** Implemented proper cache busting to ensure code updates load correctly
+- **Spherical Grid System:** 20x8 grid configuration with proper pole positioning and scaling
+- **Pole Markers:** Gold octagon at north pole, orange octagon at south pole for special significance
+- **Grid Square Scaling:** Squares grow larger at equator, smaller at poles for proper spherical geometry
+- **Complete Visual Board:** Players can now see the entire game board with clear grid boundaries
 
 ---
 

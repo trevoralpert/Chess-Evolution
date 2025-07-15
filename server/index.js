@@ -82,7 +82,9 @@ io.on('connection', (socket) => {
   socket.on('contest-response', (data) => {
     handleContestResponse(socket.id, data);
   });
-  
+
+
+
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`);
     
@@ -107,6 +109,8 @@ io.on('connection', (socket) => {
     broadcastGameState();
   });
 });
+
+
 
 function createStartingPieces(player) {
   const { baseRow, baseCol } = player.spawnArea;
@@ -186,11 +190,11 @@ function handlePieceMove(playerId, moveData) {
   
   // Check if this move is valid according to piece movement rules
   const validMoves = getValidMoves(pieceId);
-  const isValidMove = validMoves.some(move => 
+  const matchingMove = validMoves.find(move => 
     move.row === targetRow && move.col === targetCol
   );
   
-  if (!isValidMove) {
+  if (!matchingMove) {
     const errorMsg = `Invalid move: (${targetRow}, ${targetCol}) is not a valid move for piece ${pieceId}`;
     console.log(errorMsg);
     const playerSocket = io.sockets.sockets.get(playerId);
@@ -200,7 +204,71 @@ function handlePieceMove(playerId, moveData) {
     return null;
   }
   
-  // Check if position is occupied
+  // Handle jump-capture moves
+  if (matchingMove.type === 'jump-capture') {
+    // Remove the jumped-over piece
+    const capturedPieceId = matchingMove.capturedPieceId;
+    const capturedPiece = gameState.pieces[capturedPieceId];
+    
+    if (capturedPiece) {
+      console.log(`Jump capture: ${piece.symbol} jumps over ${capturedPiece.symbol}`);
+      
+      // Remove captured piece from grid and game state
+      const capturedPosKey = GridUtils.getPositionKey(capturedPiece.row, capturedPiece.col);
+      delete gameState.grid[capturedPosKey];
+      delete gameState.pieces[capturedPieceId];
+      
+      // Remove from player's pieces array
+      const capturedPlayer = gameState.players[capturedPiece.playerId];
+      if (capturedPlayer) {
+        capturedPlayer.pieces = capturedPlayer.pieces.filter(id => id !== capturedPieceId);
+      }
+      
+      // Award kill to jumping piece
+      piece.kills = (piece.kills || 0) + 1;
+      
+      // Move jumper to landing position
+      const oldPosKey = GridUtils.getPositionKey(piece.row, piece.col);
+      delete gameState.grid[oldPosKey];
+      
+      piece.row = targetRow;
+      piece.col = targetCol;
+      gameState.grid[GridUtils.getPositionKey(targetRow, targetCol)] = pieceId;
+      
+      // Check if jumper can evolve
+      if (canEvolve(piece)) {
+        const evolvedPiece = evolvePiece(piece);
+        gameState.pieces[piece.id] = evolvedPiece;
+        
+        console.log(`Evolution: ${piece.symbol} evolved to ${evolvedPiece.symbol}!`);
+        
+        // Broadcast evolution event
+        io.emit('piece-evolution', {
+          pieceId: piece.id,
+          oldType: piece.type,
+          newType: evolvedPiece.type,
+          position: { row: evolvedPiece.row, col: evolvedPiece.col }
+        });
+      }
+      
+      // Broadcast jump capture event
+      io.emit('jump-capture', {
+        jumperId: pieceId,
+        capturedPieceId: capturedPieceId,
+        jumperPosition: { row: piece.row, col: piece.col },
+        capturedPosition: matchingMove.capturedPosition,
+        playerId: playerId
+      });
+      
+      const successMsg = `Jump capture: ${piece.symbol} captured ${capturedPiece.symbol} by jumping over`;
+      console.log(successMsg);
+      broadcastGameState();
+      
+      return { success: true, message: successMsg };
+    }
+  }
+  
+  // Check if position is occupied (for regular moves)
   const targetPosKey = GridUtils.getPositionKey(targetRow, targetCol);
   const targetPieceId = gameState.grid[targetPosKey];
   
@@ -377,6 +445,8 @@ function handlePieceSplit(playerId, splitData) {
   
   return { success: true, message: successMsg };
 }
+
+
 
 function handleBattle(attackingPiece, defendingPiece) {
   console.log(`Battle: ${attackingPiece.symbol} (${attackingPiece.value}pts) vs ${defendingPiece.symbol} (${defendingPiece.value}pts)`);
@@ -649,7 +719,7 @@ function getValidMoves(pieceId) {
     let moveDirections = movementPattern.directions || [];
     let attackDirections = movementPattern.attackDirections || movementPattern.directions;
     
-    // For pawns, determine movement direction based on player's spawn position
+    // For pawns, determine movement direction based on spawn location
     if (piece.type === 'PAWN') {
       const player = gameState.players[piece.playerId];
       if (player) {
@@ -722,59 +792,102 @@ function getValidMoves(pieceId) {
   } else {
     // Standard movement patterns (omnidirectional, diagonal, orthogonal, etc.)
     
-    // Special handling for King at poles
-    if (piece.type === 'KING' && (piece.row === 0 || piece.row === GAME_CONFIG.GRID_ROWS - 1)) {
-      // King at north pole (row 0) or south pole (row 19)
-      const isPoleNorth = piece.row === 0;
-      const targetRow = isPoleNorth ? 1 : GAME_CONFIG.GRID_ROWS - 2;
-      
-      // At poles, king can move to any column at the adjacent row (full 360° movement)
-      for (let col = 0; col < GAME_CONFIG.GRID_COLS; col++) {
-        const posKey = GridUtils.getPositionKey(targetRow, col);
-        const occupyingPieceId = gameState.grid[posKey];
-        
-        if (!occupyingPieceId) {
-          // Empty position - can move here
-          validMoves.push({ row: targetRow, col: col, type: 'move' });
-        } else {
-          // Position occupied
-          const occupyingPiece = gameState.pieces[occupyingPieceId];
-          if (occupyingPiece.playerId !== piece.playerId) {
-            // Enemy piece - can attack
-            validMoves.push({ row: targetRow, col: col, type: 'attack' });
-          }
-        }
-      }
-    } else {
-      // Standard movement for all other pieces and king not at poles
+    // Special handling for jumping pieces (Jumpers and evolved jumpers)
+    if (movementPattern.jumpOver && (piece.type === 'JUMPER' || piece.type === 'SUPER_JUMPER' || piece.type === 'HYPER_JUMPER' || piece.type === 'MISTRESS_JUMPER')) {
+      // Jumpers capture by jumping OVER pieces (not landing on them)
       movementPattern.directions.forEach(dir => {
-        const maxDistance = movementPattern.maxDistance || 1;
+        const jumpOverRow = piece.row + (dir.row / 2); // Midpoint to jump over
+        const jumpOverCol = GridUtils.normalizeCol(piece.col + (dir.col / 2));
+        const landingRow = piece.row + dir.row; // Landing position
+        const landingCol = GridUtils.normalizeCol(piece.col + dir.col);
         
-        for (let distance = 1; distance <= maxDistance; distance++) {
-          const targetRow = piece.row + (dir.row * distance);
-          const targetCol = GridUtils.normalizeCol(piece.col + (dir.col * distance));
+        // Check if jumping positions are valid
+        if (!GridUtils.isValidPosition(jumpOverRow, jumpOverCol) || !GridUtils.isValidPosition(landingRow, landingCol)) return;
+        
+        // Check if there's a piece to jump over
+        const jumpOverPosKey = GridUtils.getPositionKey(jumpOverRow, jumpOverCol);
+        const jumpOverPieceId = gameState.grid[jumpOverPosKey];
+        
+        // Check landing position
+        const landingPosKey = GridUtils.getPositionKey(landingRow, landingCol);
+        const landingPieceId = gameState.grid[landingPosKey];
+        
+        if (jumpOverPieceId && !landingPieceId) {
+          // There's a piece to jump over and landing position is empty
+          const jumpOverPiece = gameState.pieces[jumpOverPieceId];
           
-          if (!GridUtils.isValidPosition(targetRow, targetCol)) break;
-          
-          const posKey = GridUtils.getPositionKey(targetRow, targetCol);
+          if (jumpOverPiece.playerId !== piece.playerId) {
+            // Enemy piece - can capture by jumping over
+            validMoves.push({ 
+              row: landingRow, 
+              col: landingCol, 
+              type: 'jump-capture',
+              capturedPieceId: jumpOverPieceId,
+              capturedPosition: { row: jumpOverRow, col: jumpOverCol }
+            });
+          }
+        } else if (!jumpOverPieceId && !landingPieceId) {
+          // No piece to jump over and landing position is empty - regular move
+          validMoves.push({ row: landingRow, col: landingCol, type: 'move' });
+        }
+      });
+    } else {
+      // Standard movement for non-jumping pieces
+      
+      // Special handling for King at poles
+      if (piece.type === 'KING' && (piece.row === 0 || piece.row === GAME_CONFIG.GRID_ROWS - 1)) {
+        // King at north pole (row 0) or south pole (row 19)
+        const isPoleNorth = piece.row === 0;
+        const targetRow = isPoleNorth ? 1 : GAME_CONFIG.GRID_ROWS - 2;
+        
+        // At poles, king can move to any column at the adjacent row (full 360° movement)
+        for (let col = 0; col < GAME_CONFIG.GRID_COLS; col++) {
+          const posKey = GridUtils.getPositionKey(targetRow, col);
           const occupyingPieceId = gameState.grid[posKey];
           
           if (!occupyingPieceId) {
             // Empty position - can move here
-            validMoves.push({ row: targetRow, col: targetCol, type: 'move' });
+            validMoves.push({ row: targetRow, col: col, type: 'move' });
           } else {
             // Position occupied
             const occupyingPiece = gameState.pieces[occupyingPieceId];
             if (occupyingPiece.playerId !== piece.playerId) {
               // Enemy piece - can attack
-              validMoves.push({ row: targetRow, col: targetCol, type: 'attack' });
+              validMoves.push({ row: targetRow, col: col, type: 'attack' });
             }
-            
-            // Cannot continue further in this direction unless piece can jump
-            if (!movementPattern.jumpOver) break;
           }
         }
-      });
+      } else {
+        // Standard movement for all other pieces and king not at poles
+        movementPattern.directions.forEach(dir => {
+          const maxDistance = movementPattern.maxDistance || 1;
+          
+          for (let distance = 1; distance <= maxDistance; distance++) {
+            const targetRow = piece.row + (dir.row * distance);
+            const targetCol = GridUtils.normalizeCol(piece.col + (dir.col * distance));
+            
+            if (!GridUtils.isValidPosition(targetRow, targetCol)) break;
+            
+            const posKey = GridUtils.getPositionKey(targetRow, targetCol);
+            const occupyingPieceId = gameState.grid[posKey];
+            
+            if (!occupyingPieceId) {
+              // Empty position - can move here
+              validMoves.push({ row: targetRow, col: targetCol, type: 'move' });
+            } else {
+              // Position occupied
+              const occupyingPiece = gameState.pieces[occupyingPieceId];
+              if (occupyingPiece.playerId !== piece.playerId) {
+                // Enemy piece - can attack
+                validMoves.push({ row: targetRow, col: targetCol, type: 'attack' });
+              }
+              
+              // Cannot continue further in this direction unless piece can jump
+              if (!movementPattern.jumpOver) break;
+            }
+          }
+        });
+      }
     }
   }
   

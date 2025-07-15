@@ -1,0 +1,122 @@
+# BrainLift Globe Chess - Project Checklist
+
+## Overview
+Multiplayer 3D chess game on a sphere using Three.js, Socket.io, and Node.js with unique mechanics and evolving pieces.
+
+## Current Status
+- **Phase**: 4 (Advanced Movement Mechanics)
+- **Progress**: 50% complete (3/6 items)
+- **Development Time**: Multi-day sprint
+- **Last Updated**: [Current Date]
+
+## CURRENT PRIORITY
+Continue Phase 4 advanced movement mechanics - next focus on evolved jumper multi-capture abilities.
+
+## Progress Tracking
+
+### Phase 1: Foundation and Basic Infrastructure ✅ COMPLETE
+- [x] Set up Node.js server with Socket.io (100%)
+- [x] Create basic HTML/CSS interface (100%)
+- [x] Implement 20x8 grid system on sphere (100%)
+- [x] Basic piece placement and movement (100%)
+- [x] Player connection and management (100%)
+- [x] Real-time synchronization (100%)
+
+### Phase 2: Battle System Implementation ✅ COMPLETE
+- [x] Implement dice-based combat system (100%)
+- [x] Add battle contest mechanics (100%)
+- [x] Create evolution point system (100%)
+- [x] Implement piece upgrades and transformations (100%)
+- [x] Add victory conditions and game states (100%)
+
+### Phase 3: 3D Models and Visual Enhancement ✅ COMPLETE
+- [x] Integrate GLB 3D models for all pieces (100%)
+- [x] Implement model loading and positioning (100%)
+- [x] Add visual effects and animations (100%)
+- [x] Create dynamic lighting and materials (100%)
+- [x] Polish user interface and controls (100%)
+
+### Phase 4: Advanced Movement Mechanics 🔄 IN PROGRESS (50%)
+- [x] Implement Splitter splitting mechanics - can move forward OR split (not both) ✅
+- [x] Implement Jumper capture mechanics - take pieces by jumping OVER them (not landing) ✅
+- [x] Restore original spawn-based pawn movement (North→South, South→North) ✅
+- [ ] Add evolved jumper multi-capture - Super(2), Hyper(3), Mistress(3+landing), Hybrid Queen(up to 7)
+- [ ] Implement Hybrid Queen dual movement - can move like Queen OR like Jumper  
+- [ ] Add splitter reproduction balance and strategic limitations
+
+### Phase 5: Advanced Game Features 📋 PENDING
+- [ ] Implement tournament mode with brackets
+- [ ] Add spectator mode and replay system
+- [ ] Create AI opponents with different difficulty levels
+- [ ] Add lobby system for game matchmaking
+- [ ] Implement player statistics and leaderboards
+
+### Phase 6: Polish and Optimization 📋 PENDING
+- [ ] Performance optimization and code cleanup
+- [ ] Advanced graphics and visual effects
+- [ ] Mobile responsiveness and touch controls
+- [ ] Comprehensive testing and bug fixes
+- [ ] Documentation and deployment preparation
+
+## Technical Architecture
+
+### Server Components
+- **server/index.js**: Main server logic with Socket.io handlers
+- **server/gameConfig.js**: Game configuration and constants
+- **server/pieceTypes.js**: Piece definitions and movement patterns
+- **public/utils/gridToSphere.js**: Grid-to-sphere coordinate conversion
+
+### Client Components
+- **public/index.html**: Main game interface
+- **public/main-simple.js**: Core game logic and Three.js rendering
+- **public/battleSystem.js**: Battle system UI and interactions
+
+### Asset Management
+- **chess piece models/Final pieces/**: GLB 3D models for all pieces
+- **image assets/**: 2D images and textures
+- All GLB files use UPPERCASE naming with underscores
+
+## Key Features Implemented
+
+### Movement System
+- 20x8 grid on sphere surface with latitude/longitude coordinates
+- Piece-specific movement patterns with sphere geometry considerations
+- Splitter pieces can move OR split (not both in same turn)
+- Jumper pieces capture by jumping over enemies (not landing on them)
+- Pawns move toward sphere center based on spawn location (North→South, South→North)
+
+### Battle System
+- Dice-based combat with attack/defense values
+- Battle contest system with time limits
+- Evolution points from battles and circumnavigation
+- Piece transformations and upgrades
+
+### Unique Pieces
+- Standard: King, Queen, Rook, Bishop, Knight, Pawn
+- Special: Splitter, Jumper, Super Jumper, Hyper Jumper, Mistress Jumper, Hybrid Queen
+- Each piece has distinct movement patterns and abilities
+
+### 3D Visualization
+- GLB model loading and positioning
+- Real-time piece animations and movements
+- Visual highlighting for valid moves and special actions
+- Dynamic lighting and materials
+
+## Dependencies
+- Node.js and npm
+- Socket.io for real-time communication
+- Three.js for 3D graphics
+- GLTFLoader for 3D model loading
+
+## Next Steps
+1. Implement multi-capture mechanics for evolved jumpers
+2. Add Hybrid Queen dual movement system
+3. Balance splitter reproduction mechanics
+4. Begin Phase 5 advanced features
+
+## Notes
+- All GLB files follow UPPERCASE_WITH_UNDERSCORES naming convention
+- Sphere grid system uses normalized coordinates for seamless wrapping
+- Battle system includes both immediate and contested resolutions
+- Evolution system encourages strategic piece development
+- Pawn movement simplified to forward motion on latitude line 

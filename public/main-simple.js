@@ -627,6 +627,89 @@ socket.on('split-result', (data) => {
   }, 3000);
 });
 
+
+
+socket.on('jump-capture', (data) => {
+  const { jumperId, capturedPieceId, jumperPosition, capturedPosition, playerId } = data;
+  console.log(`Jump capture: ${jumperId} captured ${capturedPieceId} by jumping over`);
+  
+  // Show jump capture notification
+  const player = gameState.players[playerId];
+  if (player) {
+    const playerIndex = Object.keys(gameState.players).indexOf(playerId) + 1;
+    showNotification(`Player ${playerIndex} Jump Capture!`, player.color, 2000);
+  }
+  
+  // Create jump capture animation
+  const jumperWorldPos = getWorldPosition(jumperPosition.row, jumperPosition.col);
+  const capturedWorldPos = getWorldPosition(capturedPosition.row, capturedPosition.col);
+  
+  // Create arc effect showing the jump
+  const jumpArcGeometry = new THREE.BufferGeometry();
+  const jumpArcPoints = [];
+  
+  // Create arc from captured position to jumper position
+  for (let i = 0; i <= 20; i++) {
+    const t = i / 20;
+    const x = capturedWorldPos.x + (jumperWorldPos.x - capturedWorldPos.x) * t;
+    const y = capturedWorldPos.y + (jumperWorldPos.y - capturedWorldPos.y) * t + Math.sin(t * Math.PI) * 0.3;
+    const z = capturedWorldPos.z + (jumperWorldPos.z - capturedWorldPos.z) * t;
+    jumpArcPoints.push(new THREE.Vector3(x, y, z));
+  }
+  
+  jumpArcGeometry.setFromPoints(jumpArcPoints);
+  
+  const jumpArcMaterial = new THREE.LineBasicMaterial({
+    color: 0xff8800, // Orange color for jump capture
+    linewidth: 3,
+    transparent: true,
+    opacity: 0.9
+  });
+  
+  const jumpArc = new THREE.Line(jumpArcGeometry, jumpArcMaterial);
+  scene.add(jumpArc);
+  
+  // Create explosion effect at captured position
+  const explosionGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+  const explosionMaterial = new THREE.MeshBasicMaterial({
+    color: 0xff4444,
+    transparent: true,
+    opacity: 0.7,
+    wireframe: true
+  });
+  
+  const explosion = new THREE.Mesh(explosionGeometry, explosionMaterial);
+  explosion.position.set(capturedWorldPos.x, capturedWorldPos.y, capturedWorldPos.z);
+  scene.add(explosion);
+  
+  // Animate the effects
+  let animationTime = 0;
+  const animateJumpCapture = () => {
+    animationTime += 0.05;
+    
+    // Fade out arc
+    jumpArc.material.opacity = 0.9 - animationTime;
+    
+    // Expand and fade explosion
+    explosion.scale.set(1 + animationTime * 2, 1 + animationTime * 2, 1 + animationTime * 2);
+    explosion.material.opacity = 0.7 - animationTime;
+    
+    if (animationTime < 1) {
+      requestAnimationFrame(animateJumpCapture);
+    } else {
+      // Clean up
+      scene.remove(jumpArc);
+      scene.remove(explosion);
+      jumpArcGeometry.dispose();
+      jumpArcMaterial.dispose();
+      explosionGeometry.dispose();
+      explosionMaterial.dispose();
+    }
+  };
+  
+  animateJumpCapture();
+});
+
 function showNotification(message, color, duration) {
   // Create notification element
   const notification = document.createElement('div');
@@ -1055,6 +1138,10 @@ function highlightValidMoves() {
     } else if (move.type === 'split') {
       highlightColor = 0xff6b6b; // Lighter red for split
       highlightGeometry = new THREE.OctahedronGeometry(0.12); // Different shape for split
+
+    } else if (move.type === 'jump-capture') {
+      highlightColor = 0xff8800; // Orange for jump capture
+      highlightGeometry = new THREE.TetrahedronGeometry(0.12); // Pyramid shape for jump
     } else {
       highlightColor = 0x44ff44; // Green for regular move
       highlightGeometry = new THREE.SphereGeometry(0.15, 8, 8);
@@ -1064,7 +1151,7 @@ function highlightValidMoves() {
       color: highlightColor,
       transparent: true,
       opacity: 0.8,
-      wireframe: move.type === 'split' // Wireframe for split moves to make them distinctive
+      wireframe: move.type === 'split' || move.type === 'jump-capture' // Wireframe for special moves
     });
     
     const highlight = new THREE.Mesh(highlightGeometry, highlightMaterial);
@@ -1126,6 +1213,8 @@ function highlightSelectedPiece(pieceId) {
 function getCurrentlySelectedPieceId() {
   return selectedPieceId;
 }
+
+
 
 // Helper function to convert color string to hex
 function getColorFromString(colorString) {
@@ -1232,6 +1321,7 @@ function onMouseClick(event) {
           // Update UI
           gameInfoEl.textContent = `Splitting piece...`;
           console.log(`Splitting piece ${currentSelectedPieceId} to (${move.row}, ${move.col})`);
+
         } else {
           // Send regular move command to server
           socket.emit('move-piece', {
