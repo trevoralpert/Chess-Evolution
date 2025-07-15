@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multiplayer Globe Chess</title>
+  <style>
+    body { 
+      margin: 0; 
+      overflow: hidden; 
+      background-color: #1a1a1a;
+      font-family: Arial, sans-serif;
+    }
+    canvas { 
+      display: block; 
+    }
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      z-index: 100;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 10px;
+      border-radius: 5px;
+    }
+    #connection-status {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      color: white;
+      z-index: 100;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 10px;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <h3>Globe Chess</h3>
+    <div id="player-count">Players: 0</div>
+    <div id="game-info">Waiting for players...</div>
+  </div>
+  
+  <div id="connection-status">
+    <div id="status">Connecting...</div>
+  </div>
+
+  <!-- Load Three.js, OrbitControls, and GLTFLoader via script tags -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    // Debug script loading
+    console.log('Scripts loaded. THREE available:', typeof THREE !== 'undefined');
+    console.log('OrbitControls available:', typeof THREE !== 'undefined' && typeof THREE.OrbitControls !== 'undefined');
+    console.log('GLTFLoader available:', typeof THREE !== 'undefined' && typeof THREE.GLTFLoader !== 'undefined');
+    
+    // Additional debug - let's see what's in THREE
+    if (typeof THREE !== 'undefined') {
+      console.log('THREE.OrbitControls:', THREE.OrbitControls);
+      console.log('THREE.GLTFLoader:', THREE.GLTFLoader);
+      console.log('Available loaders:', Object.keys(THREE).filter(k => k.includes('Loader')));
+    }
+  </script>
+  <script src="./main-simple.js?v=8"></script>
+</body>
+</html> 
