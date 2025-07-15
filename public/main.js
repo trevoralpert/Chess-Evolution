@@ -50,51 +50,70 @@ const gridSquares = [];
 const poleMarkers = [];
 
 function createGridOverlay() {
+  console.log('🔧 Starting grid overlay creation...');
+  
+  // Use correct grid configuration
+  const gridRows = 20;
+  const gridCols = 8;
+  
+  console.log(`Grid configuration: ${gridRows} rows × ${gridCols} cols`);
+  
   // Create grid squares
-  for (let row = 0; row < 20; row++) {
-    for (let col = 0; col < 8; col++) {
-      const position = getWorldPosition(row, col);
-      
-      // Calculate square size based on latitude (larger at equator)
-      const latFactor = Math.sin(THREE.MathUtils.degToRad(90 - (row / 19) * 180));
-      const squareSize = 0.15 + (latFactor * 0.1);
-      
-      // Check if this is a pole position
-      const isPole = (row === 0 || row === 19);
-      
-      if (isPole) {
-        // Create special pole marker (octagon/circle)
-        const poleGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.02, 8);
-        const poleMaterial = new THREE.MeshBasicMaterial({ 
-          color: row === 0 ? 0xffd700 : 0xff4500, // Gold for north, orange for south
-          transparent: true,
-          opacity: 0.3
-        });
-        const poleMarker = new THREE.Mesh(poleGeometry, poleMaterial);
-        poleMarker.position.set(position.x, position.y, position.z);
-        poleMarker.lookAt(0, 0, 0);
-        scene.add(poleMarker);
-        poleMarkers.push(poleMarker);
-      } else {
-        // Create regular grid square
-        const squareGeometry = new THREE.PlaneGeometry(squareSize, squareSize);
-        const squareMaterial = new THREE.MeshBasicMaterial({ 
-          color: 0x666666,
-          transparent: true,
-          opacity: 0.1,
-          side: THREE.DoubleSide
-        });
-        const square = new THREE.Mesh(squareGeometry, squareMaterial);
-        square.position.set(position.x, position.y, position.z);
-        square.lookAt(0, 0, 0);
-        square.userData = { gridRow: row, gridCol: col };
-        scene.add(square);
-        gridSquares.push(square);
+  for (let row = 0; row < gridRows; row++) {
+    for (let col = 0; col < gridCols; col++) {
+      try {
+        // Calculate position using correct grid size
+        const { phi, theta } = gridToSpherical(gridRows, gridCols, row, col);
+        const position = sphericalToCartesian(globeRadius + 0.1, phi, theta); // Moved further out
+        
+        // Debug first few positions
+        if (row < 2 && col < 2) {
+          console.log(`Position (${row}, ${col}): phi=${phi}, theta=${theta}, pos=`, position);
+        }
+        
+        // Calculate square size based on latitude (larger at equator)
+        const latFactor = Math.sin(THREE.MathUtils.degToRad(90 - (row / (gridRows - 1)) * 180));
+        const squareSize = 0.4 + (latFactor * 0.2); // Made larger
+        
+        // Check if this is a pole position
+        const isPole = (row === 0 || row === gridRows - 1);
+        
+        if (isPole) {
+          // Create special pole marker (octagon/circle)
+          const poleGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.05, 8);
+          const poleMaterial = new THREE.MeshBasicMaterial({ 
+            color: row === 0 ? 0xffd700 : 0xff4500, // Gold for north, orange for south
+            transparent: true,
+            opacity: 0.8 // Made more opaque
+          });
+          const poleMarker = new THREE.Mesh(poleGeometry, poleMaterial);
+          poleMarker.position.set(position.x, position.y, position.z);
+          poleMarker.lookAt(0, 0, 0);
+          scene.add(poleMarker);
+          poleMarkers.push(poleMarker);
+        } else {
+          // Create regular grid square
+          const squareGeometry = new THREE.PlaneGeometry(squareSize, squareSize);
+          const squareMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0x00ff00, // Bright green for visibility
+            transparent: true,
+            opacity: 0.6, // Made more opaque
+            side: THREE.DoubleSide
+          });
+          const square = new THREE.Mesh(squareGeometry, squareMaterial);
+          square.position.set(position.x, position.y, position.z);
+          square.lookAt(0, 0, 0);
+          square.userData = { gridRow: row, gridCol: col };
+          scene.add(square);
+          gridSquares.push(square);
+        }
+      } catch (error) {
+        console.error(`❌ Error creating grid square at (${row}, ${col}):`, error);
       }
     }
   }
   
-  console.log(`Created ${gridSquares.length} grid squares and ${poleMarkers.length} pole markers`);
+  console.log(`✅ Created ${gridSquares.length} grid squares and ${poleMarkers.length} pole markers`);
 }
 
 // Create grid overlay on startup
