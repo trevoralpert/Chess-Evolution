@@ -1,0 +1,158 @@
+# JavaScript/Node.js/Three.js Multiplayer Game Development Rules
+
+You are an expert in JavaScript, Node.js, Three.js, Socket.io, and multiplayer game development.
+
+## Core Principles
+- Write clean, maintainable, and well-documented code
+- Prioritize performance and optimization for real-time multiplayer experiences
+- Use modern JavaScript/ES6+ features and best practices
+- Implement proper error handling and logging
+- Follow DRY (Don't Repeat Yourself) principles
+- Maintain loose coupling and high cohesion
+
+## Code Style and Structure
+- Use functional programming patterns where appropriate
+- Prefer `const` and `let` over `var`
+- Use arrow functions for callbacks and short functions
+- Use template literals for string interpolation
+- Use destructuring for object and array operations
+- Write self-documenting code with descriptive variable names
+
+## Naming Conventions
+- Use camelCase for variables, functions, and methods
+- Use PascalCase for classes and constructors
+- Use UPPER_SNAKE_CASE for constants
+- Use descriptive names that clearly indicate purpose
+- Prefix boolean variables with `is`, `has`, `can`, `should`
+- Use verb-noun pattern for functions (e.g., `updatePlayerPosition`)
+
+## File Organization
+- Organize files by feature/module rather than by type
+- Use consistent directory structure:
+  - `server/` - Node.js backend code
+  - `public/` - Static assets and client-side code
+  - `utils/` - Shared utility functions
+  - `config/` - Configuration files
+- Use meaningful file names that reflect their purpose
+- Keep files focused on a single responsibility
+
+## Node.js Backend Development
+- Use async/await for asynchronous operations
+- Implement proper error handling with try/catch blocks
+- Use middleware for common functionality
+- Follow RESTful API design principles
+- Implement proper validation for all inputs
+- Use environment variables for configuration
+- Implement proper logging with different levels (info, warn, error)
+
+## Three.js 3D Graphics
+- Optimize geometry and materials for performance
+- Use object pooling for frequently created/destroyed objects
+- Implement proper cleanup to prevent memory leaks
+- Use appropriate LOD (Level of Detail) techniques
+- Optimize rendering pipeline with proper culling
+- Use efficient update loops with requestAnimationFrame
+- Implement proper camera controls and boundaries
+
+## Socket.io Real-time Communication
+- Use event-driven architecture for game state updates
+- Implement proper connection/disconnection handling
+- Use namespaces and rooms for game organization
+- Implement client-side prediction for smooth gameplay
+- Use server-side validation for all game actions
+- Implement proper rate limiting and anti-cheat measures
+- Handle network latency and packet loss gracefully
+
+## Game Development Best Practices
+- Implement fixed timestep for consistent physics
+- Use state machines for complex game logic
+- Implement proper collision detection and response
+- Use efficient data structures for spatial queries
+- Implement proper game loop with separate update/render phases
+- Use component-based architecture for game entities
+- Implement proper resource management and loading
+
+## Performance Optimization
+- Profile and optimize bottlenecks regularly
+- Use efficient algorithms and data structures
+- Implement proper caching strategies
+- Minimize network traffic with delta compression
+- Use worker threads for CPU-intensive tasks
+- Implement proper memory management
+- Optimize graphics rendering pipeline
+
+## Testing and Debugging
+- Write unit tests for critical game logic
+- Use integration tests for multiplayer scenarios
+- Implement proper logging and debug information
+- Use performance profiling tools
+- Test with multiple clients and network conditions
+- Implement proper error reporting and monitoring
+
+## Security Considerations
+- Validate all client inputs on the server
+- Implement proper authentication and authorization
+- Use secure communication protocols
+- Implement rate limiting and DDoS protection
+- Sanitize all user-generated content
+- Implement proper session management
+
+## Error Handling
+- Use consistent error handling patterns
+- Implement graceful degradation for network issues
+- Provide meaningful error messages to users
+- Log errors with sufficient context for debugging
+- Implement proper fallback mechanisms
+- Use circuit breakers for external dependencies
+
+## Documentation
+- Document all public APIs and interfaces
+- Include examples in code comments
+- Maintain up-to-date README files
+- Document deployment and setup procedures
+- Include architecture diagrams where helpful
+
+## Project Scope Management
+**IMPORTANT**: Whenever any changes are made to the project scope, features, or requirements, automatically update the @checklist.txt file to reflect these changes. This includes:
+- Adding new features or requirements
+- Removing or deprecating features
+- Modifying existing functionality
+- Updating development phases or milestones
+- Changing technical specifications or dependencies
+
+When updating @checklist.txt:
+- Mark completed items with [x]
+- Mark new items with [ ]
+- Update progress tracking percentages
+- Add dates for completed items
+- Include relevant context or dependencies
+- Update the "CURRENT PRIORITY" section
+- Reflect changes in the progress tracking section
+
+## Key Conventions
+- Use semantic commit messages (feat:, fix:, docs:, etc.)
+- Implement proper version control with branching strategies
+- Use consistent code formatting (consider Prettier)
+- Implement proper deployment and CI/CD pipelines
+- Document all configuration options and environment variables
+- Use TypeScript for better type safety when possible
+
+## Multiplayer Game Specific Rules
+- Always validate game state on the server
+- Implement proper lag compensation techniques
+- Use interpolation and extrapolation for smooth movement
+- Implement proper game session management
+- Handle player disconnections gracefully
+- Use efficient networking protocols (UDP when possible)
+- Implement proper game balance and fair play mechanics
+
+## Three.js Specific Optimizations
+- Use instanced rendering for repeated objects
+- Implement proper frustum culling
+- Use texture atlasing to reduce draw calls
+- Implement proper scene graph organization
+- Use efficient materials and shaders
+- Implement proper lighting optimization
+- Use web workers for complex calculations
+
+Remember to always prioritize player experience, maintain clean and maintainable code, and ensure the game performs well across different devices and network conditions.
