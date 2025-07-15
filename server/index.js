@@ -10,6 +10,7 @@ const { AIManager, AI_DIFFICULTY } = require('./aiManager');
 const LobbyManager = require('./lobbyManager');
 const StatisticsManager = require('./statisticsManager');
 const EvolutionManager = require('./evolutionManager');
+const TimingManager = require('./timingManager');
 
 const app = express();
 const server = http.createServer(app);
@@ -48,6 +49,29 @@ const statisticsManager = new StatisticsManager();
 
 // Evolution banking and choice management
 const evolutionManager = new EvolutionManager();
+
+// Timing and collision management
+const timingManager = new TimingManager(io);
+
+// Set up move executor for timing manager
+timingManager.setMoveExecutor((playerId, moveData) => {
+  const result = handlePieceMove(playerId, moveData);
+  if (result) {
+    // Record the move
+    spectatorManager.recordMove('main', {
+      type: 'move',
+      playerId: playerId,
+      pieceId: moveData.pieceId,
+      fromPosition: { row: result.fromRow, col: result.fromCol },
+      toPosition: { row: moveData.targetRow, col: moveData.targetCol },
+      moveType: result.moveType || 'normal',
+      captures: result.captures || []
+    });
+    
+    // Send confirmation back to the client
+    io.emit('move-result', { success: true, message: result.message, playerId: playerId });
+  }
+});
 
 // Setup cleanup intervals
 evolutionManager.setupCleanupInterval();
@@ -100,26 +124,42 @@ io.on('connection', (socket) => {
   // Create starting pieces for the player
   createStartingPieces(player);
   
+  // Add player to timing system
+  timingManager.addPlayer(socket.id);
+  
+  // Initialize timing system if this is the first player
+  if (gameState.playerCount === 1) {
+    timingManager.initialize(gameState);
+  }
+  
   // Broadcast updated game state
   broadcastGameState();
   
   socket.on('move-piece', (data) => {
-    const result = handlePieceMove(socket.id, data);
-    if (result) {
-      // Record the move
-      spectatorManager.recordMove('main', {
-        type: 'move',
-        playerId: socket.id,
-        pieceId: data.pieceId,
-        fromPosition: { row: result.fromRow, col: result.fromCol },
-        toPosition: { row: data.targetRow, col: data.targetCol },
-        moveType: result.moveType || 'normal',
-        captures: result.captures || []
-      });
-      
-      // Send confirmation back to the client
-      socket.emit('move-result', { success: true, message: result.message });
+    // Check timing system for turn validation and collision detection
+    const timingResult = timingManager.registerMove(socket.id, data);
+    
+    if (!timingResult.success) {
+      if (timingResult.collision) {
+        // Handle collision - trigger battle
+        socket.emit('move-collision', {
+          message: 'Collision detected! Resolving battle...',
+          conflictingMove: timingResult.conflictingMove
+        });
+        
+        // Trigger battle between pieces
+        handleMoveCollision(socket.id, data, timingResult.conflictingMove);
+      } else {
+        socket.emit('move-result', { success: false, message: timingResult.error });
+      }
+      return;
     }
+    
+    // Move is pending, will be executed after collision window
+    socket.emit('move-pending', { 
+      message: 'Move registered, checking for conflicts...',
+      pending: true 
+    });
   });
   
   socket.on('split-piece', (data) => {
@@ -592,6 +632,9 @@ io.on('connection', (socket) => {
       return;
     }
     
+    // Pause timers during evolution choice
+    timingManager.pauseAllTimers();
+    
     socket.emit('evolution-choice-available', {
       pieceId: pieceId,
       piece: piece,
@@ -650,6 +693,9 @@ io.on('connection', (socket) => {
       evolution: result.evolution,
       bankInfo: evolutionManager.getPlayerBankInfo(socket.id)
     });
+    
+    // Resume timers after evolution choice is complete
+    timingManager.resumeAllTimers();
   });
 
   socket.on('cancel-evolution-choice', (data) => {
@@ -661,6 +707,9 @@ io.on('connection', (socket) => {
     } else {
       socket.emit('evolution-choice-failed', { error: 'No pending choice to cancel' });
     }
+    
+    // Resume timers after evolution choice is cancelled
+    timingManager.resumeAllTimers();
   });
 
   socket.on('get-evolution-bank', () => {
@@ -717,6 +766,9 @@ io.on('connection', (socket) => {
     
     delete gameState.players[socket.id];
     gameState.playerCount = Object.keys(gameState.players).length;
+    
+    // Remove player from timing system
+    timingManager.removePlayer(socket.id);
     
     // If game is empty, finish recording
     if (gameState.playerCount === 0) {
@@ -1776,6 +1828,9 @@ function handleContestResponse(playerId, data) {
 }
 
 function resolveBattleWithDice(attackingPiece, defendingPiece) {
+  // Pause timers during battle
+  timingManager.pauseAllTimers();
+  
   const battleResult = resolveDiceBattle(attackingPiece, defendingPiece);
   const winner = battleResult.winner;
   const loser = battleResult.loser;
@@ -1939,6 +1994,59 @@ function completeBattleResolution(winner, loser) {
   });
   
   broadcastGameState();
+  
+  // Resume timers after battle completion
+  timingManager.resumeAllTimers();
+}
+
+function handleMoveCollision(playerId, moveData, conflictingMove) {
+  const piece1 = gameState.pieces[moveData.pieceId];
+  const piece2 = gameState.pieces[conflictingMove.move.pieceId];
+  
+  if (!piece1 || !piece2) {
+    console.log('Invalid pieces in collision');
+    return;
+  }
+  
+  console.log(`Move collision detected: ${piece1.symbol} vs ${piece2.symbol} at (${moveData.targetRow}, ${moveData.targetCol})`);
+  
+  // Create a battle between the two pieces
+  const battleId = `collision-${Date.now()}`;
+  const pendingBattle = {
+    id: battleId,
+    attackingPiece: piece1,
+    defendingPiece: piece2,
+    type: 'collision',
+    targetRow: moveData.targetRow,
+    targetCol: moveData.targetCol
+  };
+  
+  gameState.pendingBattles[battleId] = pendingBattle;
+  
+  // Check if this should trigger a contest
+  if (shouldTriggerContest(piece1, piece2)) {
+    const timeLimit = getContestTimeLimit(piece1, piece2);
+    
+    // Notify defending player about the collision contest
+    io.to(piece2.playerId).emit('collision-contest-prompt', {
+      battleId: battleId,
+      attackingPiece: piece1,
+      defendingPiece: piece2,
+      timeLimit: timeLimit,
+      targetPosition: { row: moveData.targetRow, col: moveData.targetCol }
+    });
+    
+    // Start contest timer
+    setTimeout(() => {
+      if (gameState.pendingBattles[battleId]) {
+        console.log(`Collision contest timeout for battle ${battleId}`);
+        handleContestResponse(piece2.playerId, { battleId, wantsToContest: false });
+      }
+    }, timeLimit);
+  } else {
+    // Immediate battle resolution
+    resolveBattleImmediate(piece1, piece2);
+  }
 }
 
 function calculateBattleAnimationDuration(battleLog) {

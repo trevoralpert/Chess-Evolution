@@ -31,6 +31,14 @@ function sphericalToCartesian(r, phi, theta) {
 const socket = io();
 console.log('Socket.io initialized');
 
+// Timer management variables
+let currentTimer = null;
+let timerStartTime = 0;
+let timerDuration = 7000; // 7 seconds default
+let activePlayerId = null;
+let isTimerPaused = false;
+let pausedTimeRemaining = 0;
+
 // Three.js scene setup
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -47,6 +55,119 @@ window.addEventListener('mousedown', (e) => {
   mouseDownTime = Date.now();
   console.log(`Mouse down at: ${mouseDownTime}`);
 });
+
+// Timer management functions
+function startTimer(playerId, timeLimit, startTime) {
+  activePlayerId = playerId;
+  timerStartTime = startTime;
+  timerDuration = timeLimit;
+  isTimerPaused = false;
+  
+  // Update UI
+  updateTimerDisplay();
+  
+  // Start the timer interval
+  if (currentTimer) {
+    clearInterval(currentTimer);
+  }
+  
+  currentTimer = setInterval(() => {
+    if (!isTimerPaused) {
+      updateTimerDisplay();
+    }
+  }, 100); // Update every 100ms for smooth animation
+  
+  console.log(`Timer started for player ${playerId}: ${timeLimit}ms`);
+}
+
+function pauseTimer() {
+  isTimerPaused = true;
+  const elapsed = Date.now() - timerStartTime;
+  pausedTimeRemaining = Math.max(0, timerDuration - elapsed);
+  
+  document.getElementById('timer-status').textContent = 'Timer Paused (Battle/Evolution)';
+  document.getElementById('timer-bar').style.background = '#666';
+  
+  console.log('Timer paused');
+}
+
+function resumeTimer() {
+  if (isTimerPaused) {
+    isTimerPaused = false;
+    timerStartTime = Date.now();
+    timerDuration = pausedTimeRemaining;
+    
+    document.getElementById('timer-status').textContent = 'Timer Active';
+    document.getElementById('timer-bar').style.background = 'linear-gradient(90deg, #00ff00, #ffff00, #ff6600, #ff0000)';
+    
+    console.log('Timer resumed');
+  }
+}
+
+function updateTimerDisplay() {
+  const timeRemainingElement = document.getElementById('time-remaining');
+  const timerBarElement = document.getElementById('timer-bar');
+  const timerStatusElement = document.getElementById('timer-status');
+  
+  if (isTimerPaused) {
+    const remainingSeconds = pausedTimeRemaining / 1000;
+    timeRemainingElement.textContent = remainingSeconds.toFixed(1);
+    timerBarElement.style.width = `${(pausedTimeRemaining / 7000) * 100}%`;
+    return;
+  }
+  
+  const elapsed = Date.now() - timerStartTime;
+  const remaining = Math.max(0, timerDuration - elapsed);
+  const remainingSeconds = remaining / 1000;
+  
+  timeRemainingElement.textContent = remainingSeconds.toFixed(1);
+  
+  // Update progress bar
+  const progress = (remaining / timerDuration) * 100;
+  timerBarElement.style.width = `${progress}%`;
+  
+  // Update status
+  if (remaining <= 0) {
+    timerStatusElement.textContent = 'Time expired!';
+    timerStatusElement.style.color = '#ff0000';
+    if (currentTimer) {
+      clearInterval(currentTimer);
+      currentTimer = null;
+    }
+  } else {
+    timerStatusElement.textContent = 'Timer Active';
+    timerStatusElement.style.color = '#ccc';
+  }
+}
+
+function updateActivePlayer(playerId, playerName) {
+  activePlayerId = playerId;
+  document.getElementById('active-player-name').textContent = playerName || 'Unknown';
+  
+  // Highlight if it's your turn
+  const timingUI = document.getElementById('timing-ui');
+  if (playerId === socket.id) {
+    timingUI.style.borderColor = '#00ff00';
+    timingUI.style.boxShadow = '0 0 10px #00ff00';
+  } else {
+    timingUI.style.borderColor = '#ff6600';
+    timingUI.style.boxShadow = 'none';
+  }
+}
+
+function updateTurnQueue(turnQueue) {
+  const turnQueueList = document.getElementById('turn-queue-list');
+  if (turnQueue && turnQueue.length > 0) {
+    const queueText = turnQueue.map((playerId, index) => {
+      const player = gameState.players[playerId];
+      const playerName = player ? player.name : 'Unknown';
+      return `${index + 1}. ${playerName}${playerId === activePlayerId ? ' (Current)' : ''}`;
+    }).join(', ');
+    turnQueueList.textContent = queueText;
+  } else {
+    turnQueueList.textContent = '-';
+  }
+}
 
 // Manual camera controls (since OrbitControls is having issues)
 let controls;
@@ -3371,6 +3492,86 @@ socket.on('evolution-point-award', (data) => {
     if (document.getElementById('evolution-ui').style.display === 'block') {
       refreshEvolutionBank();
     }
+  }
+});
+
+// Timer system socket handlers
+socket.on('timer-started', (data) => {
+  console.log('Timer started:', data);
+  startTimer(data.playerId, data.timeLimit, data.startTime);
+  
+  // Update active player display
+  const player = gameState.players[data.playerId];
+  if (player) {
+    updateActivePlayer(data.playerId, player.name);
+  }
+});
+
+socket.on('turn-changed', (data) => {
+  console.log('Turn changed:', data);
+  updateActivePlayer(data.activePlayer, data.playerName);
+  
+  // Show notification if it's your turn
+  if (data.activePlayer === socket.id) {
+    showNotification('Your Turn', 'Make your move!', 'info');
+  }
+});
+
+socket.on('player-timeout', (data) => {
+  console.log('Player timeout:', data);
+  showNotification('Player Timeout', data.message, 'warning');
+  
+  // Clear the timer display
+  if (currentTimer) {
+    clearInterval(currentTimer);
+    currentTimer = null;
+  }
+  
+  document.getElementById('timer-status').textContent = 'Player timed out';
+  document.getElementById('timer-status').style.color = '#ff8800';
+});
+
+socket.on('timers-paused', (data) => {
+  console.log('Timers paused:', data);
+  pauseTimer();
+});
+
+socket.on('timers-resumed', (data) => {
+  console.log('Timers resumed:', data);
+  resumeTimer();
+});
+
+socket.on('move-pending', (data) => {
+  console.log('Move pending:', data);
+  showNotification('Move Pending', data.message, 'info');
+  
+  // Pause timer briefly to show move is being processed
+  if (currentTimer) {
+    clearInterval(currentTimer);
+    currentTimer = null;
+  }
+  
+  document.getElementById('timer-status').textContent = 'Processing move...';
+  document.getElementById('timer-status').style.color = '#ffff00';
+});
+
+socket.on('move-collision', (data) => {
+  console.log('Move collision:', data);
+  showNotification('Collision!', data.message, 'warning');
+  
+  // Pause timer during collision resolution
+  pauseTimer();
+});
+
+socket.on('collision-contest-prompt', (data) => {
+  console.log('Collision contest prompt:', data);
+  showNotification('Collision Contest', 
+    `${data.attackingPiece.symbol} vs ${data.defendingPiece.symbol} at (${data.targetPosition.row}, ${data.targetPosition.col})`, 
+    'warning');
+  
+  // This would normally show a contest UI, but for now just show notification
+  if (data.defendingPiece.playerId === socket.id) {
+    showNotification('Defend!', 'Choose to contest or decline the battle', 'info');
   }
 });
 
