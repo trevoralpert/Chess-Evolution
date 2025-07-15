@@ -384,12 +384,26 @@ function completeBattleResolution(winner, loser) {
     });
   }
   
+  // Check for checkmate (King capture) and player elimination
+  if (loser.type === 'KING') {
+    console.log(`CHECKMATE! King ${loser.symbol} captured - Player ${loser.playerId} eliminated!`);
+    eliminatePlayer(loser.playerId);
+    
+    // Check for victory condition
+    const remainingPlayers = Object.keys(gameState.players).length;
+    if (remainingPlayers === 1) {
+      const victoryPlayer = Object.values(gameState.players)[0];
+      declareVictory(victoryPlayer);
+    }
+  }
+  
   // Broadcast battle result
   io.emit('battle-result', {
     winner: winner.id,
     loser: loser.id,
     position: { row: winner.row, col: winner.col },
-    winnerKills: winner.kills
+    winnerKills: winner.kills,
+    wasKingCaptured: loser.type === 'KING'
   });
   
   broadcastGameState();
@@ -400,6 +414,57 @@ function calculateBattleAnimationDuration(battleLog) {
   const initialDiceTime = 1; // 1 second for initial dice
   const tieBreakerTime = battleLog.rounds.length * 1; // 1 second per tie-breaker
   return initialDiceTime + tieBreakerTime;
+}
+
+function eliminatePlayer(playerId) {
+  const player = gameState.players[playerId];
+  if (!player) return;
+  
+  console.log(`Eliminating player ${playerId} (Player ${player.index + 1})`);
+  
+  // Remove all pieces belonging to this player
+  const playerPieces = [...player.pieces]; // Create copy to avoid mutation during iteration
+  playerPieces.forEach(pieceId => {
+    const piece = gameState.pieces[pieceId];
+    if (piece) {
+      // Remove from grid
+      const posKey = GridUtils.getPositionKey(piece.row, piece.col);
+      delete gameState.grid[posKey];
+      
+      // Remove from pieces
+      delete gameState.pieces[pieceId];
+      
+      console.log(`Removed piece ${piece.symbol} at (${piece.row}, ${piece.col})`);
+    }
+  });
+  
+  // Remove player from game
+  delete gameState.players[playerId];
+  gameState.playerCount = Object.keys(gameState.players).length;
+  
+  console.log(`Player eliminated. Remaining players: ${gameState.playerCount}`);
+  
+  // Broadcast elimination event
+  io.emit('player-eliminated', {
+    eliminatedPlayerId: playerId,
+    playerIndex: player.index,
+    remainingPlayers: gameState.playerCount
+  });
+}
+
+function declareVictory(victoryPlayer) {
+  console.log(`VICTORY! Player ${victoryPlayer.index + 1} wins the game!`);
+  
+  // Broadcast victory event
+  io.emit('game-victory', {
+    winnerId: victoryPlayer.id,
+    playerIndex: victoryPlayer.index,
+    winnerColor: victoryPlayer.color,
+    totalPlayers: Object.keys(gameState.players).length
+  });
+  
+  // Optional: Reset game state after victory
+  // resetGameState();
 }
 
 function getValidMoves(pieceId) {

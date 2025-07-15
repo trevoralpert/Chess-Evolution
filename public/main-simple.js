@@ -450,6 +450,79 @@ socket.on('dice-battle-animation', (data) => {
   showDiceBattleAnimation(battleLog, winner, loser, duration);
 });
 
+socket.on('player-eliminated', (data) => {
+  const { eliminatedPlayerId, playerIndex, remainingPlayers } = data;
+  console.log(`PLAYER ELIMINATED: Player ${playerIndex + 1} (${eliminatedPlayerId}) eliminated! ${remainingPlayers} players remaining.`);
+  
+  // Update UI with elimination information
+  gameInfoEl.textContent = `Player ${playerIndex + 1} eliminated! ${remainingPlayers} players left`;
+  gameInfoEl.style.color = '#ff4444';
+  
+  // Show elimination notification
+  showNotification(`Player ${playerIndex + 1} eliminated!`, '#ff4444', 3000);
+  
+  // Flash the globe red briefly
+  const originalColor = globe.material.color.clone();
+  globe.material.color.setHex(0xff4444);
+  setTimeout(() => {
+    globe.material.color.copy(originalColor);
+  }, 500);
+});
+
+socket.on('game-victory', (data) => {
+  const { winnerId, playerIndex, winnerColor, totalPlayers } = data;
+  console.log(`GAME VICTORY: Player ${playerIndex + 1} (${winnerId}) wins!`);
+  
+  // Update UI with victory information
+  gameInfoEl.textContent = `🎉 Player ${playerIndex + 1} WINS! 🎉`;
+  gameInfoEl.style.color = winnerColor;
+  
+  // Show victory notification
+  showNotification(`🎉 Player ${playerIndex + 1} WINS! 🎉`, winnerColor, 5000);
+  
+  // Flash the globe with winner's color
+  const originalColor = globe.material.color.clone();
+  globe.material.color.setHex(parseInt(winnerColor.replace('#', '0x')));
+  setTimeout(() => {
+    globe.material.color.copy(originalColor);
+  }, 2000);
+  
+  // Disable further interactions
+  selectedPieceId = null;
+  clearValidMoveHighlights();
+});
+
+function showNotification(message, color, duration) {
+  // Create notification element
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.9);
+    color: ${color};
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    z-index: 1000;
+    font-size: 24px;
+    font-weight: bold;
+    border: 3px solid ${color};
+    animation: pulse 1s infinite;
+  `;
+  
+  notification.textContent = message;
+  document.body.appendChild(notification);
+  
+  // Remove notification after duration
+  setTimeout(() => {
+    if (notification.parentNode) {
+      notification.parentNode.removeChild(notification);
+    }
+  }, duration);
+}
+
 function showBattleContestPrompt(battleId, attackingPiece, defendingPiece, timeLimit) {
   // Remove any existing prompt
   const existingPrompt = document.getElementById('battle-contest-prompt');
