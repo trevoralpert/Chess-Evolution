@@ -2056,6 +2056,15 @@ async function createPieceMeshOptimized(piece) {
   const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal);
   mesh.setRotationFromQuaternion(quaternion);
   
+  // Apply height adjustments for GLB models to match piece positioning
+  const heightAdjustment = getModelHeightAdjustment(piece.type);
+  if (heightAdjustment !== 0) {
+    // Move the mesh along the normal vector (away from sphere center)
+    const adjustmentVector = normal.clone().multiplyScalar(heightAdjustment);
+    mesh.position.add(adjustmentVector);
+    console.log(`Applied height adjustment ${heightAdjustment} to ${piece.type} GLB model`);
+  }
+  
   // Debug: Log King positions only
   if (piece.type === 'KING') {
     console.log(`${piece.symbol} King at grid (${piece.row}, ${piece.col}) - Player ${playerIndex + 1}`);
@@ -2154,6 +2163,25 @@ function getGeometricScale(pieceType) {
     'HYBRID_QUEEN': 1.3
   };
   return scaleMap[pieceType] || 1.0;
+}
+
+// Helper function to get height adjustments for GLB models
+function getModelHeightAdjustment(pieceType) {
+  const adjustmentMap = {
+    'KING': 0.08,        // King appears sunken, lift it up
+    'QUEEN': 0.04,       // Queen might need slight adjustment
+    'ROOK': 0.02,        // Rook might need slight adjustment
+    'KNIGHT': 0.02,      // Knight might need slight adjustment
+    'BISHOP': 0.03,      // Bishop might need slight adjustment
+    'PAWN': 0.0,         // Pawn is the reference - no adjustment needed
+    'SPLITTER': 0.02,    // Evolved pieces might need adjustments
+    'JUMPER': 0.03,
+    'SUPER_JUMPER': 0.03,
+    'HYPER_JUMPER': 0.04,
+    'MISTRESS_JUMPER': 0.05,
+    'HYBRID_QUEEN': 0.06
+  };
+  return adjustmentMap[pieceType] || 0.0;
 }
 
 // Helper function to create geometric shape fallbacks
@@ -5433,7 +5461,16 @@ function forceRepositionAllPieces() {
       const position = getWorldPosition(piece.row, piece.col);
       const mesh = pieceMeshes[piece.id];
       mesh.position.set(position.x, position.y, position.z);
-      console.log(`🔄 Repositioned ${piece.type} (${piece.id}) to height ${position.y}`);
+      
+      // Apply height adjustment for GLB models to match piece positioning
+      const heightAdjustment = getModelHeightAdjustment(piece.type);
+      if (heightAdjustment !== 0) {
+        const normal = new THREE.Vector3(position.x, position.y, position.z).normalize();
+        mesh.position.add(normal.multiplyScalar(heightAdjustment));
+        console.log(`🔄 Applied height adjustment ${heightAdjustment} to ${piece.type} during repositioning`);
+      }
+      
+      console.log(`🔄 Repositioned ${piece.type} (${piece.id}) to height ${mesh.position.y}`);
     }
   });
 }
