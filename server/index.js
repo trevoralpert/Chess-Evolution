@@ -188,11 +188,20 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // Move is pending, will be executed after collision window
-    socket.emit('move-pending', { 
-      message: 'Move registered, checking for conflicts...',
-      pending: true 
-    });
+    if (timingResult.queued) {
+      // Move is queued, will be executed when timer reaches 0
+      socket.emit('move-queued', { 
+        message: timingResult.message,
+        queued: true,
+        timeRemaining: timingResult.timeRemaining
+      });
+    } else {
+      // Move is pending, will be executed after collision window
+      socket.emit('move-pending', { 
+        message: 'Move registered, checking for conflicts...',
+        pending: true 
+      });
+    }
   });
   
   socket.on('split-piece', (data) => {
@@ -210,6 +219,26 @@ io.on('connection', (socket) => {
   
   socket.on('contest-response', (data) => {
     handleContestResponse(socket.id, data);
+  });
+
+  // Real-time system handlers
+  socket.on('cancel-queued-move', () => {
+    const result = timingManager.cancelQueuedMove(socket.id);
+    socket.emit('cancel-queued-move-result', { success: result });
+  });
+  
+  socket.on('get-player-timer', () => {
+    const timer = timingManager.getPlayerTimer(socket.id);
+    const queuedMove = timingManager.getQueuedMove(socket.id);
+    socket.emit('player-timer-state', { 
+      timer: timer,
+      queuedMove: queuedMove
+    });
+  });
+  
+  socket.on('get-queued-move', () => {
+    const queuedMove = timingManager.getQueuedMove(socket.id);
+    socket.emit('queued-move-state', { queuedMove: queuedMove });
   });
 
   // Tournament socket handlers

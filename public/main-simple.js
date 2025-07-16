@@ -549,6 +549,98 @@ function updateTurnQueue(turnQueue) {
   }
 }
 
+// Real-time system timer functions
+function startRealTimeTimer(duration) {
+  timerDuration = duration;
+  timerStartTime = Date.now();
+  isTimerPaused = false;
+  
+  // Start the timer interval
+  if (currentTimer) {
+    clearInterval(currentTimer);
+  }
+  
+  currentTimer = setInterval(() => {
+    if (!isTimerPaused) {
+      const elapsed = Date.now() - timerStartTime;
+      const remaining = Math.max(0, timerDuration - elapsed);
+      updateTimerDisplay(remaining);
+      
+      if (remaining <= 0) {
+        clearInterval(currentTimer);
+        currentTimer = null;
+      }
+    }
+  }, 100); // Update every 100ms for smooth animation
+  
+  console.log(`Real-time timer started: ${duration}ms`);
+}
+
+function updateTimerDisplay(timeRemaining) {
+  const timeRemainingElement = document.getElementById('time-remaining');
+  const timerBarElement = document.getElementById('timer-bar');
+  const timerStatusElement = document.getElementById('timer-status');
+  
+  if (!timeRemainingElement || !timerBarElement || !timerStatusElement) return;
+  
+  const remainingSeconds = timeRemaining / 1000;
+  timeRemainingElement.textContent = remainingSeconds.toFixed(1);
+  
+  // Update progress bar
+  const progress = (timeRemaining / timerDuration) * 100;
+  timerBarElement.style.width = `${progress}%`;
+  
+  // Update status and colors
+  if (timeRemaining <= 0) {
+    timerStatusElement.textContent = 'Ready to move';
+    timerStatusElement.style.color = '#00ff00';
+    timerBarElement.style.background = '#00ff00';
+  } else {
+    timerStatusElement.textContent = 'Timer counting down...';
+    timerStatusElement.style.color = '#ff8800';
+    timerBarElement.style.background = 'linear-gradient(90deg, #00ff00, #ffff00, #ff6600, #ff0000)';
+  }
+}
+
+function updateTimerUI(timer, queuedMove) {
+  const timerStatusElement = document.getElementById('timer-status');
+  const timeRemainingElement = document.getElementById('time-remaining');
+  
+  if (!timerStatusElement || !timeRemainingElement) return;
+  
+  if (timer) {
+    const remainingSeconds = timer.timeRemaining / 1000;
+    timeRemainingElement.textContent = remainingSeconds.toFixed(1);
+    
+    if (timer.timeRemaining <= 0) {
+      timerStatusElement.textContent = 'Ready to move';
+      timerStatusElement.style.color = '#00ff00';
+    } else {
+      if (queuedMove) {
+        timerStatusElement.textContent = 'Move queued - waiting for timer';
+        timerStatusElement.style.color = '#ffaa00';
+      } else {
+        timerStatusElement.textContent = 'Timer counting down...';
+        timerStatusElement.style.color = '#ff8800';
+      }
+    }
+  }
+}
+
+function updateQueueDisplay(queuedMove) {
+  const statusElement = document.getElementById('timer-status');
+  
+  if (!statusElement) return;
+  
+  if (queuedMove) {
+    statusElement.textContent = `Move queued: ${queuedMove.pieceId} → (${queuedMove.targetRow}, ${queuedMove.targetCol})`;
+    statusElement.style.color = '#ffaa00';
+  } else {
+    statusElement.textContent = 'No move queued';
+    statusElement.style.color = '#ccc';
+  }
+}
+
 // Camera controls setup
 let controls;
 let manualCameraControls = null;
@@ -630,74 +722,52 @@ const gridSquares = [];
 const poleMarkers = [];
 
 function createGridOverlay() {
-  console.log('🔧 Starting grid overlay creation...');
-  
-  // Use correct grid configuration
-  const gridRows = 20;
-  const gridCols = 8;
-  
-  console.log(`Grid configuration: ${gridRows} rows × ${gridCols} cols`);
-  
-  // Create grid squares
-  for (let row = 0; row < gridRows; row++) {
-    for (let col = 0; col < gridCols; col++) {
-      try {
-        // Calculate position using correct grid size
-        const { phi, theta } = gridToSpherical(gridRows, gridCols, row, col);
-        const position = sphericalToCartesian(globeRadius + 0.1, phi, theta); // Moved further out
+  try {
+    console.log('🚨 CREATEGRIDSOVERLAY FUNCTION CALLED - THIS SHOULD DEFINITELY SHOW UP! 🚨');
+    console.log('🔧 Starting grid overlay creation...');
+    
+    // Use correct grid configuration
+    const gridRows = 20;
+    const gridCols = 8;
+    
+    console.log(`Grid configuration: ${gridRows} rows × ${gridCols} cols`);
+    
+    // Create grid squares covering the entire sphere
+    for (let row = 0; row < gridRows; row++) {
+      for (let col = 0; col < gridCols; col++) {
+        try {
+          // Calculate position using correct grid size
+          const { phi, theta } = gridToSpherical(gridRows, gridCols, row, col);
+          const position = sphericalToCartesian(globeRadius + 0.05, phi, theta); // Closer to sphere surface
         
         // Debug first few positions
         if (row < 2 && col < 2) {
           console.log(`Position (${row}, ${col}): phi=${phi}, theta=${theta}, pos=`, position);
         }
         
-        // Calculate square size based on latitude (larger at equator)
-        const latFactor = Math.sin(THREE.MathUtils.degToRad(90 - (row / (gridRows - 1)) * 180));
-        const squareSize = 0.4 + (latFactor * 0.2); // Made larger
+        // Calculate square size based on latitude for proper spherical coverage
+        const latFactor = Math.sin(THREE.MathUtils.degToRad(phi));
+        const squareSize = 0.8 + (latFactor * 0.4); // Larger squares for better coverage
         
-        // Check if this is a pole position
-        const isPole = (row === 0 || row === gridRows - 1);
+        // Create chess-board pattern with alternating colors for ALL squares (including poles)
+        const squareGeometry = new THREE.PlaneGeometry(squareSize, squareSize);
         
-        if (isPole) {
-          // Create special pole marker (octagon/circle)
-          const poleGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.05, 8);
-          const poleMaterial = new THREE.MeshBasicMaterial({ 
-            color: row === 0 ? 0xffd700 : 0xff4500, // Gold for north, orange for south
-            transparent: true,
-            opacity: 0.8 // Made more opaque
-          });
-          const poleMarker = new THREE.Mesh(poleGeometry, poleMaterial);
-          poleMarker.position.set(position.x, position.y, position.z);
-          poleMarker.lookAt(0, 0, 0);
-          scene.add(poleMarker);
-          poleMarkers.push(poleMarker);
-        } else {
-          // Create regular grid square with special equator highlighting
-          const squareGeometry = new THREE.PlaneGeometry(squareSize, squareSize);
-          
-          // Check if this is the equator (row 10 in 0-19 grid)
-          const isEquator = (row === 10);
-          
-          const squareMaterial = new THREE.MeshBasicMaterial({ 
-            color: isEquator ? 0xffd700 : 0x00ff00, // Gold for equator, green for regular
-            transparent: true,
-            opacity: isEquator ? 0.8 : 0.6, // More opaque for equator
-            side: THREE.DoubleSide
-          });
-          
-          const square = new THREE.Mesh(squareGeometry, squareMaterial);
-          square.position.set(position.x, position.y, position.z);
-          square.lookAt(0, 0, 0);
-          square.userData = { gridRow: row, gridCol: col, isEquator: isEquator };
-          scene.add(square);
-          gridSquares.push(square);
-          
-          // Add pulsing animation for equator squares
-          if (isEquator) {
-            square.userData.originalOpacity = 0.8;
-            square.userData.isEquatorSquare = true;
-          }
-        }
+        // Calculate chess-board pattern: alternate colors based on grid position
+        const isBlueSquare = (row + col) % 2 === 0;
+        
+        const squareMaterial = new THREE.MeshBasicMaterial({ 
+          color: isBlueSquare ? 0x2266ff : 0xff2266, // Blue and red alternating
+          transparent: true,
+          opacity: 0.9,
+          side: THREE.DoubleSide
+        });
+        
+        const square = new THREE.Mesh(squareGeometry, squareMaterial);
+        square.position.set(position.x, position.y, position.z);
+        square.lookAt(0, 0, 0);
+        square.userData = { gridRow: row, gridCol: col, isBlueSquare: isBlueSquare };
+        scene.add(square);
+        gridSquares.push(square);
       } catch (error) {
         console.error(`❌ Error creating grid square at (${row}, ${col}):`, error);
       }
@@ -705,9 +775,15 @@ function createGridOverlay() {
   }
   
   console.log(`✅ Created ${gridSquares.length} grid squares and ${poleMarkers.length} pole markers`);
+  
+  } catch (error) {
+    console.error('❌ ERROR in createGridOverlay function:', error);
+    console.error('❌ Error stack:', error.stack);
+  }
 }
 
 // Create grid overlay on startup
+console.log('🚨 ABOUT TO CALL createGridOverlay() - THIS SHOULD SHOW UP! 🚨');
 createGridOverlay();
 
 // Lighting
@@ -1787,7 +1863,7 @@ async function createPieceMeshOptimized(piece) {
   
   console.log(`Creating piece ${piece.type} for player ${player.name} (index: ${playerIndex})`);
   console.log(`Player object:`, player);
-  console.log(`PLAYER_COLORS[${playerIndex}] = ${PLAYER_COLORS[playerIndex] ? PLAYER_COLORS[playerIndex].toString(16) : 'undefined'}`);
+  console.log(`PLAYER_COLORS[${playerIndex}] = ${PLAYER_COLORS[playerIndex] ? '0x' + PLAYER_COLORS[playerIndex].toString(16).padStart(6, '0').toUpperCase() : 'undefined'}`);
   
   let mesh;
   
@@ -1890,6 +1966,11 @@ function updatePieceMeshOptimized(piece) {
   const mesh = pieceMeshes[piece.id];
   if (mesh) {
     const position = getWorldPosition(piece.row, piece.col);
+    console.log('🔄 POSITION UPDATE - Piece', piece.id, 'moved to:');
+    console.log('  Grid position:', piece.row, piece.col);
+    console.log('  World position:', position);
+    console.log('  Previous world position:', mesh.position);
+    
     mesh.position.set(position.x, position.y, position.z);
     mesh.userData.piece = piece;
     
@@ -2027,13 +2108,23 @@ function updatePieceMesh(piece) {
 }
 
 function getWorldPosition(row, col) {
+  console.log('🌍 getWorldPosition called with:', {
+    row, col,
+    gridRows: gameState.gridConfig.rows,
+    gridCols: gameState.gridConfig.cols
+  });
+  
   const { phi, theta } = gridToSpherical(
     gameState.gridConfig.rows,
     gameState.gridConfig.cols,
     row,
     col
   );
-  return sphericalToCartesian(globeRadius + 0.15, phi, theta);
+  
+  const position = sphericalToCartesian(globeRadius + 0.25, phi, theta); // Positioned clearly above squares
+  console.log('🌍 Calculated position:', { phi, theta, position });
+  
+  return position;
 }
 
 function updateUI() {
@@ -3220,6 +3311,11 @@ function onMouseClick(event) {
           }
 
           // Send regular move command to server
+          console.log('🚀 MOVE DEBUG - Sending move command:');
+          console.log('  pieceId:', currentSelectedPieceId);
+          console.log('  targetRow:', move.row, 'targetCol:', move.col);
+          console.log('  Current piece position:', gameState.pieces[currentSelectedPieceId]?.mesh?.position);
+          
           socket.emit('move-piece', {
             pieceId: currentSelectedPieceId,
             targetRow: move.row,
@@ -4289,6 +4385,14 @@ function initializeChatSystem() {
   // Toggle chat visibility
   toggleButton.addEventListener('click', toggleChat);
   
+  // Add keyboard shortcut to cancel queued moves
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      // Cancel queued move
+      socket.emit('cancel-queued-move');
+    }
+  });
+  
   console.log('Chat system initialized');
 }
 
@@ -4450,6 +4554,109 @@ socket.on('move-collision', (data) => {
   
   // Pause timer during collision resolution
   pauseTimer();
+});
+
+// Real-time system handlers
+socket.on('game-ready-to-begin', (data) => {
+  console.log('Game ready to begin:', data);
+  const statusEl = document.getElementById('timer-status');
+  if (statusEl) {
+    statusEl.textContent = data.message;
+    statusEl.style.color = '#00ff00';
+  }
+  showNotification('Game Ready', `${data.message} - ${data.playersReady} players ready`, 'success');
+});
+
+socket.on('waiting-for-players', (data) => {
+  console.log('Waiting for players:', data);
+  const statusEl = document.getElementById('timer-status');
+  if (statusEl) {
+    statusEl.textContent = `${data.message} (${data.playersReady}/${data.playersNeeded})`;
+    statusEl.style.color = '#ffff00';
+  }
+});
+
+socket.on('game-started-first-move', (data) => {
+  console.log('Game started:', data);
+  const statusEl = document.getElementById('timer-status');
+  if (statusEl) {
+    statusEl.textContent = 'Game Active';
+    statusEl.style.color = '#00ff00';
+  }
+  showNotification('Game Started!', data.message, 'success');
+});
+
+socket.on('player-timer-started', (data) => {
+  console.log('Player timer started:', data);
+  if (data.playerId === socket.id) {
+    // Start visual timer countdown for this player
+    startRealTimeTimer(data.timerDuration);
+  }
+});
+
+socket.on('player-timer-update', (data) => {
+  if (data.playerId === socket.id) {
+    updateTimerDisplay(data.timeRemaining);
+  }
+});
+
+socket.on('player-timer-zero', (data) => {
+  console.log('Player timer at zero:', data);
+  if (data.playerId === socket.id) {
+    // Timer is at 0, player can move
+    const statusEl = document.getElementById('timer-status');
+    if (statusEl) {
+      statusEl.textContent = 'Ready to move';
+      statusEl.style.color = '#00ff00';
+    }
+  }
+});
+
+socket.on('move-queued', (data) => {
+  console.log('Move queued:', data);
+  showNotification('Move Queued', data.message, 'info');
+  
+  // Show queue indicator
+  const statusEl = document.getElementById('timer-status');
+  if (statusEl) {
+    statusEl.textContent = 'Move queued - waiting for timer';
+    statusEl.style.color = '#ffaa00';
+  }
+});
+
+socket.on('move-cancelled', (data) => {
+  console.log('Move cancelled:', data);
+  if (data.playerId === socket.id) {
+    showNotification('Move Cancelled', 'Queued move has been cancelled', 'info');
+    
+    // Clear queue indicator
+    const statusEl = document.getElementById('timer-status');
+    if (statusEl) {
+      statusEl.textContent = 'Timer counting down...';
+      statusEl.style.color = '#ff8800';
+    }
+  }
+});
+
+socket.on('cancel-queued-move-result', (data) => {
+  console.log('Cancel queued move result:', data);
+  if (data.success) {
+    showNotification('Move Cancelled', 'Queued move cancelled successfully', 'info');
+  } else {
+    showNotification('Cancel Failed', 'No move to cancel', 'warning');
+  }
+});
+
+socket.on('player-timer-state', (data) => {
+  console.log('Player timer state:', data);
+  // Update UI based on timer and queue state
+  updateTimerUI(data.timer, data.queuedMove);
+});
+
+socket.on('queued-move-state', (data) => {
+  console.log('Queued move state:', data);
+  // Update queue display
+  updateQueueDisplay(data.queuedMove);
 });
 
 socket.on('collision-contest-prompt', (data) => {
