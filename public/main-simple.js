@@ -334,6 +334,12 @@ class PerformanceOptimizer {
       const position = getWorldPosition(piece.row, piece.col);
       mesh.position.set(position.x, position.y, position.z);
       mesh.userData.piece = piece;
+      
+      // Orient piece so bottom faces sphere center (top points away from center)
+      const normal = new THREE.Vector3(position.x, position.y, position.z).normalize();
+      const up = new THREE.Vector3(0, 1, 0); // Piece's original "up" direction
+      const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal);
+      mesh.setRotationFromQuaternion(quaternion);
     }
   }
   
@@ -387,12 +393,48 @@ class PerformanceOptimizer {
 // Initialize performance optimizer
 const performanceOptimizer = new PerformanceOptimizer();
 
-// Mouse down tracking for click detection (needed regardless of camera controls)
+// Mouse interaction tracking
 let mouseDownTime = 0;
-window.addEventListener('mousedown', (e) => {
+let mouseStartPos = { x: 0, y: 0 };
+let isDragging = false;
+
+function handleMouseDown(e) {
   mouseDownTime = Date.now();
+  mouseStartPos = { x: e.clientX, y: e.clientY };
+  isDragging = false;
   console.log(`Mouse down at: ${mouseDownTime}`);
-});
+}
+
+function handleMouseMove(e) {
+  if (mouseDownTime > 0) {
+    const deltaX = e.clientX - mouseStartPos.x;
+    const deltaY = e.clientY - mouseStartPos.y;
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    
+    // Consider it dragging if moved more than 5 pixels
+    if (distance > 5) {
+      isDragging = true;
+    }
+    
+    // Handle camera movement if using manual controls
+    if (manualCameraControls) {
+      manualCameraControls.handleCameraMouseMove(e);
+    }
+  }
+}
+
+function handleMouseUp(e) {
+  const mouseUpTime = Date.now();
+  const clickDuration = mouseUpTime - mouseDownTime;
+  
+  // Only process click if it was quick and didn't drag
+  if (clickDuration < 300 && !isDragging) {
+    onMouseClick(e);
+  }
+  
+  mouseDownTime = 0;
+  isDragging = false;
+}
 
 // Timer management functions
 function startTimer(playerId, timeLimit, startTime) {
@@ -507,8 +549,10 @@ function updateTurnQueue(turnQueue) {
   }
 }
 
-// Manual camera controls (since OrbitControls is having issues)
+// Camera controls setup
 let controls;
+let manualCameraControls = null;
+
 if (typeof THREE !== 'undefined' && THREE.OrbitControls) {
   controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enablePan = false;
@@ -517,59 +561,51 @@ if (typeof THREE !== 'undefined' && THREE.OrbitControls) {
   console.log('OrbitControls initialized successfully');
 } else {
   console.log('Using manual camera controls instead of OrbitControls');
-  // Simple manual camera control
-  let isMouseDown = false;
-  let mouseX = 0;
-  let mouseY = 0;
-  let cameraDistance = 10;
-  let cameraAngleX = 0;
-  let cameraAngleY = 0;
-  
-  function updateCameraPosition() {
-    camera.position.x = cameraDistance * Math.sin(cameraAngleX) * Math.cos(cameraAngleY);
-    camera.position.y = cameraDistance * Math.sin(cameraAngleY);
-    camera.position.z = cameraDistance * Math.cos(cameraAngleX) * Math.cos(cameraAngleY);
-    camera.lookAt(0, 0, 0);
-  }
-  
-  // Mouse controls for camera
-  window.addEventListener('mousedown', (e) => {
-    isMouseDown = true;
-    mouseX = e.clientX;
-    mouseY = e.clientY;
-  });
-  
-  window.addEventListener('mouseup', () => {
-    isMouseDown = false;
-  });
-  
-  window.addEventListener('mousemove', (e) => {
-    if (!isMouseDown) return;
+  // Manual camera control system
+  manualCameraControls = {
+    cameraDistance: 10,
+    cameraAngleX: 0,
+    cameraAngleY: 0,
     
-    const deltaX = e.clientX - mouseX;
-    const deltaY = e.clientY - mouseY;
+    updateCameraPosition() {
+      camera.position.x = this.cameraDistance * Math.sin(this.cameraAngleX) * Math.cos(this.cameraAngleY);
+      camera.position.y = this.cameraDistance * Math.sin(this.cameraAngleY);
+      camera.position.z = this.cameraDistance * Math.cos(this.cameraAngleX) * Math.cos(this.cameraAngleY);
+      camera.lookAt(0, 0, 0);
+    },
     
-    cameraAngleX += deltaX * 0.01;
-    cameraAngleY += deltaY * 0.01;
+    handleCameraMouseMove(e) {
+      if (isDragging && mouseDownTime > 0) {
+        const deltaX = e.clientX - mouseStartPos.x;
+        const deltaY = e.clientY - mouseStartPos.y;
+        
+        this.cameraAngleX += deltaX * 0.01;
+        this.cameraAngleY += deltaY * 0.01;
+        
+        // Clamp Y rotation to prevent flipping
+        this.cameraAngleY = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, this.cameraAngleY));
+        
+        this.updateCameraPosition();
+        
+        mouseStartPos.x = e.clientX;
+        mouseStartPos.y = e.clientY;
+      }
+    },
     
-    // Clamp Y rotation to prevent flipping
-    cameraAngleY = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, cameraAngleY));
-    
-    updateCameraPosition();
-    
-    mouseX = e.clientX;
-    mouseY = e.clientY;
-  });
-  
-  // Zoom controls
-  window.addEventListener('wheel', (e) => {
-    cameraDistance += e.deltaY * 0.01;
-    cameraDistance = Math.max(8, Math.min(15, cameraDistance));
-    updateCameraPosition();
-  });
+    handleWheel(e) {
+      this.cameraDistance += e.deltaY * 0.01;
+      this.cameraDistance = Math.max(8, Math.min(15, this.cameraDistance));
+      this.updateCameraPosition();
+    }
+  };
   
   // Initialize camera position
-  updateCameraPosition();
+  manualCameraControls.updateCameraPosition();
+  
+  // Add wheel event listener for zoom
+  window.addEventListener('wheel', (e) => {
+    manualCameraControls.handleWheel(e);
+  });
 }
 // Set initial camera position to show both poles better
 camera.position.set(5, 5, 10);
@@ -1749,6 +1785,10 @@ async function createPieceMeshOptimized(piece) {
   const playerIndex = player.index !== undefined ? player.index : 
                      Object.keys(gameState.players).indexOf(piece.playerId);
   
+  console.log(`Creating piece ${piece.type} for player ${player.name} (index: ${playerIndex})`);
+  console.log(`Player object:`, player);
+  console.log(`PLAYER_COLORS[${playerIndex}] = ${PLAYER_COLORS[playerIndex] ? PLAYER_COLORS[playerIndex].toString(16) : 'undefined'}`);
+  
   let mesh;
   
   // Try to load GLB model with caching
@@ -1762,6 +1802,7 @@ async function createPieceMeshOptimized(piece) {
       
       // Apply player color tinting to materials
       const playerColor = getPieceColorForPlayer(piece, player, playerIndex);
+      console.log(`Applying GLB color ${playerColor.toString(16)} to ${piece.type} mesh`);
       mesh.traverse((child) => {
         if (child.isMesh && child.material) {
           // Create material and cache it
@@ -1798,6 +1839,7 @@ async function createPieceMeshOptimized(piece) {
     
     // Use player-specific color for better identification
     const pieceColor = getPieceColorForPlayer(piece, player, playerIndex);
+    console.log(`Applying geometric fallback color ${pieceColor.toString(16)} to ${piece.type} mesh`);
     
     const material = performanceOptimizer.getCachedMaterial('standard', {
       color: pieceColor,
@@ -1806,6 +1848,7 @@ async function createPieceMeshOptimized(piece) {
     });
     
     mesh.material = material;
+    console.log(`Material applied with color:`, material.color.getHex().toString(16));
     
     // Apply geometric shape scaling
     const scale = getGeometricScale(piece.type);
@@ -1815,6 +1858,15 @@ async function createPieceMeshOptimized(piece) {
   // Position on sphere surface
   mesh.position.set(position.x, position.y, position.z);
   mesh.userData = { pieceId: piece.id, piece: piece };
+  
+  // Orient piece so bottom faces sphere center (top points away from center)
+  // Calculate the normal vector from center to piece position
+  const normal = new THREE.Vector3(position.x, position.y, position.z).normalize();
+  
+  // Create a rotation matrix to align the piece with the sphere surface
+  const up = new THREE.Vector3(0, 1, 0); // Piece's original "up" direction
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal);
+  mesh.setRotationFromQuaternion(quaternion);
   
   // Debug: Log King positions only
   if (piece.type === 'KING') {
@@ -1840,6 +1892,12 @@ function updatePieceMeshOptimized(piece) {
     const position = getWorldPosition(piece.row, piece.col);
     mesh.position.set(position.x, position.y, position.z);
     mesh.userData.piece = piece;
+    
+    // Orient piece so bottom faces sphere center (top points away from center)
+    const normal = new THREE.Vector3(position.x, position.y, position.z).normalize();
+    const up = new THREE.Vector3(0, 1, 0); // Piece's original "up" direction
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal);
+    mesh.setRotationFromQuaternion(quaternion);
   }
 }
 
@@ -1959,6 +2017,12 @@ function updatePieceMesh(piece) {
     const position = getWorldPosition(piece.row, piece.col);
     mesh.position.set(position.x, position.y, position.z);
     mesh.userData.piece = piece;
+    
+    // Orient piece so bottom faces sphere center (top points away from center)
+    const normal = new THREE.Vector3(position.x, position.y, position.z).normalize();
+    const up = new THREE.Vector3(0, 1, 0); // Piece's original "up" direction
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal);
+    mesh.setRotationFromQuaternion(quaternion);
   }
 }
 
@@ -1978,6 +2042,64 @@ function updateUI() {
   
   const pieceCount = Object.keys(gameState.pieces).length;
   gameInfoEl.textContent = `${pieceCount} pieces on board`;
+  
+  // Add player color indicators
+  updatePlayerColorIndicators();
+}
+
+function updatePlayerColorIndicators() {
+  // Find or create player color indicator div
+  let colorIndicator = document.getElementById('player-color-indicator');
+  if (!colorIndicator) {
+    colorIndicator = document.createElement('div');
+    colorIndicator.id = 'player-color-indicator';
+    colorIndicator.style.cssText = `
+      margin-top: 10px;
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 5px;
+      font-size: 12px;
+    `;
+    document.getElementById('ui').appendChild(colorIndicator);
+  }
+  
+  // Clear existing content
+  colorIndicator.innerHTML = '<div style="color: #ccc; margin-bottom: 5px;">Player Colors:</div>';
+  
+  // Add color indicators for each player
+  const currentPlayerId = socket.id;
+  const players = Object.values(gameState.players);
+  
+  players.forEach((player, index) => {
+    const playerColor = PLAYER_COLORS[player.index] || 0xffffff;
+    const colorHex = '#' + playerColor.toString(16).padStart(6, '0');
+    
+    const playerDiv = document.createElement('div');
+    playerDiv.style.cssText = `
+      display: flex;
+      align-items: center;
+      margin-bottom: 3px;
+      ${player.id === currentPlayerId ? 'font-weight: bold; background: rgba(255, 255, 255, 0.1); padding: 2px 4px; border-radius: 3px;' : ''}
+    `;
+    
+    const colorSwatch = document.createElement('div');
+    colorSwatch.style.cssText = `
+      width: 16px;
+      height: 16px;
+      background-color: ${colorHex};
+      border-radius: 2px;
+      margin-right: 8px;
+      border: 1px solid #666;
+    `;
+    
+    const playerName = document.createElement('span');
+    playerName.textContent = `${player.name}${player.id === currentPlayerId ? ' (You)' : ''}`;
+    playerName.style.color = '#fff';
+    
+    playerDiv.appendChild(colorSwatch);
+    playerDiv.appendChild(playerName);
+    colorIndicator.appendChild(playerDiv);
+  });
 }
 
 let selectedMovementMode = null;
@@ -2904,16 +3026,16 @@ function getColorFromString(colorString) {
   return colorMap[colorString] || 0xffffff;
 }
 
-// Player color palettes for clear identification
+// Player color palettes for clear identification - vibrant colors
 const PLAYER_COLORS = [
-  0xFF0000, // Red
-  0x0000FF, // Blue
-  0x00FF00, // Green
-  0xFFFF00, // Yellow
-  0xFF00FF, // Magenta
-  0x00FFFF, // Cyan
-  0xFFA500, // Orange
-  0x800080  // Purple
+  0xFF0000, // Red - Player 1
+  0x0080FF, // Bright Blue - Player 2
+  0x00FF00, // Green - Player 3
+  0xFFD700, // Gold - Player 4
+  0xFF00FF, // Magenta - Player 5
+  0x00FFFF, // Cyan - Player 6
+  0xFF8000, // Orange - Player 7
+  0x8000FF  // Purple - Player 8
 ];
 
 // Get distinct player color
@@ -2929,7 +3051,10 @@ function getPlayerColor(playerId, playerIndex) {
 
 // Enhanced piece color function that prioritizes player identification
 function getPieceColorForPlayer(piece, player, playerIndex) {
-  const basePlayerColor = getPlayerColor(player.id, playerIndex);
+  // Use the consistent PLAYER_COLORS array based on player index
+  const basePlayerColor = PLAYER_COLORS[playerIndex] || 0xffffff;
+  
+  console.log(`getPieceColorForPlayer: piece=${piece.type}, playerIndex=${playerIndex}, baseColor=${basePlayerColor.toString(16)}`);
   
   // For special pieces, tint the player color slightly
   const pieceModifiers = {
@@ -2949,11 +3074,21 @@ function getPieceColorForPlayer(piece, player, playerIndex) {
   
   const modifier = pieceModifiers[piece.type] || { brightness: 1.0, saturation: 1.0 };
   
-  // Apply modifier to player color
+  // Apply modifier to player color using HSL for better color preservation
   const color = new THREE.Color(basePlayerColor);
-  color.multiplyScalar(modifier.brightness);
+  const hsl = {};
+  color.getHSL(hsl);
   
-  return color.getHex();
+  // Apply brightness and saturation modifiers in HSL space
+  hsl.l = Math.min(1.0, hsl.l * modifier.brightness); // Clamp to max 1.0
+  hsl.s = Math.min(1.0, hsl.s * modifier.saturation); // Clamp to max 1.0
+  
+  color.setHSL(hsl.h, hsl.s, hsl.l);
+  
+  const finalColor = color.getHex();
+  console.log(`Final color for ${piece.type}: ${finalColor.toString(16)}`);
+  
+  return finalColor;
 }
 
 // Mouse interaction
@@ -2998,7 +3133,11 @@ function onMouseClick(event) {
       console.log('Piece player ID:', piece.playerId);
       console.log('Player ID match:', currentPlayer && piece.playerId === currentPlayer.id);
       
-      if (currentPlayer && piece.playerId === currentPlayer.id) {
+      // More robust ownership check - also check if piece belongs to socket ID directly
+      const isOwnPiece = (currentPlayer && piece.playerId === currentPlayer.id) || 
+                        (piece.playerId === socket.id);
+      
+      if (isOwnPiece) {
         if (isRightClick) {
           // Right-click: Request evolution options
           socket.emit('request-evolution-choice', { pieceId: piece.id });
@@ -3116,11 +3255,13 @@ function onMouseClick(event) {
   }
 }
 
-window.addEventListener('click', onMouseClick);
+// Set up consolidated mouse event handlers
+window.addEventListener('mousedown', handleMouseDown);
+window.addEventListener('mousemove', handleMouseMove);
+window.addEventListener('mouseup', handleMouseUp);
 window.addEventListener('contextmenu', (event) => {
   event.preventDefault(); // Prevent context menu on right-click
 });
-window.addEventListener('mousedown', onMouseClick);
 
 // Touch event handling for mobile
 let touchStartTime = 0;
@@ -3654,6 +3795,11 @@ document.getElementById('remove-all-ai-btn').addEventListener('click', () => {
   removeAllAI();
 });
 
+// Quit game button
+document.getElementById('quit-game').addEventListener('click', () => {
+  quitGame();
+});
+
 // AI functions
 function showAIUI() {
   document.getElementById('ai-ui').style.display = 'block';
@@ -3685,6 +3831,46 @@ function removeAllAI() {
   });
   currentAIPlayers = [];
   updateAIPlayersList();
+}
+
+// Quit game function
+function quitGame() {
+  const confirmQuit = confirm('Are you sure you want to quit the game? This will remove all your pieces and end your session.');
+  
+  if (confirmQuit) {
+    // Clear local game state
+    gameState = {
+      players: {},
+      pieces: {},
+      gridConfig: { rows: 20, cols: 8 }
+    };
+    
+    // Clear visual elements
+    Object.keys(pieceMeshes).forEach(pieceId => {
+      scene.remove(pieceMeshes[pieceId]);
+      delete pieceMeshes[pieceId];
+    });
+    
+    // Clear highlights and selections
+    clearValidMoveHighlights();
+    clearSelectionHighlight();
+    selectedPieceId = null;
+    validMoves = [];
+    
+    // Update UI
+    gameInfoEl.textContent = 'You have quit the game';
+    gameInfoEl.style.color = '#ff6b6b';
+    
+    // Notify server and disconnect
+    socket.emit('quit-game');
+    
+    // Optionally reload page after short delay
+    setTimeout(() => {
+      if (confirm('Would you like to reload the page to start a new game?')) {
+        window.location.reload();
+      }
+    }, 1000);
+  }
 }
 
 function getAIPersonality(personalityType) {

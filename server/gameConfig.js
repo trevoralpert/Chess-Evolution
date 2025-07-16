@@ -13,8 +13,8 @@ const GAME_CONFIG = {
     // King at spawn point (pole), 8 pawns in circular ring at next latitude
     KING: { row: 0, col: 0 }, // At the spawn point (pole)
     PAWNS: [
-      { row: 1, col: 0 }, { row: 1, col: 1 }, { row: 1, col: 2 }, { row: 1, col: 3 },
-      { row: 1, col: 4 }, { row: 1, col: 5 }, { row: 1, col: 6 }, { row: 1, col: 7 }
+      { row: 1, col: 0 },  { row: 1, col: 1 },  { row: 1, col: 2 },  { row: 1, col: 3 },
+      { row: 1, col: 4 },  { row: 1, col: 5 },  { row: 1, col: 6 },  { row: 1, col: 7 }
     ]
   },
   
@@ -22,13 +22,13 @@ const GAME_CONFIG = {
   // Kings spawn at exact vertices (poles)
   SPAWN_AREAS: [
     { baseRow: 0, baseCol: 0 },   // Player 1 - North Pole
-    { baseRow: 18, baseCol: 4 },  // Player 2 - South Pole (leave room for pawns)
+    { baseRow: 19, baseCol: 4 },  // Player 2 - South Pole (row 19 is actual south pole)
     { baseRow: 5, baseCol: 2 },   // Player 3 - Distributed (if needed)
-    { baseRow: 13, baseCol: 6 },  // Player 4 - Distributed (if needed)
+    { baseRow: 14, baseCol: 6 },  // Player 4 - Distributed (if needed)
     { baseRow: 3, baseCol: 4 },   // Player 5 - Distributed (if needed)
-    { baseRow: 15, baseCol: 0 },  // Player 6 - Distributed (if needed)
+    { baseRow: 16, baseCol: 0 },  // Player 6 - Distributed (if needed)
     { baseRow: 7, baseCol: 6 },   // Player 7 - Distributed (if needed)
-    { baseRow: 11, baseCol: 2 }   // Player 8 - Distributed (if needed)
+    { baseRow: 12, baseCol: 2 }   // Player 8 - Distributed (if needed)
   ],
   
   // Piece types and values

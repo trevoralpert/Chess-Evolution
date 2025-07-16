@@ -678,8 +678,8 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // Pause timers during evolution choice
-    timingManager.pauseAllTimers();
+    // Pause cooldowns during evolution choice
+    timingManager.pauseAllCooldowns();
     
     socket.emit('evolution-choice-available', {
       pieceId: pieceId,
@@ -740,8 +740,8 @@ io.on('connection', (socket) => {
       bankInfo: evolutionManager.getPlayerBankInfo(socket.id)
     });
     
-    // Resume timers after evolution choice is complete
-    timingManager.resumeAllTimers();
+    // Resume cooldowns after evolution choice is complete
+    timingManager.resumeAllCooldowns();
   });
 
   socket.on('cancel-evolution-choice', (data) => {
@@ -754,8 +754,8 @@ io.on('connection', (socket) => {
       socket.emit('evolution-choice-failed', { error: 'No pending choice to cancel' });
     }
     
-    // Resume timers after evolution choice is cancelled
-    timingManager.resumeAllTimers();
+    // Resume cooldowns after evolution choice is cancelled
+    timingManager.resumeAllCooldowns();
   });
 
   socket.on('get-evolution-bank', () => {
@@ -803,6 +803,74 @@ io.on('connection', (socket) => {
   socket.on('get-chat-stats', () => {
     const stats = chatManager.getPlayerStats(socket.id);
     socket.emit('chat-stats', { stats });
+  });
+
+  // Handle quit game request
+  socket.on('quit-game', () => {
+    console.log(`Player ${socket.id} requested to quit game`);
+    
+    // Remove from spectators if they were spectating
+    spectatorManager.removeSpectator('main', socket);
+    
+    // Clean up AI if this was managing AI players
+    aiManager.cleanup(socket.id);
+    
+    // Handle lobby disconnect
+    const affectedLobbyId = lobbyManager.handleDisconnect(socket.id);
+    if (affectedLobbyId) {
+      const lobby = lobbyManager.getLobby(affectedLobbyId);
+      if (lobby) {
+        // Notify remaining players in the lobby
+        io.to(affectedLobbyId).emit('lobby-updated', { lobby });
+      }
+      
+      // Send updated lobby list to all clients
+      io.emit('lobby-list-update', { lobbies: lobbyManager.getAvailableLobbies() });
+    }
+    
+    // Remove player from game
+    const player = gameState.players[socket.id];
+    if (player) {
+      console.log(`Removing ${player.pieces.length} pieces for player ${player.index + 1}`);
+      
+      // Remove all pieces belonging to this player
+      player.pieces.forEach(pieceId => {
+        const piece = gameState.pieces[pieceId];
+        if (piece) {
+          const posKey = GridUtils.getPositionKey(piece.row, piece.col);
+          delete gameState.grid[posKey];
+          delete gameState.pieces[pieceId];
+        }
+      });
+      
+      // Remove player from players list
+      delete gameState.players[socket.id];
+      gameState.playerCount = Object.keys(gameState.players).length;
+      
+      // Remove from evolution and timing systems
+      evolutionManager.removePlayer(socket.id);
+      timingManager.removePlayer(socket.id);
+      
+      // Remove from chat
+      chatManager.leaveChatRoom('main', socket.id);
+      
+      // Check if only one player remains
+      if (gameState.playerCount === 1) {
+        console.log('Only one player remaining, stopping turn timers');
+        timingManager.stopAllTimers();
+      }
+      
+      // Check victory conditions
+      victoryManager.checkVictory();
+      
+      // Broadcast updated game state
+      broadcastGameState();
+      
+      console.log(`Player count after quit: ${gameState.playerCount}`);
+    }
+    
+    // Disconnect the socket
+    socket.disconnect();
   });
 
   socket.on('disconnect', () => {
@@ -879,19 +947,41 @@ async function triggerAIMove(aiPlayerId) {
   
   if (!aiManager.isAIPlayer(aiPlayerId)) return;
   
+  // Check if AI player can move (not on cooldown)
+  if (!timingManager.canPlayerMove(aiPlayerId)) {
+    console.log(`AI ${aiPlayerId} is on cooldown, scheduling retry`);
+    
+    // Retry after cooldown period
+    setTimeout(() => {
+      triggerAIMove(aiPlayerId);
+    }, 1000); // Check again in 1 second
+    return;
+  }
+  
   try {
     console.log(`Triggering AI move for ${aiPlayerId}`);
     
+    // Use the same move system as human players
     const moveResult = await aiManager.makeAIMove(
       aiPlayerId,
       gameState,
       getValidMoves,
-      handlePieceMove,
+      (playerId, moveData) => {
+        // Register move through timing system like human players
+        const timingResult = timingManager.registerMove(playerId, moveData);
+        
+        if (timingResult.success) {
+          // Move will be executed after collision window
+          return { success: true, message: `AI move registered: ${moveData.pieceId}` };
+        } else {
+          return { success: false, message: timingResult.error };
+        }
+      },
       handlePieceSplit
     );
     
     if (moveResult) {
-      console.log(`AI ${aiPlayerId} move completed:`, moveResult.message);
+      console.log(`AI ${aiPlayerId} move successful:`, moveResult.message);
       
       // Record the AI move
       spectatorManager.recordMove('main', {
@@ -912,11 +1002,23 @@ async function triggerAIMove(aiPlayerId) {
       if (gameState.playerCount > 1) {
         setTimeout(() => {
           checkAITurn(aiPlayerId);
-        }, 3000 + Math.random() * 2000); // 3-5 second delay between AI moves
+        }, 8000 + Math.random() * 2000); // 8-10 second delay to respect cooldown
       }
+    } else {
+      console.log(`AI ${aiPlayerId} could not make move, retrying later`);
+      
+      // Retry after a delay if no move was made
+      setTimeout(() => {
+        checkAITurn(aiPlayerId);
+      }, 2000);
     }
   } catch (error) {
     console.error(`AI move error for ${aiPlayerId}:`, error);
+    
+    // Retry after error
+    setTimeout(() => {
+      checkAITurn(aiPlayerId);
+    }, 3000);
   }
 }
 
@@ -1079,9 +1181,14 @@ function createStartingPieces(player) {
   // Track piece birth for evolution system
   evolutionManager.trackPieceBirth(king.id, king);
   
-  // Create Pawns
+  // Create Pawns - adjust formation based on spawn location
+  // North pole players (row 0-9): pawns move south (+1 row)
+  // South pole players (row 10-19): pawns move north (-1 row)
+  const isNorthPole = baseRow <= 9;
+  const pawnRowOffset = isNorthPole ? 1 : -1;
+  
   GAME_CONFIG.STARTING_FORMATION.PAWNS.forEach((pawnPos, index) => {
-    const pawnRow = baseRow + pawnPos.row;
+    const pawnRow = baseRow + (pawnRowOffset * Math.abs(pawnPos.row));
     const pawnCol = GridUtils.normalizeCol(baseCol + pawnPos.col);
     
     const pawn = {
@@ -1908,8 +2015,8 @@ function handleContestResponse(playerId, data) {
 }
 
 function resolveBattleWithDice(attackingPiece, defendingPiece) {
-  // Pause timers during battle
-  timingManager.pauseAllTimers();
+  // Pause cooldowns during battle
+  timingManager.pauseAllCooldowns();
   
   const battleResult = resolveDiceBattle(attackingPiece, defendingPiece);
   const winner = battleResult.winner;
@@ -2090,8 +2197,8 @@ function completeBattleResolution(winner, loser) {
   
   broadcastGameState();
   
-  // Resume timers after battle completion
-  timingManager.resumeAllTimers();
+  // Resume cooldowns after battle completion
+  timingManager.resumeAllCooldowns();
 }
 
 function handleMoveCollision(playerId, moveData, conflictingMove) {

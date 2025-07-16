@@ -1,167 +1,169 @@
 class TimingManager {
   constructor(io) {
     this.io = io;
-    this.playerTimers = {}; // playerId -> { timer: timeoutId, startTime: timestamp, remainingTime: ms }
+    this.playerCooldowns = {}; // playerId -> { cooldownEnd: timestamp, timer: timeoutId }
     this.gameTimer = null;
     this.isPaused = false;
     this.pauseStartTime = null;
     this.pendingMoves = {}; // playerId -> { move: data, timestamp: number }
     this.collisionWindow = 500; // ms window for collision detection
-    this.moveTimeout = 7000; // 7 seconds per move
-    this.currentActivePlayer = null;
-    this.turnQueue = [];
+    this.moveCooldown = 7000; // 7 seconds cooldown per move
     this.gameState = null;
   }
 
   initialize(gameState) {
     this.gameState = gameState;
-    this.turnQueue = Object.keys(gameState.players);
     
-    // Only start timers if there are multiple players
-    if (this.turnQueue.length > 1) {
-      this.currentActivePlayer = this.turnQueue[0];
-      this.startPlayerTimer(this.currentActivePlayer);
-    } else {
-      this.currentActivePlayer = null;
-      console.log('Single player mode - no turn timers needed');
-    }
+    // Initialize all players with no cooldown (can move immediately)
+    Object.keys(gameState.players).forEach(playerId => {
+      this.playerCooldowns[playerId] = {
+        cooldownEnd: 0, // Can move immediately
+        timer: null
+      };
+    });
+    
+    console.log('Cooldown-based timer system initialized - all players can move immediately');
+    
+    // Broadcast that all players can move
+    this.broadcastPlayerStates();
   }
 
-  startPlayerTimer(playerId) {
+  // Check if player can move (not on cooldown)
+  canPlayerMove(playerId) {
+    if (!this.playerCooldowns[playerId]) return true;
+    return Date.now() >= this.playerCooldowns[playerId].cooldownEnd;
+  }
+
+  // Start cooldown after a player makes a move
+  startPlayerCooldown(playerId) {
     if (this.isPaused || !playerId) return;
 
-    // Clear any existing timer
-    this.clearPlayerTimer(playerId);
+    // Clear any existing cooldown timer
+    this.clearPlayerCooldown(playerId);
 
-    const startTime = Date.now();
-    this.playerTimers[playerId] = {
-      startTime: startTime,
-      remainingTime: this.moveTimeout,
+    const cooldownEndTime = Date.now() + this.moveCooldown;
+    
+    this.playerCooldowns[playerId] = {
+      cooldownEnd: cooldownEndTime,
       timer: setTimeout(() => {
-        this.handleTimeout(playerId);
-      }, this.moveTimeout)
+        this.handleCooldownComplete(playerId);
+      }, this.moveCooldown)
     };
 
-    // Notify all clients about the timer start
-    this.io.emit('timer-started', {
+    // Notify all clients about the cooldown start
+    this.io.emit('player-cooldown-started', {
       playerId: playerId,
-      timeLimit: this.moveTimeout,
-      startTime: startTime
+      cooldownDuration: this.moveCooldown,
+      cooldownEndTime: cooldownEndTime
     });
 
-    console.log(`Timer started for player ${playerId}: ${this.moveTimeout}ms`);
+    console.log(`Player ${playerId} on cooldown for ${this.moveCooldown}ms`);
   }
 
-  clearPlayerTimer(playerId) {
-    if (this.playerTimers[playerId]) {
-      clearTimeout(this.playerTimers[playerId].timer);
-      delete this.playerTimers[playerId];
+  clearPlayerCooldown(playerId) {
+    if (this.playerCooldowns[playerId] && this.playerCooldowns[playerId].timer) {
+      clearTimeout(this.playerCooldowns[playerId].timer);
+      this.playerCooldowns[playerId] = {
+        cooldownEnd: 0,
+        timer: null
+      };
     }
   }
 
-  pauseAllTimers() {
+  handleCooldownComplete(playerId) {
+    if (this.playerCooldowns[playerId]) {
+      this.playerCooldowns[playerId].cooldownEnd = 0;
+      this.playerCooldowns[playerId].timer = null;
+    }
+
+    // Notify client that player can move again
+    this.io.emit('player-cooldown-ended', {
+      playerId: playerId
+    });
+
+    console.log(`Player ${playerId} cooldown complete - can move again`);
+  }
+
+  pauseAllCooldowns() {
     if (this.isPaused) return;
 
     this.isPaused = true;
     this.pauseStartTime = Date.now();
 
-    // Pause all active timers
-    Object.keys(this.playerTimers).forEach(playerId => {
-      const timer = this.playerTimers[playerId];
-      if (timer.timer) {
-        clearTimeout(timer.timer);
-        // Calculate remaining time
-        const elapsed = Date.now() - timer.startTime;
-        timer.remainingTime = Math.max(0, timer.remainingTime - elapsed);
+    // Pause all active cooldowns
+    Object.keys(this.playerCooldowns).forEach(playerId => {
+      const cooldown = this.playerCooldowns[playerId];
+      if (cooldown.timer) {
+        clearTimeout(cooldown.timer);
+        // Extend cooldown end time by pause duration (will be calculated on resume)
       }
     });
 
-    this.io.emit('timers-paused', {
+    this.io.emit('cooldowns-paused', {
       pauseTime: this.pauseStartTime
     });
 
-    console.log('All timers paused');
+    console.log('All cooldowns paused');
   }
 
-  resumeAllTimers() {
+  resumeAllCooldowns() {
     if (!this.isPaused) return;
 
     this.isPaused = false;
     const pauseDuration = Date.now() - this.pauseStartTime;
 
-    // Resume all timers with remaining time
-    Object.keys(this.playerTimers).forEach(playerId => {
-      const timer = this.playerTimers[playerId];
-      if (timer.remainingTime > 0) {
-        timer.startTime = Date.now();
-        timer.timer = setTimeout(() => {
-          this.handleTimeout(playerId);
-        }, timer.remainingTime);
+    // Resume all cooldowns with extended time
+    Object.keys(this.playerCooldowns).forEach(playerId => {
+      const cooldown = this.playerCooldowns[playerId];
+      if (cooldown.cooldownEnd > 0) {
+        // Extend cooldown end time by pause duration
+        cooldown.cooldownEnd += pauseDuration;
+        
+        const remainingTime = cooldown.cooldownEnd - Date.now();
+        if (remainingTime > 0) {
+          cooldown.timer = setTimeout(() => {
+            this.handleCooldownComplete(playerId);
+          }, remainingTime);
+        } else {
+          // Cooldown should have ended during pause
+          this.handleCooldownComplete(playerId);
+        }
       }
     });
 
-    this.io.emit('timers-resumed', {
+    this.io.emit('cooldowns-resumed', {
       pauseDuration: pauseDuration
     });
 
-    console.log(`All timers resumed after ${pauseDuration}ms pause`);
+    console.log(`All cooldowns resumed after ${pauseDuration}ms pause`);
   }
 
-  handleTimeout(playerId) {
-    console.log(`Player ${playerId} timed out!`);
-    
-    // Clear the timer
-    this.clearPlayerTimer(playerId);
-
-    // Notify all clients
-    this.io.emit('player-timeout', {
-      playerId: playerId,
-      message: 'Player timed out - turn skipped'
+  // Broadcast current state of all players (can move or on cooldown)
+  broadcastPlayerStates() {
+    const playerStates = {};
+    Object.keys(this.playerCooldowns).forEach(playerId => {
+      playerStates[playerId] = {
+        canMove: this.canPlayerMove(playerId),
+        cooldownEnd: this.playerCooldowns[playerId].cooldownEnd
+      };
     });
 
-    // Move to next player
-    this.nextTurn();
+    this.io.emit('player-states-updated', {
+      playerStates: playerStates
+    });
   }
 
-  nextTurn() {
-    if (this.turnQueue.length === 0) return;
-
-    // Don't start timers if there's only one player (prevents infinite loop)
-    const activePlayers = this.turnQueue.filter(playerId => this.gameState.players[playerId]);
-    if (activePlayers.length <= 1) {
-      console.log('Only one player remaining, stopping turn timers');
-      this.currentActivePlayer = null;
-      return;
-    }
-
-    // Find next active player
-    const currentIndex = this.turnQueue.indexOf(this.currentActivePlayer);
-    let nextIndex = (currentIndex + 1) % this.turnQueue.length;
-    let attempts = 0;
-
-    // Skip disconnected players
-    while (attempts < this.turnQueue.length) {
-      const nextPlayerId = this.turnQueue[nextIndex];
-      if (this.gameState.players[nextPlayerId]) {
-        this.currentActivePlayer = nextPlayerId;
-        this.startPlayerTimer(nextPlayerId);
-        
-        this.io.emit('turn-changed', {
-          activePlayer: nextPlayerId,
-          playerName: this.gameState.players[nextPlayerId].name
-        });
-        return;
-      }
-      nextIndex = (nextIndex + 1) % this.turnQueue.length;
-      attempts++;
-    }
-
-    console.log('No active players found for next turn');
-  }
+  // No longer needed - cooldown system doesn't use turns
+  // Players can move whenever they're not on cooldown
 
   registerMove(playerId, moveData) {
-    if (!this.isActivePlayer(playerId)) {
-      return { success: false, error: 'Not your turn' };
+    // Check if player can move (not on cooldown)
+    if (!this.canPlayerMove(playerId)) {
+      const remainingCooldown = this.playerCooldowns[playerId].cooldownEnd - Date.now();
+      return { 
+        success: false, 
+        error: `On cooldown - ${Math.ceil(remainingCooldown / 1000)}s remaining` 
+      };
     }
 
     const timestamp = Date.now();
@@ -178,8 +180,8 @@ class TimingManager {
       timestamp: timestamp
     };
 
-    // Clear the player's timer
-    this.clearPlayerTimer(playerId);
+    // Start cooldown immediately
+    this.startPlayerCooldown(playerId);
 
     // Execute the move after collision window
     setTimeout(() => {
@@ -215,17 +217,15 @@ class TimingManager {
       this.moveExecutor(playerId, pendingMove.move);
     }
 
-    // Move to next turn
-    this.nextTurn();
+    // Start cooldown for this player (no turns in cooldown-based system)
+    this.startPlayerCooldown(playerId);
   }
 
   setMoveExecutor(executor) {
     this.moveExecutor = executor;
   }
 
-  isActivePlayer(playerId) {
-    return this.currentActivePlayer === playerId;
-  }
+  // No longer needed - all players can move when not on cooldown
 
   removePlayer(playerId) {
     // Clear any timers for this player
@@ -234,52 +234,57 @@ class TimingManager {
     // Remove from pending moves
     delete this.pendingMoves[playerId];
     
-    // Remove from turn queue
-    const index = this.turnQueue.indexOf(playerId);
-    if (index > -1) {
-      this.turnQueue.splice(index, 1);
-    }
-
-    // If this was the active player, move to next
-    if (this.currentActivePlayer === playerId) {
-      this.nextTurn();
+    // Remove from cooldown system
+    if (this.playerCooldowns[playerId]) {
+      if (this.playerCooldowns[playerId].timer) {
+        clearTimeout(this.playerCooldowns[playerId].timer);
+      }
+      delete this.playerCooldowns[playerId];
     }
   }
 
   addPlayer(playerId) {
-    if (!this.turnQueue.includes(playerId)) {
-      this.turnQueue.push(playerId);
-      
-      // If this is the second player, start the timer system
-      if (this.turnQueue.length === 2 && !this.currentActivePlayer) {
-        this.currentActivePlayer = this.turnQueue[0];
-        this.startPlayerTimer(this.currentActivePlayer);
-        console.log('Second player joined - starting turn timers');
-      }
-    }
+    // Initialize cooldown for new player (can move immediately)
+    this.playerCooldowns[playerId] = {
+      cooldownEnd: 0,
+      timer: null
+    };
+    
+    console.log(`Player ${playerId} added to cooldown system - can move immediately`);
+    
+    // Broadcast updated player states
+    this.broadcastPlayerStates();
   }
 
-  getCurrentActivePlayer() {
-    return this.currentActivePlayer;
+  removePlayer(playerId) {
+    // Clear any active cooldown
+    this.clearPlayerCooldown(playerId);
+    
+    // Remove from cooldowns
+    delete this.playerCooldowns[playerId];
+    
+    console.log(`Player ${playerId} removed from cooldown system`);
+    
+    // Broadcast updated player states
+    this.broadcastPlayerStates();
   }
 
-  getPlayerTimer(playerId) {
-    return this.playerTimers[playerId];
+  getPlayerCooldown(playerId) {
+    return this.playerCooldowns[playerId];
   }
 
   getGameState() {
     return {
-      activePlayer: this.currentActivePlayer,
       isPaused: this.isPaused,
-      turnQueue: this.turnQueue,
+      playerCooldowns: this.playerCooldowns,
       pendingMoves: Object.keys(this.pendingMoves)
     };
   }
 
   stopAllTimers() {
-    // Clear all player timers
-    Object.keys(this.playerTimers).forEach(playerId => {
-      this.clearPlayerTimer(playerId);
+    // Clear all player cooldowns
+    Object.keys(this.playerCooldowns).forEach(playerId => {
+      this.clearPlayerCooldown(playerId);
     });
 
     // Clear game timer if it exists
@@ -288,9 +293,8 @@ class TimingManager {
       this.gameTimer = null;
     }
 
-    // Clear turn queue and active player
-    this.turnQueue = [];
-    this.currentActivePlayer = null;
+    // Clear cooldowns
+    this.playerCooldowns = {};
     this.isPaused = false;
 
     // Notify all clients that timers are stopped
