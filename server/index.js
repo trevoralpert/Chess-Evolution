@@ -123,11 +123,17 @@ io.on('connection', (socket) => {
   }
   
   const spawnArea = GAME_CONFIG.SPAWN_AREAS[playerIndex];
+  
+  // Assign first available color
+  const availableColors = getAvailableColors();
+  const defaultColor = availableColors.length > 0 ? availableColors[0].id : 'red';
+  
   const player = {
     id: socket.id,
     name: `Player ${playerIndex + 1}`,
     index: playerIndex,
-    color: getPlayerColor(playerIndex),
+    color: defaultColor,
+    selectedColor: defaultColor,
     spawnArea: spawnArea,
     pieces: [],
     stats: {
@@ -137,6 +143,9 @@ io.on('connection', (socket) => {
       battlesLost: 0
     }
   };
+  
+  // Mark color as taken
+  takenColors.add(defaultColor);
   
   gameState.players[socket.id] = player;
   gameState.playerCount = Object.keys(gameState.players).length;
@@ -403,10 +412,16 @@ io.on('connection', (socket) => {
     }
     
     const spawnArea = GAME_CONFIG.SPAWN_AREAS[playerIndex];
+    
+    // Assign first available color for AI
+    const availableColors = getAvailableColors();
+    const defaultColor = availableColors.length > 0 ? availableColors[0].id : 'red';
+    
     const aiPlayer = {
       id: aiPlayerId,
       index: playerIndex,
-      color: getPlayerColor(playerIndex),
+      color: defaultColor,
+      selectedColor: defaultColor,
       spawnArea: spawnArea,
       pieces: [],
       isAI: true,
@@ -419,6 +434,9 @@ io.on('connection', (socket) => {
         battlesLost: 0
       }
     };
+    
+    // Mark color as taken
+    takenColors.add(defaultColor);
     
     // Add to game state
     gameState.players[aiPlayerId] = aiPlayer;
@@ -820,6 +838,33 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Color selection handlers
+  socket.on('get-available-colors', () => {
+    const availableColors = getAvailableColors();
+    socket.emit('available-colors', { colors: availableColors });
+  });
+
+  socket.on('select-color', (data) => {
+    const { colorId } = data;
+    console.log(`🎨 Server: Player ${socket.id} wants to select color ${colorId}`);
+    const result = setPlayerColor(socket.id, colorId);
+    
+    if (result.success) {
+      console.log(`🎨 Server: Color ${colorId} successfully assigned to player ${socket.id}`);
+      socket.emit('color-selected', { colorId: colorId });
+      
+      // Broadcast updated game state to all players
+      broadcastGameState();
+      
+      // Broadcast available colors to all players
+      const availableColors = getAvailableColors();
+      io.emit('available-colors', { colors: availableColors });
+    } else {
+      console.log(`🎨 Server: Color selection failed for player ${socket.id}:`, result.error);
+      socket.emit('color-selection-failed', { error: result.error });
+    }
+  });
+
   socket.on('get-chat-history', (data) => {
     const { roomId } = data;
     const roomInfo = chatManager.getChatRoomInfo(roomId || 'main');
@@ -883,6 +928,15 @@ io.on('connection', (socket) => {
       // Remove from chat
       chatManager.leaveChatRoom('main', socket.id);
       
+      // Free up the player's color
+      if (player.selectedColor) {
+        takenColors.delete(player.selectedColor);
+        
+        // Broadcast updated available colors to all players
+        const availableColors = getAvailableColors();
+        io.emit('available-colors', { colors: availableColors });
+      }
+      
       // Check if only one player remains
       if (gameState.playerCount === 1) {
         console.log('Only one player remaining, stopping turn timers');
@@ -936,7 +990,16 @@ io.on('connection', (socket) => {
           delete gameState.pieces[pieceId];
         }
       });
-    }
+      
+              // Free up the player's color
+        if (player.selectedColor) {
+          takenColors.delete(player.selectedColor);
+          
+          // Broadcast updated available colors to all players
+          const availableColors = getAvailableColors();
+          io.emit('available-colors', { colors: availableColors });
+        }
+      }
     
     delete gameState.players[socket.id];
     gameState.playerCount = Object.keys(gameState.players).length;
@@ -1114,7 +1177,7 @@ function startGameFromLobby(lobbyId) {
       index: index,
       name: lobbyPlayer.name,
       color: getPlayerColor(index),
-
+      selectedColor: getPlayerColor(index),
       pieces: [],
       spawnArea: spawnArea,
       isAI: false,
@@ -2757,9 +2820,57 @@ function broadcastPlayerUpdate(playerId, player) {
   io.emit('player-update', { playerId, player });
 }
 
+// Available colors for player selection
+const AVAILABLE_COLORS = [
+  { id: 'red', name: 'Red', hex: 0xFF0000 },
+  { id: 'blue', name: 'Blue', hex: 0x0080FF },
+  { id: 'light_blue', name: 'Light Blue', hex: 0x40C0FF },
+  { id: 'green', name: 'Green', hex: 0x00FF00 },
+  { id: 'yellow', name: 'Yellow', hex: 0xFFD700 },
+  { id: 'purple', name: 'Purple', hex: 0x8000FF },
+  { id: 'magenta', name: 'Magenta', hex: 0xFF00FF },
+  { id: 'cyan', name: 'Cyan', hex: 0x00FFFF },
+  { id: 'orange', name: 'Orange', hex: 0xFF8000 },
+  { id: 'pink', name: 'Pink', hex: 0xFF69B4 },
+  { id: 'lime', name: 'Lime', hex: 0x00FF80 },
+  { id: 'teal', name: 'Teal', hex: 0x008080 }
+];
+
+// Track taken colors
+const takenColors = new Set();
+
 function getPlayerColor(index) {
   const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'cyan', 'orange', 'pink'];
   return colors[index % colors.length];
+}
+
+function getAvailableColors() {
+  return AVAILABLE_COLORS.filter(color => !takenColors.has(color.id));
+}
+
+function isColorAvailable(colorId) {
+  return !takenColors.has(colorId);
+}
+
+function setPlayerColor(playerId, colorId) {
+  const player = gameState.players[playerId];
+  if (!player) return { success: false, error: 'Player not found' };
+  
+  if (!isColorAvailable(colorId)) {
+    return { success: false, error: 'Color not available' };
+  }
+  
+  // Remove old color if player had one
+  if (player.selectedColor) {
+    takenColors.delete(player.selectedColor);
+  }
+  
+  // Set new color
+  player.selectedColor = colorId;
+  player.color = colorId; // Update the color field for compatibility
+  takenColors.add(colorId);
+  
+  return { success: true, color: colorId };
 }
 
 // Tournament match handling

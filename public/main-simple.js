@@ -364,6 +364,30 @@ class PerformanceOptimizer {
     }
   }
   
+  // Clear piece cache and remove all pieces from scene
+  clearPieceCache() {
+    console.log('🧹 Clearing piece cache to force color updates');
+    Object.keys(pieceMeshes).forEach(pieceId => {
+      const mesh = pieceMeshes[pieceId];
+      if (mesh) {
+        scene.remove(mesh);
+        
+        // Dispose of geometries and materials
+        if (mesh.geometry) {
+          mesh.geometry.dispose();
+        }
+        if (mesh.material) {
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach(mat => mat.dispose());
+          } else {
+            mesh.material.dispose();
+          }
+        }
+      }
+      delete pieceMeshes[pieceId];
+    });
+  }
+
   // Memory cleanup
   cleanup() {
     // Clear caches
@@ -650,7 +674,33 @@ if (typeof THREE !== 'undefined' && THREE.OrbitControls) {
   controls.enablePan = false;
   controls.minDistance = 8;
   controls.maxDistance = 15;
-  console.log('OrbitControls initialized successfully');
+  
+  // Enable unrestricted 3D rotation - remove polar angle restrictions completely
+  controls.minPolarAngle = 0; // Default minimum
+  controls.maxPolarAngle = Math.PI; // Default maximum
+  
+  // Override the internal constraint logic to disable polar limits
+  const originalUpdate = controls.update;
+  controls.update = function() {
+    // Temporarily disable polar angle constraints
+    const originalMinPolar = this.minPolarAngle;
+    const originalMaxPolar = this.maxPolarAngle;
+    
+    // Set to unlimited range during update
+    this.minPolarAngle = -Infinity;
+    this.maxPolarAngle = Infinity;
+    
+    // Call original update
+    const result = originalUpdate.call(this);
+    
+    // Restore original values (though they won't be used)
+    this.minPolarAngle = originalMinPolar;
+    this.maxPolarAngle = originalMaxPolar;
+    
+    return result;
+  };
+  
+  console.log('OrbitControls initialized successfully with unrestricted 3D rotation');
 } else {
   console.log('Using manual camera controls instead of OrbitControls');
   // Manual camera control system
@@ -674,8 +724,8 @@ if (typeof THREE !== 'undefined' && THREE.OrbitControls) {
         this.cameraAngleX += deltaX * 0.01;
         this.cameraAngleY += deltaY * 0.01;
         
-        // Clamp Y rotation to prevent flipping
-        this.cameraAngleY = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, this.cameraAngleY));
+        // Enable unrestricted 3D rotation - remove polar angle restrictions
+        // this.cameraAngleY = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, this.cameraAngleY));
         
         this.updateCameraPosition();
         
@@ -1975,7 +2025,8 @@ async function createPieceMeshOptimized(piece) {
   
   console.log(`Creating piece ${piece.type} for player ${player.name} (index: ${playerIndex})`);
   console.log(`Player object:`, player);
-  console.log(`PLAYER_COLORS[${playerIndex}] = ${PLAYER_COLORS[playerIndex] ? '0x' + PLAYER_COLORS[playerIndex].toString(16).padStart(6, '0').toUpperCase() : 'undefined'}`);
+  const debugColor = getPlayerColor(piece.playerId, playerIndex);
+  console.log(`Player color: 0x${debugColor.toString(16).padStart(6, '0').toUpperCase()}`);
   
   let mesh;
   
@@ -1988,7 +2039,7 @@ async function createPieceMeshOptimized(piece) {
       // Clone the model scene
       mesh = gltf.scene.clone();
       
-      // Apply player color tinting to materials
+      // Apply player color tinting to materials and set userData for click detection
       const playerColor = getPieceColorForPlayer(piece, player, playerIndex);
       console.log(`Applying GLB color ${playerColor.toString(16)} to ${piece.type} mesh`);
       mesh.traverse((child) => {
@@ -2008,6 +2059,10 @@ async function createPieceMeshOptimized(piece) {
             child.material.metalness = 0.4;
             child.material.roughness = 0.6;
           }
+          
+          // Set userData on child meshes for click detection
+          child.userData.piece = piece;
+          child.userData.pieceId = piece.id;
         }
       });
       
@@ -2078,6 +2133,11 @@ async function createPieceMeshOptimized(piece) {
   label.position.set(0, 0.3, 0);
   
   mesh.add(label);
+  
+  // Set userData for click detection
+  mesh.userData.piece = piece;
+  mesh.userData.pieceId = piece.id;
+  
   scene.add(mesh);
   pieceMeshes[piece.id] = mesh;
 }
@@ -2326,7 +2386,7 @@ function updatePlayerColorIndicators() {
   const players = Object.values(gameState.players);
   
   players.forEach((player, index) => {
-    const playerColor = PLAYER_COLORS[player.index] || 0xffffff;
+    const playerColor = getPlayerColor(player.id, player.index) || 0xffffff;
     const colorHex = '#' + playerColor.toString(16).padStart(6, '0');
     
     const playerDiv = document.createElement('div');
@@ -3281,23 +3341,28 @@ function getColorFromString(colorString) {
   return colorMap[colorString] || 0xffffff;
 }
 
-// Player color palettes for clear identification - vibrant colors
-const PLAYER_COLORS = [
-  0xFF0000, // Red - Player 1
-  0x0080FF, // Bright Blue - Player 2
-  0x00FF00, // Green - Player 3
-  0xFFD700, // Gold - Player 4
-  0xFF00FF, // Magenta - Player 5
-  0x00FFFF, // Cyan - Player 6
-  0xFF8000, // Orange - Player 7
-  0x8000FF  // Purple - Player 8
-];
+// Color mapping from server color IDs to hex values
+const COLOR_MAP = {
+  'red': 0xFF0000,
+  'blue': 0x0080FF,
+  'light_blue': 0x40C0FF,
+  'green': 0x00FF00,
+  'yellow': 0xFFD700,
+  'purple': 0x8000FF,
+  'magenta': 0xFF00FF,
+  'cyan': 0x00FFFF,
+  'orange': 0xFF8000,
+  'pink': 0xFF69B4,
+  'lime': 0x00FF80,
+  'teal': 0x008080
+};
 
-// Get distinct player color
+// Get distinct player color using server-assigned color
 function getPlayerColor(playerId, playerIndex) {
-  // Use player index to get consistent color
-  if (playerIndex !== undefined && playerIndex >= 0 && playerIndex < PLAYER_COLORS.length) {
-    return PLAYER_COLORS[playerIndex];
+  const player = gameState.players[playerId];
+  
+  if (player && player.selectedColor && COLOR_MAP[player.selectedColor]) {
+    return COLOR_MAP[player.selectedColor];
   }
   
   // Fallback to color generation from string
@@ -3306,37 +3371,22 @@ function getPlayerColor(playerId, playerIndex) {
 
 // Enhanced piece color function that prioritizes player identification
 function getPieceColorForPlayer(piece, player, playerIndex) {
-  // Use the consistent PLAYER_COLORS array based on player index
-  const basePlayerColor = PLAYER_COLORS[playerIndex] || 0xffffff;
+  // Use the player's selected color from the server
+  const basePlayerColor = getPlayerColor(piece.playerId, playerIndex);
   
-  console.log(`getPieceColorForPlayer: piece=${piece.type}, playerIndex=${playerIndex}, baseColor=${basePlayerColor.toString(16)}`);
+  console.log(`getPieceColorForPlayer: piece=${piece.type}, playerId=${piece.playerId}, baseColor=${basePlayerColor.toString(16)}`);
   
-  // For special pieces, tint the player color slightly
-  const pieceModifiers = {
-    'KING': { brightness: 1.2, saturation: 1.1 },    // Brighter for king
-    'QUEEN': { brightness: 1.1, saturation: 1.1 },
-    'ROOK': { brightness: 0.9, saturation: 1.0 },
-    'BISHOP': { brightness: 0.95, saturation: 1.0 },
-    'KNIGHT': { brightness: 0.95, saturation: 1.0 },
-    'PAWN': { brightness: 0.8, saturation: 0.9 },    // Slightly muted for pawns
-    'SPLITTER': { brightness: 1.0, saturation: 1.1 },
-    'JUMPER': { brightness: 1.0, saturation: 1.1 },
-    'SUPER_JUMPER': { brightness: 1.1, saturation: 1.2 },
-    'HYPER_JUMPER': { brightness: 1.2, saturation: 1.2 },
-    'MISTRESS_JUMPER': { brightness: 1.3, saturation: 1.3 },
-    'HYBRID_QUEEN': { brightness: 1.4, saturation: 1.4 }
-  };
+  // Apply consistent brightness boost to all pieces for better visibility
+  // but keep the same base color for team consistency
+  const universalBrightness = 1.2; // Slight brightness boost for all pieces
   
-  const modifier = pieceModifiers[piece.type] || { brightness: 1.0, saturation: 1.0 };
-  
-  // Apply modifier to player color using HSL for better color preservation
+  // Apply brightness to player color using HSL for better color preservation
   const color = new THREE.Color(basePlayerColor);
   const hsl = {};
   color.getHSL(hsl);
   
-  // Apply brightness and saturation modifiers in HSL space
-  hsl.l = Math.min(1.0, hsl.l * modifier.brightness); // Clamp to max 1.0
-  hsl.s = Math.min(1.0, hsl.s * modifier.saturation); // Clamp to max 1.0
+  // Apply universal brightness modifier in HSL space
+  hsl.l = Math.min(1.0, hsl.l * universalBrightness); // Clamp to max 1.0
   
   color.setHSL(hsl.h, hsl.s, hsl.l);
   
@@ -4639,13 +4689,7 @@ function getChatMessageStyle(messageType) {
   return styles[messageType] || '';
 }
 
-function getPlayerColor(playerId) {
-  if (playerId === 'system') return '#ffff00';
-  if (playerId === socket.id) return '#00ff00';
-  
-  const player = gameState.players[playerId];
-  return player ? player.color : '#ffffff';
-}
+// Removed duplicate getPlayerColor function - using the one that supports color selection system
 
 function updateChatStatus(status) {
   const chatStatus = document.getElementById('chat-status');
@@ -4908,6 +4952,93 @@ animate();
 
 console.log('Globe Chess client fully initialized');
 console.log('Click on pieces to see valid moves'); 
+
+// Color selection system
+let availableColors = [];
+let selectedColor = null;
+
+// Initialize color selection
+function initializeColorSelection() {
+  socket.emit('get-available-colors');
+}
+
+// Socket handlers for color selection
+socket.on('available-colors', (data) => {
+  availableColors = data.colors;
+  updateColorSelector();
+});
+
+socket.on('color-selected', (data) => {
+  console.log('🎨 Color selected:', data.colorId);
+  selectedColor = data.colorId;
+  updateColorSelector();
+  updateSelectedColorDisplay();
+  
+  // Force piece color update by clearing cache and recreating pieces
+  performanceOptimizer.clearPieceCache();
+  if (gameState && gameState.pieces) {
+    console.log('🔄 Updating piece colors after color selection');
+    updateVisuals();
+  }
+});
+
+socket.on('color-selection-failed', (data) => {
+  console.warn('Color selection failed:', data.error);
+  alert('Color selection failed: ' + data.error);
+});
+
+// Update color selector UI
+function updateColorSelector() {
+  const colorOptionsEl = document.getElementById('color-options');
+  if (!colorOptionsEl) return;
+  
+  colorOptionsEl.innerHTML = '';
+  
+  availableColors.forEach(color => {
+    const option = document.createElement('div');
+    option.className = 'color-option';
+    option.style.backgroundColor = `#${color.hex.toString(16).padStart(6, '0')}`;
+    option.title = color.name;
+    option.dataset.colorId = color.id;
+    
+    if (selectedColor === color.id) {
+      option.classList.add('selected');
+      option.textContent = '✓';
+    }
+    
+    option.addEventListener('click', () => {
+      console.log('🎨 User clicked on color:', color.id, color.name);
+      if (selectedColor !== color.id) {
+        console.log('🎨 Sending color selection to server:', color.id);
+        socket.emit('select-color', { colorId: color.id });
+      } else {
+        console.log('🎨 Color already selected, ignoring click');
+      }
+    });
+    
+    colorOptionsEl.appendChild(option);
+  });
+}
+
+// Update selected color display
+function updateSelectedColorDisplay() {
+  const selectedColorEl = document.getElementById('selected-color');
+  if (!selectedColorEl) return;
+  
+  if (selectedColor) {
+    const colorInfo = availableColors.find(c => c.id === selectedColor);
+    if (colorInfo) {
+      selectedColorEl.textContent = `Selected: ${colorInfo.name}`;
+      selectedColorEl.style.color = `#${colorInfo.hex.toString(16).padStart(6, '0')}`;
+    }
+  } else {
+    selectedColorEl.textContent = 'None selected';
+    selectedColorEl.style.color = '#aaa';
+  }
+}
+
+// Initialize color selection when page loads
+initializeColorSelection(); 
 
 // Performance Optimization System (duplicate removed)
 

@@ -136,6 +136,46 @@
       outline-offset: 2px;
     }
     
+    /* Color selector styles */
+    .color-option {
+      width: 20px;
+      height: 20px;
+      border: 2px solid #444;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      color: #fff;
+      text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
+    }
+    
+    .color-option:hover {
+      border-color: #fff;
+      transform: scale(1.1);
+    }
+    
+    .color-option.selected {
+      border-color: #fff;
+      box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
+    }
+    
+    .color-option.unavailable {
+      opacity: 0.4;
+      cursor: not-allowed;
+      position: relative;
+    }
+    
+    .color-option.unavailable::after {
+      content: "✖";
+      position: absolute;
+      font-size: 12px;
+      color: #fff;
+      text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
+    }
+    
     /* Mobile responsiveness */
     @media (max-width: 768px) {
       #ui {
@@ -213,6 +253,13 @@
     <h3 style="font-size: 14px; margin: 0 0 5px 0;">Globe Chess</h3>
     <div id="player-count">Players: 0</div>
     <div id="game-info">Waiting for players...</div>
+    <div id="color-selector" style="margin-top: 10px; padding: 5px; background: rgba(0, 0, 0, 0.3); border-radius: 3px;">
+      <div style="font-size: 10px; color: #ccc; margin-bottom: 5px;">Your Color:</div>
+      <div id="color-options" style="display: flex; flex-wrap: wrap; gap: 3px;">
+        <!-- Color options will be populated by JavaScript -->
+      </div>
+      <div id="selected-color" style="margin-top: 5px; font-size: 9px; color: #aaa;">None selected</div>
+    </div>
     <div style="margin-top: 5px;">
       <button id="lobby-toggle" style="padding: 2px 6px; background: #00aaff; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px;">🏠 Lobby System</button>
       <button id="evolution-toggle" style="padding: 2px 6px; background: #6600cc; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px; margin-left: 3px;">🧬 Evolution</button>
