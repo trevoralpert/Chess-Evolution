@@ -732,55 +732,144 @@ function createGridOverlay() {
     
     console.log(`Grid configuration: ${gridRows} rows × ${gridCols} cols`);
     
-    // Create beach ball pattern with continuous curved bands
-    for (let row = 0; row < gridRows; row++) {
-      // Each row is a band around the sphere - alternate colors by row
-      const isBlueRing = row % 2 === 0;
+    // Create circular caps at the poles first
+    // North pole cap (where Player 1 king is at row 0)
+    const northCapGeometry = new THREE.CircleGeometry(globeRadius * 0.08, 32); // Smaller radius
+    const northCapMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0x4169E1, // Blue
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide
+    });
+    const northCap = new THREE.Mesh(northCapGeometry, northCapMaterial);
+    northCap.position.set(0, globeRadius + 0.05, 0); // Much lower so pieces sit well above
+    northCap.rotation.x = -Math.PI / 2;
+    northCap.userData = { isPole: true, poleType: 'north' };
+    scene.add(northCap);
+    gridSquares.push(northCap);
+    
+    // South pole cap (where Player 2 king is at row 19)
+    const southCapGeometry = new THREE.CircleGeometry(globeRadius * 0.08, 32); // Smaller radius
+    const southCapMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0xDC143C, // Red
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide
+    });
+    const southCap = new THREE.Mesh(southCapGeometry, southCapMaterial);
+    southCap.position.set(0, -globeRadius - 0.05, 0); // Much lower so pieces sit well above
+    southCap.rotation.x = Math.PI / 2;
+    southCap.userData = { isPole: true, poleType: 'south' };
+    scene.add(southCap);
+    gridSquares.push(southCap);
+    
+    // Create concentric rings with alternating colored sections
+    for (let row = 1; row < gridRows - 1; row++) { // Skip pole rows (0 and 19)
+      // Calculate the Y position for this ring - MATCH PIECE POSITIONING EXACTLY
+      const ringPhiDeg = (row / (gridRows - 1)) * 180; // Same formula as pieces
+      const ringPhi = THREE.MathUtils.degToRad(ringPhiDeg); // Convert to radians
+      const ringY = globeRadius * Math.cos(ringPhi);
+      const ringRadius = globeRadius * Math.sin(ringPhi);
       
+      // Calculate ring thickness (moved to outer scope)
+      const ringThickness = Math.PI / gridRows + 0.005; // Slightly thinner rings for better fit
+      const phiStart = ringPhi - ringThickness / 2;
+      const phiEnd = ringPhi + ringThickness / 2;
+      
+      // Create sections within this ring
       for (let col = 0; col < gridCols; col++) {
         try {
-          // Calculate phi range for this latitude band
-          const phiStart = (row / gridRows) * Math.PI;
-          const phiEnd = ((row + 1) / gridRows) * Math.PI;
+          // Calculate angles for this section with rotations
+          const baseRotation = (22.5 * Math.PI) / 180; // 22.5 degrees for all rings
+          const additionalRotation = (row % 2 === 1) ? (45 * Math.PI) / 180 : 0; // Additional 45 degrees for odd rings
+          const totalRotation = baseRotation + additionalRotation;
           
-          // Calculate theta range for this longitude segment
-          const thetaStart = (col / gridCols) * Math.PI * 2;
-          const thetaEnd = ((col + 1) / gridCols) * Math.PI * 2;
+          const angleStart = (col / gridCols) * Math.PI * 2 + totalRotation;
+          const angleEnd = ((col + 1) / gridCols) * Math.PI * 2 + totalRotation;
           
-          // Create curved segment using SphereGeometry
-          // This creates a section of a sphere between specific phi/theta ranges
-          const segmentGeometry = new THREE.SphereGeometry(
-            globeRadius + 0.05, // radius (slightly larger than base sphere)
-            8, // widthSegments (longitude divisions for smoothness)
-            4, // heightSegments (latitude divisions for smoothness)
-            thetaStart, // phiStart (longitude start)
-            thetaEnd - thetaStart, // phiLength (longitude span)
+          // Each section within the ring alternates colors
+          const isBlueSection = col % 2 === 0;
+          
+          // Create curved ring section using SphereGeometry to follow sphere surface
+          
+          const curvedSegmentGeometry = new THREE.SphereGeometry(
+            globeRadius + 0.05, // radius (much lower so pieces sit well above)
+            16, // widthSegments (longitude divisions for smoothness)
+            8, // heightSegments (latitude divisions for smoothness)
+            angleStart, // phiStart (longitude start)
+            angleEnd - angleStart, // phiLength (longitude span)
             phiStart, // thetaStart (latitude start) 
             phiEnd - phiStart // thetaLength (latitude span)
           );
           
-          const segmentMaterial = new THREE.MeshBasicMaterial({ 
-            color: isBlueRing ? 0x2266ff : 0xff2266, // Alternating by row (latitude)
+          const curvedSegmentMaterial = new THREE.MeshBasicMaterial({ 
+            color: isBlueSection ? 0x4169E1 : 0xDC143C, // Royal blue and crimson alternating
             transparent: true,
             opacity: 0.9,
             side: THREE.DoubleSide
           });
           
-          const segment = new THREE.Mesh(segmentGeometry, segmentMaterial);
-          segment.position.set(0, 0, 0); // Centered at origin
-          segment.userData = { gridRow: row, gridCol: col, isBlueSquare: isBlueRing };
-          scene.add(segment);
-          gridSquares.push(segment);
+          const curvedSegment = new THREE.Mesh(curvedSegmentGeometry, curvedSegmentMaterial);
+          curvedSegment.position.set(0, 0, 0); // Centered at origin
+          curvedSegment.userData = { gridRow: row, gridCol: col, isBlueSection: isBlueSection };
+          scene.add(curvedSegment);
+          gridSquares.push(curvedSegment);
           
-                     // Debug first few segments
-           if (row < 2 && col < 2) {
-             console.log(`Segment (${row}, ${col}): phi=${phiStart}-${phiEnd}, theta=${thetaStart}-${thetaEnd}`);
-           }
+          // Add subtle border lines between sections for better grid definition
+          const borderGeometry = new THREE.SphereGeometry(
+            globeRadius + 0.06, // slightly larger radius for borders (above grid, well below pieces)
+            2, // thin width
+            8, // height segments
+            angleStart, // start angle
+            0.005, // very thin angular width for border
+            phiStart, // latitude start
+            phiEnd - phiStart // latitude span
+          );
+          
+          const borderMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0x333333, // dark gray borders
+            transparent: true,
+            opacity: 0.3
+          });
+          
+          const border = new THREE.Mesh(borderGeometry, borderMaterial);
+          border.position.set(0, 0, 0);
+          scene.add(border);
+          gridSquares.push(border);
+          
+                    // Debug first few segments
+          if (row < 3 && col < 2) {
+            console.log(`Ring ${row}, Section ${col}: Y=${ringY}, radius=${ringRadius}, angle=${angleStart}-${angleEnd}, isBlue=${isBlueSection}`);
+          }
         } catch (error) {
-           console.error(`❌ Error creating curved band segment at (${row}, ${col}):`, error);
+          console.error(`❌ Error creating ring segment at (${row}, ${col}):`, error);
         }
       }
-  }
+      
+      // Add horizontal ring border after each ring (except last)
+      if (row < gridRows - 1) {
+        const ringBorderGeometry = new THREE.SphereGeometry(
+          globeRadius + 0.06, // slightly larger radius (above grid, well below pieces)
+          32, // width segments
+          2, // thin height
+          0, // full rotation
+          Math.PI * 2, // full circle
+          ringPhi + ringThickness / 2 - 0.002, // at ring edge
+          0.004 // very thin latitude span
+        );
+        
+        const ringBorderMaterial = new THREE.MeshBasicMaterial({ 
+          color: 0x333333, // dark gray
+          transparent: true,
+          opacity: 0.3
+        });
+        
+        const ringBorder = new THREE.Mesh(ringBorderGeometry, ringBorderMaterial);
+        ringBorder.position.set(0, 0, 0);
+        scene.add(ringBorder);
+        gridSquares.push(ringBorder);
+      }
+    }
   
   console.log(`✅ Created ${gridSquares.length} grid squares and ${poleMarkers.length} pole markers`);
   
@@ -794,15 +883,30 @@ function createGridOverlay() {
 console.log('🚨 ABOUT TO CALL createGridOverlay() - THIS SHOULD SHOW UP! 🚨');
 createGridOverlay();
 
-// Lighting
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+// Enhanced lighting for better piece visibility
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); // Increased ambient light
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+// Add hemisphere light for natural top/bottom lighting
+const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x404040, 0.6);
+scene.add(hemisphereLight);
+
+// Main directional light (increased intensity)
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
 directionalLight.position.set(5, 5, 5);
 scene.add(directionalLight);
 
-console.log('Lighting added to scene');
+// Secondary directional light from opposite side for better coverage
+const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.6);
+directionalLight2.position.set(-3, 3, -3);
+scene.add(directionalLight2);
+
+// Point light near camera for additional fill lighting
+const pointLight = new THREE.PointLight(0xffffff, 0.5, 100);
+pointLight.position.set(0, 0, 10);
+scene.add(pointLight);
+
+console.log('Enhanced lighting added to scene');
 
 // UI elements - defined early so they're available for model loading
 const playerCountEl = document.getElementById('player-count');
@@ -2059,39 +2163,62 @@ function createGeometricPiece(pieceType) {
   switch (pieceType) {
     case 'KING':
       geometry = new THREE.ConeGeometry(0.12, 0.3, 8);
+      // Translate king cone up so its base aligns with pawn sphere base
+      geometry.translate(0, 0.07, 0); // 0.15 (cone half-height) - 0.08 (sphere radius) = 0.07
       break;
     case 'QUEEN':
       geometry = new THREE.ConeGeometry(0.12, 0.25, 8);
+      // Translate queen cone up so its base aligns with pawn sphere base
+      geometry.translate(0, 0.045, 0); // 0.125 (cone half-height) - 0.08 (sphere radius) = 0.045
       break;
     case 'ROOK':
       geometry = new THREE.BoxGeometry(0.15, 0.2, 0.15);
+      // Translate rook box up so its base aligns with pawn sphere base
+      geometry.translate(0, 0.02, 0); // 0.10 (box half-height) - 0.08 (sphere radius) = 0.02
       break;
     case 'KNIGHT':
       geometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+      // Translate knight box up so its base aligns with pawn sphere base
+      geometry.translate(0, -0.005, 0); // 0.075 (box half-height) - 0.08 (sphere radius) = -0.005
       break;
     case 'BISHOP':
       geometry = new THREE.ConeGeometry(0.1, 0.25, 6);
+      // Translate bishop cone up so its base aligns with pawn sphere base
+      geometry.translate(0, 0.045, 0); // 0.125 (cone half-height) - 0.08 (sphere radius) = 0.045
       break;
     case 'PAWN':
       geometry = new THREE.SphereGeometry(0.08, 12, 12);
+      // Pawn sphere is the reference - no translation needed
       break;
     case 'SPLITTER':
       geometry = new THREE.OctahedronGeometry(0.1);
+      // Translate splitter octahedron up so its base aligns with pawn sphere base
+      geometry.translate(0, 0.02, 0); // 0.10 (octahedron half-height) - 0.08 (sphere radius) = 0.02
       break;
     case 'JUMPER':
       geometry = new THREE.TetrahedronGeometry(0.12);
+      // Translate jumper tetrahedron up so its base aligns with pawn sphere base
+      geometry.translate(0, 0.02, 0); // Approximate adjustment for tetrahedron
       break;
     case 'SUPER_JUMPER':
       geometry = new THREE.IcosahedronGeometry(0.1);
+      // Translate super jumper icosahedron up so its base aligns with pawn sphere base
+      geometry.translate(0, 0.02, 0); // 0.10 (icosahedron half-height) - 0.08 (sphere radius) = 0.02
       break;
     case 'HYPER_JUMPER':
       geometry = new THREE.DodecahedronGeometry(0.1);
+      // Translate hyper jumper dodecahedron up so its base aligns with pawn sphere base
+      geometry.translate(0, 0.02, 0); // 0.10 (dodecahedron half-height) - 0.08 (sphere radius) = 0.02
       break;
     case 'MISTRESS_JUMPER':
       geometry = new THREE.CylinderGeometry(0.08, 0.12, 0.2, 8);
+      // Translate mistress jumper cylinder up so its base aligns with pawn sphere base
+      geometry.translate(0, 0.02, 0); // 0.10 (cylinder half-height) - 0.08 (sphere radius) = 0.02
       break;
     case 'HYBRID_QUEEN':
       geometry = new THREE.ConeGeometry(0.12, 0.25, 8);
+      // Translate hybrid queen cone up so its base aligns with pawn sphere base
+      geometry.translate(0, 0.045, 0); // 0.125 (cone half-height) - 0.08 (sphere radius) = 0.045
       break;
     default:
       geometry = new THREE.BoxGeometry(0.15, 0.15, 0.15);
@@ -2122,6 +2249,7 @@ function getWorldPosition(row, col) {
     gridCols: gameState.gridConfig.cols
   });
   
+  // Keep original piece positioning - pieces are at grid intersections/vertices
   const { phi, theta } = gridToSpherical(
     gameState.gridConfig.rows,
     gameState.gridConfig.cols,
@@ -2129,7 +2257,7 @@ function getWorldPosition(row, col) {
     col
   );
   
-  const position = sphericalToCartesian(globeRadius + 0.25, phi, theta); // Positioned clearly above squares
+  const position = sphericalToCartesian(globeRadius + 0.35, phi, theta); // Positioned just above grid surface
   console.log('🌍 Calculated position:', { phi, theta, position });
   
   return position;
@@ -5294,6 +5422,28 @@ window.animate = function() {
   originalAnimate();
   visualEffects.updateParticles(16.67); // Assume 60 FPS
 };
+
+// ... existing code ...
+
+// Force all pieces to reposition to correct height
+function forceRepositionAllPieces() {
+  console.log('🔄 Forcing all pieces to reposition to correct height');
+  Object.values(gameState.pieces || {}).forEach(piece => {
+    if (pieceMeshes[piece.id]) {
+      const position = getWorldPosition(piece.row, piece.col);
+      const mesh = pieceMeshes[piece.id];
+      mesh.position.set(position.x, position.y, position.z);
+      console.log(`🔄 Repositioned ${piece.type} (${piece.id}) to height ${position.y}`);
+    }
+  });
+}
+
+// Call this once after the page loads to fix any height issues
+setTimeout(() => {
+  if (gameState && gameState.pieces) {
+    forceRepositionAllPieces();
+  }
+}, 2000); // Wait 2 seconds after page load
 
 // ... existing code ...
 
