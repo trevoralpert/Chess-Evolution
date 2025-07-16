@@ -21,34 +21,36 @@
     }
     #ui {
       position: absolute;
-      top: 10px;
-      left: 10px;
+      top: 5px;
+      left: 5px;
       color: white;
       z-index: 100;
       background: rgba(0, 0, 0, 0.5);
-      padding: 10px;
-      border-radius: 5px;
+      padding: 5px;
+      border-radius: 3px;
+      font-size: 11px;
     }
     #connection-status {
       position: absolute;
-      top: 10px;
-      right: 10px;
+      top: 5px;
+      right: 5px;
       color: white;
       z-index: 100;
       background: rgba(0, 0, 0, 0.5);
-      padding: 10px;
-      border-radius: 5px;
+      padding: 4px;
+      border-radius: 3px;
+      font-size: 9px;
     }
     #performance-info {
       position: absolute;
-      top: 10px;
-      right: 180px;
+      top: 5px;
+      right: 80px;
       color: white;
       z-index: 100;
       background: rgba(0, 0, 0, 0.5);
-      padding: 10px;
-      border-radius: 5px;
-      font-size: 12px;
+      padding: 4px;
+      border-radius: 3px;
+      font-size: 8px;
     }
     
     /* Loading animations */
@@ -208,18 +210,18 @@
 </head>
 <body>
   <div id="ui">
-    <h3>Globe Chess</h3>
+    <h3 style="font-size: 14px; margin: 0 0 5px 0;">Globe Chess</h3>
     <div id="player-count">Players: 0</div>
     <div id="game-info">Waiting for players...</div>
-    <div style="margin-top: 10px;">
-      <button id="lobby-toggle" style="padding: 5px 10px; background: #00aaff; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">🏠 Lobby System</button>
-      <button id="evolution-toggle" style="padding: 5px 10px; background: #6600cc; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; margin-left: 5px;">🧬 Evolution</button>
-      <button id="stats-toggle" style="padding: 5px 10px; background: #cc00cc; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; margin-left: 5px;">📊 Statistics</button>
-      <button id="tournament-toggle" style="padding: 5px 10px; background: #4444ff; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; margin-left: 5px;">🏆 Tournament Mode</button>
-      <button id="spectator-toggle" style="padding: 5px 10px; background: #ff6600; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; margin-left: 5px;">👁️ Spectator Mode</button>
-      <button id="replay-toggle" style="padding: 5px 10px; background: #9900cc; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; margin-left: 5px;">📺 Replays</button>
-      <button id="ai-toggle" style="padding: 5px 10px; background: #00cc66; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; margin-left: 5px;">🤖 AI Opponents</button>
-      <button id="quit-game" style="padding: 5px 10px; background: #ff4444; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; margin-left: 5px;">🚪 Quit Game</button>
+    <div style="margin-top: 5px;">
+      <button id="lobby-toggle" style="padding: 2px 6px; background: #00aaff; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px;">🏠 Lobby System</button>
+      <button id="evolution-toggle" style="padding: 2px 6px; background: #6600cc; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px; margin-left: 3px;">🧬 Evolution</button>
+      <button id="stats-toggle" style="padding: 2px 6px; background: #cc00cc; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px; margin-left: 3px;">📊 Statistics</button>
+      <button id="tournament-toggle" style="padding: 2px 6px; background: #4444ff; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px; margin-left: 3px;">🏆 Tournament Mode</button>
+      <button id="spectator-toggle" style="padding: 2px 6px; background: #ff6600; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px; margin-left: 3px;">👁️ Spectator Mode</button>
+      <button id="replay-toggle" style="padding: 2px 6px; background: #9900cc; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px; margin-left: 3px;">📺 Replays</button>
+      <button id="ai-toggle" style="padding: 2px 6px; background: #00cc66; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px; margin-left: 3px;">🤖 AI Opponents</button>
+      <button id="quit-game" style="padding: 2px 6px; background: #ff4444; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px; margin-left: 3px;">🚪 Quit Game</button>
     </div>
     <div id="dual-movement-ui" style="display: none; margin-top: 10px; padding: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px;">
       <div style="font-size: 14px; margin-bottom: 5px; color: #ffd700;">Hybrid Queen Movement:</div>
@@ -540,42 +542,42 @@
   </div>
 
   <!-- Timing UI -->
-  <div id="timing-ui" style="position: absolute; top: 10px; right: 200px; color: white; z-index: 100; background: rgba(0, 0, 0, 0.8); padding: 15px; border-radius: 8px; border: 2px solid #ff6600; min-width: 200px;">
-    <div style="font-size: 14px; margin-bottom: 10px; color: #ff6600; text-align: center;">🕒 Move Timer</div>
-    <div id="active-player-info" style="margin-bottom: 10px; text-align: center; color: #ccc; font-size: 12px;">
+  <div id="timing-ui" style="position: absolute; top: 5px; right: 120px; color: white; z-index: 100; background: rgba(0, 0, 0, 0.8); padding: 6px; border-radius: 3px; border: 1px solid #ff6600; min-width: 120px;">
+    <div style="font-size: 10px; margin-bottom: 4px; color: #ff6600; text-align: center;">🕒 Move Timer</div>
+    <div id="active-player-info" style="margin-bottom: 4px; text-align: center; color: #ccc; font-size: 9px;">
       Turn: <span id="active-player-name" style="color: #fff; font-weight: bold;">-</span>
     </div>
-    <div id="timer-display" style="margin-bottom: 10px;">
-      <div id="timer-bar-container" style="width: 100%; height: 20px; background: #333; border-radius: 10px; overflow: hidden; margin-bottom: 5px;">
-        <div id="timer-bar" style="height: 100%; background: linear-gradient(90deg, #00ff00, #ffff00, #ff6600, #ff0000); width: 100%; transition: width 0.1s linear; border-radius: 10px;"></div>
+    <div id="timer-display" style="margin-bottom: 4px;">
+      <div id="timer-bar-container" style="width: 100%; height: 12px; background: #333; border-radius: 6px; overflow: hidden; margin-bottom: 3px;">
+        <div id="timer-bar" style="height: 100%; background: linear-gradient(90deg, #00ff00, #ffff00, #ff6600, #ff0000); width: 100%; transition: width 0.1s linear; border-radius: 6px;"></div>
       </div>
-      <div id="timer-text" style="text-align: center; font-size: 18px; font-weight: bold; color: #fff;">
+      <div id="timer-text" style="text-align: center; font-size: 12px; font-weight: bold; color: #fff;">
         <span id="time-remaining">7.0</span>s
       </div>
     </div>
-    <div id="timer-status" style="text-align: center; font-size: 11px; color: #ccc;">
+    <div id="timer-status" style="text-align: center; font-size: 8px; color: #ccc;">
       Waiting for game to start...
     </div>
-    <div id="turn-queue" style="margin-top: 10px; font-size: 10px; color: #888;">
+    <div id="turn-queue" style="margin-top: 4px; font-size: 8px; color: #888;">
       <div style="color: #ccc;">Turn Queue:</div>
-      <div id="turn-queue-list" style="margin-top: 3px;">-</div>
+      <div id="turn-queue-list" style="margin-top: 2px;">-</div>
     </div>
   </div>
 
   <!-- Chat UI -->
-  <div id="chat-ui" style="position: absolute; bottom: 10px; left: 10px; color: white; z-index: 100; background: rgba(0, 0, 0, 0.8); padding: 15px; border-radius: 8px; border: 2px solid #00cc88; width: 350px; height: 300px; display: flex; flex-direction: column;">
-    <div style="font-size: 14px; margin-bottom: 10px; color: #00cc88; text-align: center; display: flex; justify-content: space-between; align-items: center;">
+  <div id="chat-ui" style="position: absolute; bottom: 5px; left: 5px; color: white; z-index: 100; background: rgba(0, 0, 0, 0.8); padding: 6px; border-radius: 3px; border: 1px solid #00cc88; width: 200px; height: 150px; display: flex; flex-direction: column;">
+    <div style="font-size: 9px; margin-bottom: 4px; color: #00cc88; text-align: center; display: flex; justify-content: space-between; align-items: center;">
       <span>💬 Game Chat</span>
-      <button id="toggle-chat" style="background: #00cc88; color: #000; border: none; padding: 2px 6px; border-radius: 3px; cursor: pointer; font-size: 10px;">Hide</button>
+      <button id="toggle-chat" style="background: #00cc88; color: #000; border: none; padding: 1px 3px; border-radius: 2px; cursor: pointer; font-size: 8px;">Hide</button>
     </div>
-    <div id="chat-messages" style="flex: 1; overflow-y: auto; background: rgba(0, 0, 0, 0.5); padding: 8px; border-radius: 5px; margin-bottom: 10px; font-size: 12px; border: 1px solid #333;">
+    <div id="chat-messages" style="flex: 1; overflow-y: auto; background: rgba(0, 0, 0, 0.5); padding: 4px; border-radius: 3px; margin-bottom: 4px; font-size: 8px; border: 1px solid #333;">
       <div style="color: #888; text-align: center; font-style: italic;">Chat messages will appear here...</div>
     </div>
-    <div id="chat-input-container" style="display: flex; gap: 5px;">
-      <input id="chat-input" type="text" placeholder="Type a message..." style="flex: 1; padding: 5px; background: #333; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 12px;" maxlength="200">
-      <button id="send-chat" style="background: #00cc88; color: #000; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;">Send</button>
+    <div id="chat-input-container" style="display: flex; gap: 3px;">
+      <input id="chat-input" type="text" placeholder="Type a message..." style="flex: 1; padding: 3px; background: #333; color: #fff; border: 1px solid #555; border-radius: 2px; font-size: 8px;" maxlength="200">
+      <button id="send-chat" style="background: #00cc88; color: #000; border: none; padding: 3px 6px; border-radius: 2px; cursor: pointer; font-size: 8px;">Send</button>
     </div>
-    <div id="chat-status" style="font-size: 10px; color: #888; margin-top: 5px; text-align: center;">
+    <div id="chat-status" style="font-size: 7px; color: #888; margin-top: 2px; text-align: center;">
       Connected to Game Chat
     </div>
   </div>
