@@ -584,6 +584,20 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="/socket.io/socket.io.js"></script>
+  
+  <!-- Initialize GLTFLoader when scripts are loaded -->
+  <script>
+    window.addEventListener('load', function() {
+      console.log('Window loaded - checking Three.js components...');
+      console.log('THREE available:', typeof THREE !== 'undefined');
+      console.log('OrbitControls available:', typeof THREE.OrbitControls !== 'undefined');
+      console.log('GLTFLoader available:', typeof THREE.GLTFLoader !== 'undefined');
+      
+      if (typeof THREE.GLTFLoader === 'undefined') {
+        console.error('GLTFLoader not loaded! Models will use geometric fallbacks.');
+      }
+    });
+  </script>
   <script src="./main-simple.js?v=15&debug=true"></script>
 </body>
 </html> 

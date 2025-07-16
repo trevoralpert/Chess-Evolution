@@ -23,6 +23,9 @@ const PORT = process.env.PORT || 3000;
 // Serve static files from /public
 app.use(express.static(path.join(__dirname, '../public')));
 
+// Serve chess piece models from /chess piece models
+app.use('/chess piece models', express.static(path.join(__dirname, '../chess piece models')));
+
 // Game state
 const gameState = {
   players: {},

@@ -1,4 +1,4 @@
-console.log('🚀 Starting main-simple.js v14 - CACHE BUST TEST 🚀');
+console.log('🚀 Starting main-simple.js v15 - ADDING GLTF LOADER 🚀');
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -6,6 +6,38 @@ if (typeof THREE === 'undefined') {
 } else {
   console.log('Three.js loaded successfully:', THREE);
 }
+
+// Load GLTFLoader and add it to THREE object
+async function loadGLTFLoader() {
+  try {
+    // Check if GLTFLoader is already available from the script tag
+    if (typeof THREE.GLTFLoader !== 'undefined') {
+      console.log('✅ GLTFLoader already available from script tag');
+      return true;
+    }
+    
+    // If not, try to import it (using same version as HTML file)
+    const GLTFLoaderModule = await import('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/loaders/GLTFLoader.js');
+    THREE.GLTFLoader = GLTFLoaderModule.GLTFLoader;
+    console.log('✅ GLTFLoader imported and added to THREE object');
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to load GLTFLoader:', error);
+    return false;
+  }
+}
+
+// Initialize GLTFLoader and then start the game
+(async function initializeGame() {
+  console.log('🔧 Loading GLTFLoader...');
+  await loadGLTFLoader();
+  console.log('🚀 GLTFLoader ready, starting game initialization...');
+  
+  // Continue with the rest of the initialization
+  startGameInitialization();
+})();
+
+function startGameInitialization() {
 
 // Grid utility functions (copied from gridToSphere.js)
 function gridToSpherical(rows, cols, row, col) {
@@ -659,7 +691,22 @@ const statusEl = document.getElementById('status');
 
 // Model loading system
 const modelCache = {};
-const modelLoader = new THREE.GLTFLoader();
+let modelLoader = null;
+
+// Initialize GLTFLoader when available
+function initializeGLTFLoader() {
+  if (typeof THREE.GLTFLoader !== 'undefined') {
+    modelLoader = new THREE.GLTFLoader();
+    console.log('✅ GLTFLoader initialized successfully');
+    return true;
+  } else {
+    console.warn('⚠️ GLTFLoader not available, using geometric fallbacks');
+    return false;
+  }
+}
+
+// Try to initialize GLTFLoader
+const hasGLTFLoader = initializeGLTFLoader();
 
 // Model file mappings - using finalized GLB files from Final pieces folder
 const MODEL_PATHS = {
@@ -682,6 +729,12 @@ async function loadModel(pieceType) {
   // Check cache first
   if (modelCache[pieceType]) {
     return modelCache[pieceType];
+  }
+  
+  // If no GLTFLoader, return null to use geometric fallback
+  if (!hasGLTFLoader || !modelLoader) {
+    console.warn(`GLTFLoader not available for ${pieceType}, using geometric fallback`);
+    return null;
   }
   
   const modelPath = MODEL_PATHS[pieceType];
@@ -749,13 +802,37 @@ async function preloadModels() {
   console.log('Model preloading complete!');
 }
 
-// Start preloading models
-preloadModels().then(() => {
-  console.log('All models ready for use!');
-  gameInfoEl.textContent = 'Models loaded! Waiting for players...';
-}).catch(error => {
-  console.error('Error preloading models:', error);
-  gameInfoEl.textContent = 'Error loading models. Using fallback shapes.';
+// Test if models are accessible
+async function testModelAccess() {
+  try {
+    const response = await fetch('./chess piece models/Final pieces/KING.glb');
+    if (response.ok) {
+      console.log('✅ Model files are accessible');
+      return true;
+    } else {
+      console.warn('⚠️ Model files not accessible, status:', response.status);
+      return false;
+    }
+  } catch (error) {
+    console.warn('⚠️ Model files not accessible:', error);
+    return false;
+  }
+}
+
+// Start preloading models after checking accessibility
+testModelAccess().then((accessible) => {
+  if (accessible && hasGLTFLoader) {
+    preloadModels().then(() => {
+      console.log('All models ready for use!');
+      gameInfoEl.textContent = 'Models loaded! Waiting for players...';
+    }).catch(error => {
+      console.error('Error preloading models:', error);
+      gameInfoEl.textContent = 'Error loading models. Using fallback shapes.';
+    });
+  } else {
+    console.log('Using geometric fallbacks for all pieces');
+    gameInfoEl.textContent = 'Using geometric shapes. Waiting for players...';
+  }
 });
 
 // Old grid overlay function removed - using new version above
@@ -1668,6 +1745,10 @@ async function createPieceMeshOptimized(piece) {
   const player = gameState.players[piece.playerId];
   const position = getWorldPosition(piece.row, piece.col);
   
+  // Get player index for consistent coloring
+  const playerIndex = player.index !== undefined ? player.index : 
+                     Object.keys(gameState.players).indexOf(piece.playerId);
+  
   let mesh;
   
   // Try to load GLB model with caching
@@ -1679,22 +1760,24 @@ async function createPieceMeshOptimized(piece) {
       // Clone the model scene
       mesh = gltf.scene.clone();
       
-      // Apply player color tinting to materials with caching
-      const playerColor = getColorFromString(player.color);
+      // Apply player color tinting to materials
+      const playerColor = getPieceColorForPlayer(piece, player, playerIndex);
       mesh.traverse((child) => {
         if (child.isMesh && child.material) {
           // Create material and cache it
           if (Array.isArray(child.material)) {
             child.material = child.material.map(mat => {
               const newMat = mat.clone();
-              newMat.color.multiplyScalar(0.7);
-              newMat.color.lerp(new THREE.Color(playerColor), 0.3);
+              newMat.color.setHex(playerColor);
+              newMat.metalness = 0.4;
+              newMat.roughness = 0.6;
               return newMat;
             });
           } else {
             child.material = child.material.clone();
-            child.material.color.multiplyScalar(0.7);
-            child.material.color.lerp(new THREE.Color(playerColor), 0.3);
+            child.material.color.setHex(playerColor);
+            child.material.metalness = 0.4;
+            child.material.roughness = 0.6;
           }
         }
       });
@@ -1713,8 +1796,8 @@ async function createPieceMeshOptimized(piece) {
     // Fallback to geometric shapes
     mesh = createGeometricPiece(piece.type);
     
-    // Use piece-specific color if available, otherwise use player color
-    const pieceColor = getPieceColor(piece.type) || getColorFromString(player.color);
+    // Use player-specific color for better identification
+    const pieceColor = getPieceColorForPlayer(piece, player, playerIndex);
     
     const material = performanceOptimizer.getCachedMaterial('standard', {
       color: pieceColor,
@@ -1735,7 +1818,7 @@ async function createPieceMeshOptimized(piece) {
   
   // Debug: Log King positions only
   if (piece.type === 'KING') {
-    console.log(`${piece.symbol} King at grid (${piece.row}, ${piece.col})`);
+    console.log(`${piece.symbol} King at grid (${piece.row}, ${piece.col}) - Player ${playerIndex + 1}`);
   }
   
   // Add text label with piece symbol (cached)
@@ -2821,19 +2904,56 @@ function getColorFromString(colorString) {
   return colorMap[colorString] || 0xffffff;
 }
 
-// Helper function to get piece-specific colors based on evolution level
-function getPieceColor(pieceType) {
-  const pieceColors = {
-    'PAWN': 0x8B4513,      // Brown - starting piece
-    'KING': 0xFFD700,      // Gold - special piece
-    'SPLITTER': 0xFF6B6B,  // Red - evolution level 1
-    'JUMPER': 0x4ECDC4,    // Teal - evolution level 2
-    'SUPER_JUMPER': 0x45B7D1, // Blue - evolution level 3
-    'HYPER_JUMPER': 0x9B59B6, // Purple - evolution level 4
-    'MISTRESS_JUMPER': 0xE74C3C, // Red - evolution level 5
-    'HYBRID_QUEEN': 0xF39C12  // Orange - evolution level 6 (max)
+// Player color palettes for clear identification
+const PLAYER_COLORS = [
+  0xFF0000, // Red
+  0x0000FF, // Blue
+  0x00FF00, // Green
+  0xFFFF00, // Yellow
+  0xFF00FF, // Magenta
+  0x00FFFF, // Cyan
+  0xFFA500, // Orange
+  0x800080  // Purple
+];
+
+// Get distinct player color
+function getPlayerColor(playerId, playerIndex) {
+  // Use player index to get consistent color
+  if (playerIndex !== undefined && playerIndex >= 0 && playerIndex < PLAYER_COLORS.length) {
+    return PLAYER_COLORS[playerIndex];
+  }
+  
+  // Fallback to color generation from string
+  return getColorFromString(playerId);
+}
+
+// Enhanced piece color function that prioritizes player identification
+function getPieceColorForPlayer(piece, player, playerIndex) {
+  const basePlayerColor = getPlayerColor(player.id, playerIndex);
+  
+  // For special pieces, tint the player color slightly
+  const pieceModifiers = {
+    'KING': { brightness: 1.2, saturation: 1.1 },    // Brighter for king
+    'QUEEN': { brightness: 1.1, saturation: 1.1 },
+    'ROOK': { brightness: 0.9, saturation: 1.0 },
+    'BISHOP': { brightness: 0.95, saturation: 1.0 },
+    'KNIGHT': { brightness: 0.95, saturation: 1.0 },
+    'PAWN': { brightness: 0.8, saturation: 0.9 },    // Slightly muted for pawns
+    'SPLITTER': { brightness: 1.0, saturation: 1.1 },
+    'JUMPER': { brightness: 1.0, saturation: 1.1 },
+    'SUPER_JUMPER': { brightness: 1.1, saturation: 1.2 },
+    'HYPER_JUMPER': { brightness: 1.2, saturation: 1.2 },
+    'MISTRESS_JUMPER': { brightness: 1.3, saturation: 1.3 },
+    'HYBRID_QUEEN': { brightness: 1.4, saturation: 1.4 }
   };
-  return pieceColors[pieceType];
+  
+  const modifier = pieceModifiers[piece.type] || { brightness: 1.0, saturation: 1.0 };
+  
+  // Apply modifier to player color
+  const color = new THREE.Color(basePlayerColor);
+  color.multiplyScalar(modifier.brightness);
+  
+  return color.getHex();
 }
 
 // Mouse interaction
@@ -4774,4 +4894,6 @@ window.animate = function() {
   visualEffects.updateParticles(16.67); // Assume 60 FPS
 };
 
-// ... existing code ... 
+// ... existing code ...
+
+} // End of startGameInitialization function 
