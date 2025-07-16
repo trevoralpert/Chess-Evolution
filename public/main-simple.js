@@ -1155,6 +1155,9 @@ socket.on('connect', () => {
   statusEl.style.color = '#00ff00';
   console.log('Socket connected successfully');
   console.log('My socket ID:', socket.id);
+  
+  // Request AI difficulties for the dropdown
+  socket.emit('get-ai-difficulties');
 });
 
 socket.on('disconnect', () => {
@@ -2384,7 +2387,18 @@ function updateUI() {
   playerCountEl.textContent = `Players: ${playerCount}`;
   
   const pieceCount = Object.keys(gameState.pieces).length;
-  gameInfoEl.textContent = `${pieceCount} pieces on board`;
+  
+  // Update game info based on player count
+  if (playerCount >= 2) {
+    gameInfoEl.textContent = `Game ready! ${pieceCount} pieces on board. Click your pieces to move.`;
+    gameInfoEl.style.color = '#00ff00';
+  } else if (playerCount === 1) {
+    gameInfoEl.textContent = 'Waiting for opponent... Click "Add AI Player" to start!';
+    gameInfoEl.style.color = '#ffaa00';
+  } else {
+    gameInfoEl.textContent = 'Waiting for players to join...';
+    gameInfoEl.style.color = '#ffffff';
+  }
   
   // Add player color indicators
   updatePlayerColorIndicators();
@@ -3222,6 +3236,13 @@ function highlightValidMoves() {
   // Clear previous highlights
   clearValidMoveHighlights();
   
+  // Update mode indicator to show move selection
+  if (modeIndicator && validMoves.length > 0) {
+    modeIndicator.textContent = 'Select a move (click green highlights)';
+    modeIndicator.style.borderColor = '#00ff00';
+    modeIndicator.style.background = 'rgba(0, 50, 0, 0.8)';
+  }
+  
   // Add new highlights
   validMoves.forEach(move => {
     const position = getWorldPosition(move.row, move.col);
@@ -3250,32 +3271,43 @@ function highlightValidMoves() {
       highlightGeometry = new THREE.ConeGeometry(0.12, 0.25, 6); // Cone shape for jumper mode
     } else {
       highlightColor = 0x44ff44; // Green for regular move
-      highlightGeometry = new THREE.SphereGeometry(0.15, 8, 8);
+      highlightGeometry = new THREE.SphereGeometry(0.25, 16, 16); // Increased size for better clicking
     }
     
     const highlightMaterial = new THREE.MeshBasicMaterial({
       color: highlightColor,
       transparent: true,
       opacity: 0.8,
-      wireframe: move.type === 'split' || move.type === 'jump-capture' || move.type === 'multi-jump-capture' || move.type === 'dual-move-queen' || move.type === 'dual-move-jumper' // Wireframe for special moves
+      wireframe: move.type === 'split' || move.type === 'jump-capture' || move.type === 'multi-jump-capture' || move.type === 'dual-move-queen' || move.type === 'dual-move-jumper', // Wireframe for special moves
+      depthTest: true,
+      depthWrite: true
     });
     
     const highlight = new THREE.Mesh(highlightGeometry, highlightMaterial);
     highlight.position.set(position.x, position.y, position.z);
     highlight.userData = { isValidMoveHighlight: true, move: move };
     
+    // Make sure the highlight is above the globe surface
+    const heightAdjustment = 0.05;
+    const normalizedPos = highlight.position.clone().normalize();
+    highlight.position.addScaledVector(normalizedPos, heightAdjustment);
+    
     scene.add(highlight);
-    console.log(`Added ${move.type} highlight at (${move.row}, ${move.col})`);
+    console.log(`Added ${move.type} highlight at (${move.row}, ${move.col}) - userData:`, highlight.userData, 'position:', highlight.position);
   });
 }
 
 function clearValidMoveHighlights() {
   // Remove all valid move highlights
+  const highlightsToRemove = [];
   scene.children.forEach(child => {
     if (child.userData.isValidMoveHighlight) {
-      scene.remove(child);
+      highlightsToRemove.push(child);
     }
   });
+  
+  console.log(`🧹 Clearing ${highlightsToRemove.length} valid move highlights`);
+  highlightsToRemove.forEach(child => scene.remove(child));
   
   // Clear selection highlight
   clearSelectionHighlight();
@@ -3442,9 +3474,33 @@ function onMouseClick(event) {
   
   raycaster.setFromCamera(mouse, camera);
   
-  // Try to intersect with specific piece meshes first
-  const pieceMeshArray = Object.values(pieceMeshes);
-  const intersects = raycaster.intersectObjects(pieceMeshArray, true); // Include child objects
+  // Get all potential clickable objects (pieces and valid move highlights)
+  const clickableObjects = [];
+  
+  // Add piece meshes
+  Object.values(pieceMeshes).forEach(mesh => {
+    clickableObjects.push(mesh);
+  });
+  
+  // Add valid move highlights
+  let validMoveCount = 0;
+  const validMoveHighlights = [];
+  scene.children.forEach(child => {
+    if (child.userData && child.userData.isValidMoveHighlight) {
+      clickableObjects.push(child);
+      validMoveHighlights.push(child);
+      validMoveCount++;
+      console.log('🟢 Found valid move highlight:', child.userData.move);
+    }
+  });
+  
+  console.log('🔍 Clickable objects setup:', {
+    totalClickable: clickableObjects.length,
+    pieceMeshes: Object.keys(pieceMeshes).length,
+    validMoveHighlights: validMoveCount
+  });
+  
+  const intersects = raycaster.intersectObjects(clickableObjects, true); // Include child objects
   
   console.log('🔍 Raycaster debug:', {
     mouseX: mouse.x,
@@ -3452,7 +3508,10 @@ function onMouseClick(event) {
     intersectsLength: intersects.length,
     sceneChildrenCount: scene.children.length,
     pieceMeshesCount: Object.keys(pieceMeshes).length,
-    pieceMeshArrayLength: pieceMeshArray.length
+    clickableObjectsCount: clickableObjects.length,
+    validMoveHighlightsCount: clickableObjects.filter(obj => obj.userData?.isValidMoveHighlight).length,
+    cameraPosition: camera.position,
+    rayDirection: raycaster.ray.direction
   });
   
   // Debug: Check the structure of the first few piece meshes
@@ -3501,13 +3560,27 @@ function onMouseClick(event) {
       type: intersects[0].object.type,
       userData: intersects[0].object.userData,
       hasParent: !!intersects[0].object.parent,
-      parentUserData: intersects[0].object.parent?.userData
+      parentUserData: intersects[0].object.parent?.userData,
+      isValidMoveHighlight: intersects[0].object.userData?.isValidMoveHighlight
     });
+    
+    // Log all intersects to see if move highlights are detected
+    console.log('🔍 All intersects:', intersects.map(i => ({
+      type: i.object.type,
+      isValidMoveHighlight: i.object.userData?.isValidMoveHighlight,
+      isPiece: !!i.object.userData?.piece
+    })));
   }
   
   // If no intersects, let's check what's in the scene
   if (intersects.length === 0) {
     console.log('🔍 No intersects - looking for piece objects in scene...');
+    console.log('🔍 Debug: Valid move highlights in scene:', 
+      scene.children.filter(c => c.userData.isValidMoveHighlight).map(c => ({
+        position: c.position,
+        userData: c.userData
+      }))
+    );
     
     // Find all objects with piece userData
     const pieceObjects = scene.children.filter(child => child.userData?.piece);
@@ -3537,13 +3610,24 @@ function onMouseClick(event) {
     console.log('Clicked object:', clickedObject.userData, clickedObject.type);
     console.log('Has piece:', !!clickedObject.userData.piece);
     console.log('Has valid move highlight:', !!clickedObject.userData.isValidMoveHighlight);
+    console.log('Full userData:', JSON.stringify(clickedObject.userData));
     
-    // For GLB models, we might need to traverse up to find the piece mesh
-    while (clickedObject && !clickedObject.userData.piece && !clickedObject.userData.isValidMoveHighlight) {
-      clickedObject = clickedObject.parent;
+    // Check if this is a valid move highlight first (before traversing)
+    if (clickedObject.userData.isValidMoveHighlight) {
+      console.log('✅ Direct hit on valid move highlight!');
+    } else {
+      // For GLB models, we might need to traverse up to find the piece mesh
+      while (clickedObject && !clickedObject.userData.piece && !clickedObject.userData.isValidMoveHighlight) {
+        clickedObject = clickedObject.parent;
+      }
     }
     
     console.log('Found piece object:', clickedObject ? clickedObject.userData : 'none');
+    
+    // Additional check - make sure we're not missing the valid move highlight
+    if (clickedObject && !clickedObject.userData.piece && !clickedObject.userData.isValidMoveHighlight) {
+      console.log('⚠️ Clicked object has no piece or valid move data - checking original:', intersects[0].object.userData);
+    }
     
     // Check if clicked on a piece
     if (clickedObject && clickedObject.userData.piece) {
@@ -3585,6 +3669,7 @@ function onMouseClick(event) {
     
     // Check if clicked on a valid move highlight
     else if (clickedObject && clickedObject.userData.isValidMoveHighlight) {
+      console.log('🎯 Valid move highlight clicked!');
       clickHandled = true;
       const move = clickedObject.userData.move;
       console.log('Clicked valid move:', move);
@@ -3592,6 +3677,8 @@ function onMouseClick(event) {
       
       // Find the currently selected piece by checking which piece has valid moves displayed
       const currentSelectedPieceId = getCurrentlySelectedPieceId();
+      console.log('🎯 Current selected piece ID:', currentSelectedPieceId);
+      
       if (currentSelectedPieceId) {
         // Check if this is a dual movement piece and requires mode selection
         const selectedPiece = gameState.pieces[currentSelectedPieceId];
@@ -3666,6 +3753,19 @@ function onMouseClick(event) {
         clearValidMoveHighlights();
         hideDualMovementUI();
         selectedPieceId = null;
+        
+        // Re-enable OrbitControls after making a move
+        if (controls) {
+          console.log('🖱️ Re-enabling OrbitControls after move');
+          controls.enabled = true;
+          
+          // Restore mode indicator
+          if (modeIndicator && !selectionMode) {
+            modeIndicator.textContent = 'Camera Mode (Press S to switch)';
+            modeIndicator.style.borderColor = '#00ff00';
+            modeIndicator.style.background = 'rgba(0, 0, 0, 0.8)';
+          }
+        }
       }
     }
     
@@ -3676,6 +3776,19 @@ function onMouseClick(event) {
       clearValidMoveHighlights();
       hideDualMovementUI();
       gameInfoEl.textContent = 'Click on your pieces to select them';
+      
+      // Re-enable OrbitControls when clearing selection
+      if (controls) {
+        console.log('🖱️ Re-enabling OrbitControls after clearing selection');
+        controls.enabled = true;
+        
+        // Restore mode indicator
+        if (modeIndicator && !selectionMode) {
+          modeIndicator.textContent = 'Camera Mode (Press S to switch)';
+          modeIndicator.style.borderColor = '#00ff00';
+          modeIndicator.style.background = 'rgba(0, 0, 0, 0.8)';
+        }
+      }
     }
   } else {
     // Clicked on empty space - clear selection
@@ -3683,29 +3796,119 @@ function onMouseClick(event) {
     clearValidMoveHighlights();
     hideDualMovementUI();
     gameInfoEl.textContent = 'Click on your pieces to select them';
+    
+    // Re-enable OrbitControls when clearing selection
+    if (controls) {
+      console.log('🖱️ Re-enabling OrbitControls after clearing selection');
+      controls.enabled = true;
+      
+      // Restore mode indicator
+      if (modeIndicator && !selectionMode) {
+        modeIndicator.textContent = 'Camera Mode (Press S to switch)';
+        modeIndicator.style.borderColor = '#00ff00';
+        modeIndicator.style.background = 'rgba(0, 0, 0, 0.8)';
+      }
+    }
   }
   
   return clickHandled;
 }
 
-// Set up consolidated mouse event handlers
-console.log('🖱️ Setting up mouse event listeners...');
+// Set up consolidated mouse event handlers with a different approach
+console.log('🖱️ Setting up pointer event listeners...');
 
-// IMPORTANT: Use capture phase (true) to get events BEFORE OrbitControls
-// OrbitControls prevents mousedown events from bubbling, so we need to capture them first
-renderer.domElement.addEventListener('mousedown', handleMouseDown, true); // Capture phase
-renderer.domElement.addEventListener('mousemove', handleMouseMove, true); // Capture phase
-renderer.domElement.addEventListener('mouseup', handleMouseUp, true); // Capture phase
+// Use pointer events which work better with OrbitControls
+// Disable OrbitControls temporarily when clicking on objects
+let isClickingOnPiece = false;
+
+// Function to check if click is on a piece or valid move
+function checkForPieceUnderMouse(event) {
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  
+  raycaster.setFromCamera(mouse, camera);
+  
+  // Check for pieces and valid moves
+  const clickableObjects = [];
+  
+  // Add piece meshes
+  Object.values(pieceMeshes).forEach(mesh => {
+    clickableObjects.push(mesh);
+  });
+  
+  // Add valid move highlights
+  scene.children.forEach(child => {
+    if (child.userData.isValidMoveHighlight) {
+      clickableObjects.push(child);
+    }
+  });
+  
+  const intersects = raycaster.intersectObjects(clickableObjects, true);
+  
+  return intersects.length > 0;
+}
+
+// Use pointerdown instead of mousedown - it fires before OrbitControls processes it
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  console.log('🖱️ Pointer down event fired!');
+  
+  // Check if we're clicking on a piece or valid move
+  isClickingOnPiece = checkForPieceUnderMouse(e);
+  
+  if (isClickingOnPiece && controls) {
+    console.log('🖱️ Clicking on piece/move - disabling OrbitControls');
+    controls.enabled = false; // Disable OrbitControls temporarily
+    
+    // Update mode indicator to show selection mode
+    if (modeIndicator) {
+      modeIndicator.textContent = 'Selecting (camera locked)';
+      modeIndicator.style.borderColor = '#ffaa00';
+      modeIndicator.style.background = 'rgba(100, 50, 0, 0.8)';
+    }
+  }
+  
+  handleMouseDown(e);
+}, false);
+
+renderer.domElement.addEventListener('pointermove', (e) => {
+  handleMouseMove(e);
+}, false);
+
+renderer.domElement.addEventListener('pointerup', (e) => {
+  console.log('🖱️ Pointer up event fired!');
+  handleMouseUp(e);
+  
+  // Only re-enable OrbitControls if we don't have valid moves displayed
+  // Keep it disabled while the player is selecting a move
+  if (controls && !controls.enabled) {
+    // Check if we have valid moves displayed
+    const hasValidMovesDisplayed = validMoves && validMoves.length > 0;
+    
+    if (!hasValidMovesDisplayed) {
+      console.log('🖱️ Re-enabling OrbitControls (no valid moves displayed)');
+      setTimeout(() => {
+        controls.enabled = true;
+        
+        // Restore mode indicator
+        if (modeIndicator && !selectionMode) {
+          modeIndicator.textContent = 'Camera Mode (Press S to switch)';
+          modeIndicator.style.borderColor = '#00ff00';
+          modeIndicator.style.background = 'rgba(0, 0, 0, 0.8)';
+        }
+      }, 10); // Small delay to ensure click is processed
+    } else {
+      console.log('🖱️ Keeping OrbitControls disabled - valid moves are displayed');
+    }
+  }
+  
+  isClickingOnPiece = false;
+}, false);
+
 renderer.domElement.addEventListener('contextmenu', (event) => {
   event.preventDefault(); // Prevent context menu on right-click
-}, true);
+}, false);
 
-// Add a simple test to verify mouse events are working
-renderer.domElement.addEventListener('mousedown', (e) => {
-  console.log('🖱️ Simple mousedown test - event fired!');
-}, true);
-
-console.log('🖱️ Mouse event listeners attached to canvas with capture phase');
+console.log('🖱️ Pointer event listeners attached to canvas');
 
 // Touch event handling for mobile
 let touchStartTime = 0;
@@ -3746,6 +3949,50 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Add keyboard controls for switching between camera and piece selection modes
+let selectionMode = false; // false = camera mode, true = selection mode
+const modeIndicator = document.getElementById('mode-indicator');
+
+// Show mode indicator
+if (modeIndicator) {
+  modeIndicator.style.display = 'block';
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 's' || e.key === 'S') {
+    selectionMode = !selectionMode;
+    if (controls) {
+      controls.enabled = !selectionMode;
+      console.log(`🎮 Switched to ${selectionMode ? 'SELECTION' : 'CAMERA'} mode`);
+      gameInfoEl.textContent = `Mode: ${selectionMode ? 'SELECTION (click pieces)' : 'CAMERA (drag to rotate)'}`;
+      gameInfoEl.style.color = selectionMode ? '#00ff00' : '#ffffff';
+      
+      // Update mode indicator
+      if (modeIndicator) {
+        modeIndicator.textContent = selectionMode ? 'Selection Mode (Press S to switch)' : 'Camera Mode (Press S to switch)';
+        modeIndicator.style.borderColor = selectionMode ? '#ff0000' : '#00ff00';
+        modeIndicator.style.background = selectionMode ? 'rgba(100, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.8)';
+      }
+      
+      // Show notification
+      showNotification('Mode Changed', 
+        selectionMode ? 'Selection Mode: Click on pieces to move them' : 'Camera Mode: Drag to rotate the globe',
+        'info'
+      );
+    }
+  }
+  
+  // Add debug key to force piece click detection
+  if (e.key === 'd' || e.key === 'D') {
+    console.log('🔍 Debug: Force checking for pieces under mouse');
+    const event = new MouseEvent('click', {
+      clientX: window.innerWidth / 2,
+      clientY: window.innerHeight / 2
+    });
+    onMouseClick(event);
+  }
 });
 
 // Animation loop
@@ -4430,6 +4677,18 @@ socket.on('ai-add-failed', (data) => {
 socket.on('ai-difficulties', (data) => {
   console.log('AI difficulties:', data);
   // Update difficulty select if needed
+  const difficultySelect = document.getElementById('ai-difficulty-select');
+  if (difficultySelect && data && data.difficulties) {
+    difficultySelect.innerHTML = '';
+    data.difficulties.forEach((diff) => {
+      const option = document.createElement('option');
+      option.value = diff.key;
+      option.textContent = diff.name;
+      difficultySelect.appendChild(option);
+    });
+    // Set default to MEDIUM
+    difficultySelect.value = 'MEDIUM';
+  }
 });
 
 socket.on('ai-difficulty-updated', (data) => {
@@ -5079,13 +5338,43 @@ socket.on('game-draw', (data) => {
 // Initialize chat system when page loads
 window.addEventListener('load', () => {
   initializeChatSystem();
+  
+  // Add AI player button handler
+  const addAIBtn = document.getElementById('add-ai-btn');
+  if (addAIBtn) {
+    addAIBtn.addEventListener('click', () => {
+      console.log('Adding AI player...');
+      socket.emit('add-ai-player', {
+        difficulty: 'MEDIUM',
+        personality: 'balanced'
+      });
+      addAIBtn.textContent = 'Adding AI...';
+      addAIBtn.disabled = true;
+      
+      // Re-enable after a short delay
+      setTimeout(() => {
+        addAIBtn.textContent = 'Add AI Player';
+        addAIBtn.disabled = false;
+      }, 2000);
+    });
+  }
 });
 
 // Start animation
 animate();
 
 console.log('Globe Chess client fully initialized');
-console.log('Click on pieces to see valid moves'); 
+console.log('Click on pieces to see valid moves');
+console.log('🎮 Press "S" to toggle between CAMERA and SELECTION mode');
+
+// Show initial help message
+setTimeout(() => {
+  showNotification('Controls', 
+    'Press "S" to switch between Camera Mode (rotate globe) and Selection Mode (click pieces). Currently in Camera Mode.',
+    'info'
+  );
+  gameInfoEl.textContent = 'Press "S" to enter Selection Mode and click pieces';
+}, 2000); 
 
 // Color selection system
 let availableColors = [];
@@ -5119,6 +5408,17 @@ socket.on('color-selected', (data) => {
 socket.on('color-selection-failed', (data) => {
   console.warn('Color selection failed:', data.error);
   alert('Color selection failed: ' + data.error);
+});
+
+// AI player event handlers
+socket.on('ai-player-added', (data) => {
+  console.log('AI player added:', data);
+  showNotification('AI Player Added', `${data.name} has joined the game!`, 'success');
+});
+
+socket.on('ai-add-failed', (data) => {
+  console.error('Failed to add AI player:', data.error);
+  showNotification('AI Error', data.error, 'error');
 });
 
 // Update color selector UI

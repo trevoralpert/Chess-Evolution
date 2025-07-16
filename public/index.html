@@ -251,8 +251,32 @@
 <body>
   <div id="ui">
     <h3 style="font-size: 14px; margin: 0 0 5px 0;">Globe Chess</h3>
-    <div id="player-count">Players: 0</div>
-    <div id="game-info">Waiting for players...</div>
+          <div id="player-count">Players: 0</div>
+      <div id="game-info">Waiting for players...</div>
+      <button id="add-ai-btn" style="
+        margin-top: 10px;
+        padding: 5px 10px;
+        background: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 12px;
+      ">Add AI Player</button>
+<div id="mode-indicator" style="
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 5px 15px;
+  border-radius: 20px;
+  font-size: 14px;
+  z-index: 1000;
+  display: none;
+  border: 2px solid #00ff00;
+">Camera Mode (Press S to switch)</div>
     <div id="color-selector" style="margin-top: 10px; padding: 5px; background: rgba(0, 0, 0, 0.3); border-radius: 3px;">
       <div style="font-size: 10px; color: #ccc; margin-bottom: 5px;">Your Color:</div>
       <div id="color-options" style="display: flex; flex-wrap: wrap; gap: 3px;">
@@ -648,6 +672,6 @@
       }
     });
   </script>
-  <script src="./main-simple.js?v=20&debug=true"></script>
+      <script src="./main-simple.js?v=21&debug=true"></script>
 </body>
 </html> 
