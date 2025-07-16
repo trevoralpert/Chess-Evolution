@@ -426,7 +426,10 @@ function handleMouseDown(e) {
   mouseDownTime = Date.now();
   mouseStartPos = { x: e.clientX, y: e.clientY };
   isDragging = false;
-  console.log(`Mouse down at: ${mouseDownTime}`);
+  console.log(`🖱️ Mouse down at: ${mouseDownTime}`);
+  
+  // Don't prevent default - let OrbitControls handle the event too
+  // We're just capturing it to track our own state
 }
 
 function handleMouseMove(e) {
@@ -437,7 +440,10 @@ function handleMouseMove(e) {
     
     // Consider it dragging if moved more than 5 pixels
     if (distance > 5) {
-      isDragging = true;
+      if (!isDragging) {
+        console.log(`🖱️ Mouse drag detected - distance: ${distance}px`);
+        isDragging = true;
+      }
     }
     
     // Handle camera movement if using manual controls
@@ -451,9 +457,27 @@ function handleMouseUp(e) {
   const mouseUpTime = Date.now();
   const clickDuration = mouseUpTime - mouseDownTime;
   
-  // Only process click if it was quick and didn't drag
+  console.log(`🖱️ Mouse up - duration: ${clickDuration}ms, isDragging: ${isDragging}, mouseDownTime: ${mouseDownTime}`);
+  
+  // Check if mouseDownTime was never set (indicates mouseDown wasn't called)
+  if (mouseDownTime === 0) {
+    console.log(`🖱️ Click ignored - mouseDown was never called`);
+    return;
+  }
+  
+  // Only process click if it was quick and didn't drag much
   if (clickDuration < 300 && !isDragging) {
-    onMouseClick(e);
+    console.log(`🖱️ Processing click event`);
+    const clickHandled = onMouseClick(e);
+    
+    // If we successfully processed a piece click, prevent OrbitControls from handling it
+    // This prevents the camera from moving when clicking on pieces
+    if (clickHandled === true) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  } else {
+    console.log(`🖱️ Click ignored - too long (${clickDuration}ms) or dragging (${isDragging})`);
   }
   
   mouseDownTime = 0;
@@ -2140,6 +2164,10 @@ async function createPieceMeshOptimized(piece) {
   
   scene.add(mesh);
   pieceMeshes[piece.id] = mesh;
+  
+  console.log(`🔧 Added piece ${piece.type} to scene - userData:`, mesh.userData);
+  console.log(`🔧 Piece mesh position:`, mesh.position);
+  console.log(`🔧 Scene children count after add:`, scene.children.length);
 }
 
 // Optimized piece update function
@@ -3401,17 +3429,108 @@ const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
 function onMouseClick(event) {
-  console.log('Click event triggered');
+  console.log('🖱️ Click event triggered - onMouseClick called');
   
   // Check if this is a right-click
   const isRightClick = event.button === 2;
+  
+  let clickHandled = false;
   
   // For now, just allow all clicks - we can add drag detection later if needed
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
   
   raycaster.setFromCamera(mouse, camera);
-  const intersects = raycaster.intersectObjects(scene.children, true); // Include child objects
+  
+  // Try to intersect with specific piece meshes first
+  const pieceMeshArray = Object.values(pieceMeshes);
+  const intersects = raycaster.intersectObjects(pieceMeshArray, true); // Include child objects
+  
+  console.log('🔍 Raycaster debug:', {
+    mouseX: mouse.x,
+    mouseY: mouse.y,
+    intersectsLength: intersects.length,
+    sceneChildrenCount: scene.children.length,
+    pieceMeshesCount: Object.keys(pieceMeshes).length,
+    pieceMeshArrayLength: pieceMeshArray.length
+  });
+  
+  // Debug: Check the structure of the first few piece meshes
+  console.log('🔍 Analyzing piece mesh structure:');
+  const pieceKeys = Object.keys(pieceMeshes);
+  for (let i = 0; i < Math.min(3, pieceKeys.length); i++) {
+    const pieceKey = pieceKeys[i];
+    const pieceMesh = pieceMeshes[pieceKey];
+    console.log(`🔍 Piece ${pieceKey}:`, {
+      type: pieceMesh.type,
+      visible: pieceMesh.visible,
+      children: pieceMesh.children.length,
+      position: pieceMesh.position,
+      userData: pieceMesh.userData,
+      hasGeometry: pieceMesh.geometry !== undefined,
+      hasMaterial: pieceMesh.material !== undefined
+    });
+    
+    // Check children for actual meshes
+    if (pieceMesh.children && pieceMesh.children.length > 0) {
+      console.log(`🔍 ${pieceKey} children:`, pieceMesh.children.map(child => ({
+        type: child.type,
+        visible: child.visible,
+        hasGeometry: child.geometry !== undefined,
+        hasMaterial: child.material !== undefined,
+        userData: child.userData
+      })));
+    }
+  }
+  
+  // Debug: Try raycasting against all scene children to see if anything hits
+  console.log('🔍 Testing raycaster against all scene children...');
+  const allIntersects = raycaster.intersectObjects(scene.children, true);
+  console.log('🔍 All intersects:', allIntersects.length);
+  if (allIntersects.length > 0) {
+    console.log('🔍 First all intersect:', {
+      type: allIntersects[0].object.type,
+      userData: allIntersects[0].object.userData,
+      parent: allIntersects[0].object.parent?.userData
+    });
+  }
+  
+  // Log first few intersects for debugging
+  if (intersects.length > 0) {
+    console.log('🔍 First intersect:', {
+      type: intersects[0].object.type,
+      userData: intersects[0].object.userData,
+      hasParent: !!intersects[0].object.parent,
+      parentUserData: intersects[0].object.parent?.userData
+    });
+  }
+  
+  // If no intersects, let's check what's in the scene
+  if (intersects.length === 0) {
+    console.log('🔍 No intersects - looking for piece objects in scene...');
+    
+    // Find all objects with piece userData
+    const pieceObjects = scene.children.filter(child => child.userData?.piece);
+    console.log('🔍 Found piece objects:', pieceObjects.length);
+    
+    if (pieceObjects.length > 0) {
+      console.log('🔍 First piece object:', {
+        type: pieceObjects[0].type,
+        name: pieceObjects[0].name,
+        visible: pieceObjects[0].visible,
+        position: pieceObjects[0].position,
+        userData: pieceObjects[0].userData,
+        hasGeometry: !!pieceObjects[0].geometry,
+        hasMaterial: !!pieceObjects[0].material,
+        childrenCount: pieceObjects[0].children.length
+      });
+      
+      // Check if this piece is in the pieceMeshes array
+      const pieceId = pieceObjects[0].userData.pieceId;
+      const isInPieceMeshes = pieceMeshes[pieceId] === pieceObjects[0];
+      console.log('🔍 Is in pieceMeshes:', isInPieceMeshes, 'pieceId:', pieceId);
+    }
+  }
   
   if (intersects.length > 0) {
     let clickedObject = intersects[0].object;
@@ -3443,6 +3562,7 @@ function onMouseClick(event) {
                         (piece.playerId === socket.id);
       
       if (isOwnPiece) {
+        clickHandled = true;
         if (isRightClick) {
           // Right-click: Request evolution options
           socket.emit('request-evolution-choice', { pieceId: piece.id });
@@ -3465,6 +3585,7 @@ function onMouseClick(event) {
     
     // Check if clicked on a valid move highlight
     else if (clickedObject && clickedObject.userData.isValidMoveHighlight) {
+      clickHandled = true;
       const move = clickedObject.userData.move;
       console.log('Clicked valid move:', move);
       console.log('Move data:', move.row, move.col, move.type);
@@ -3563,15 +3684,28 @@ function onMouseClick(event) {
     hideDualMovementUI();
     gameInfoEl.textContent = 'Click on your pieces to select them';
   }
+  
+  return clickHandled;
 }
 
 // Set up consolidated mouse event handlers
-window.addEventListener('mousedown', handleMouseDown);
-window.addEventListener('mousemove', handleMouseMove);
-window.addEventListener('mouseup', handleMouseUp);
-window.addEventListener('contextmenu', (event) => {
+console.log('🖱️ Setting up mouse event listeners...');
+
+// IMPORTANT: Use capture phase (true) to get events BEFORE OrbitControls
+// OrbitControls prevents mousedown events from bubbling, so we need to capture them first
+renderer.domElement.addEventListener('mousedown', handleMouseDown, true); // Capture phase
+renderer.domElement.addEventListener('mousemove', handleMouseMove, true); // Capture phase
+renderer.domElement.addEventListener('mouseup', handleMouseUp, true); // Capture phase
+renderer.domElement.addEventListener('contextmenu', (event) => {
   event.preventDefault(); // Prevent context menu on right-click
-});
+}, true);
+
+// Add a simple test to verify mouse events are working
+renderer.domElement.addEventListener('mousedown', (e) => {
+  console.log('🖱️ Simple mousedown test - event fired!');
+}, true);
+
+console.log('🖱️ Mouse event listeners attached to canvas with capture phase');
 
 // Touch event handling for mobile
 let touchStartTime = 0;
@@ -3603,9 +3737,9 @@ function onTouchEnd(e) {
   }
 }
 
-// Add touch event listeners
-window.addEventListener('touchstart', onTouchStart, { passive: false });
-window.addEventListener('touchend', onTouchEnd, { passive: false });
+// Add touch event listeners to canvas with capture phase
+renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false, capture: true });
+renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false, capture: true });
 
 // Handle window resize
 window.addEventListener('resize', () => {

@@ -172,6 +172,8 @@
 - [x] Fixed critical piece movement issue - pieces now properly respond to clicks and show valid moves
 - [x] Corrected userData.piece assignment in createPieceMeshOptimized function
 - [x] Enhanced GLB model click detection by setting userData on child meshes
+- [ ] IN PROGRESS: Debugging GLB model raycasting - pieces are created but raycaster not detecting them
+- [ ] IN PROGRESS: Implementing targeted raycasting for piece meshes to improve click detection
 
 ## Notes
 - Server successfully tested at http://localhost:3000
