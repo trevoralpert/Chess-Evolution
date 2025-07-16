@@ -1,272 +1,225 @@
-# 🌍 BrainLift: Multiplayer Globe Chess
+# 🌍 EvoChess
 
-> **Revolutionary chess gameplay on a 3D spherical board with evolutionary mechanics and real-time multiplayer action.**
+> **Revolutionary 3D spherical chess with evolutionary mechanics and real-time multiplayer**
 
-A cutting-edge strategy game that transforms traditional chess into an immersive 3D experience, featuring a spherical playing field, evolutionary piece mechanics, and innovative battle systems. Built with modern web technologies for seamless multiplayer gameplay.
+[![Node.js](https://img.shields.io/badge/Node.js-v14+-green.svg)](https://nodejs.org/)
+[![Three.js](https://img.shields.io/badge/Three.js-r155-blue.svg)](https://threejs.org/)
+[![Socket.io](https://img.shields.io/badge/Socket.io-4.0-black.svg)](https://socket.io/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## 🎯 Game Overview
+## 🎯 What Makes EvoChess Unique
 
-**BrainLift Globe Chess** breaks the conventional rectangular chess board paradigm by placing the game on a 3D sphere. Players command armies of chess pieces that can evolve, battle with dice-based combat, and navigate a wraparound world where tactical thinking meets spatial geometry.
+EvoChess reimagines chess for the modern era by breaking fundamental constraints through innovative gameplay and AI-powered development:
 
-### 🌟 Key Features
+### 1. 🌐 **Spherical Board** 
+- Play on a 20×8 globe grid (160 positions) instead of a flat 8×8 board
+- **No edges or corners** - longitude wraps around seamlessly
+- **Polar dynamics** - North and South poles become strategic strongholds
+- **True 3D gameplay** - Rotate the globe to view from any angle
 
-- **🌍 3D Spherical Board**: Chess played on a complete sphere with wraparound mechanics
-- **⚔️ Dynamic Battle System**: Dice-based combat with strategic contest opportunities
-- **🧬 Piece Evolution**: Pieces can evolve through combat and achievements
-- **🎮 Real-time Multiplayer**: Support for up to 8 players simultaneously
-- **🎭 Professional 3D Models**: Custom GLB models for all piece types
-- **⚡ Simultaneous Moves**: Fast-paced gameplay with timed decision-making
-- **🏆 Multiple Victory Conditions**: Last-player-standing with territorial influence
+### 2. 🧬 **Evolving Pieces**
+- Pieces gain **evolution points** through combat and achievements
+- **15+ evolution paths** - Transform pawns into powerful variants
+- **Strategic banking** - Save points for major upgrades
+- **Time-based evolution** - Some evolutions require survival time
+
+### 3. ♟️ **Original Pieces with New Logic**
+- **Vaultbound Family**: Pieces that capture by vaulting over enemies
+  - Vaultbound → Vaultseer → Vaultarcher → Vaultmistress
+- **Splitter**: Can divide into two weaker pieces
+- **Covenant Queen**: Ultimate evolution combining Queen + Vaultbound abilities
+- **Circumnavigation bonus**: +8 points for reaching the opposite pole
+
+### 4. 🎨 **Custom 3D Assets**
+- **Original 3D models** generated using [Meshy.ai](https://www.meshy.ai/)
+- **Unique visual identity** - Every piece has a distinctive, professional design
+- **AI-powered asset creation** - Demonstrating innovation in both gameplay and development
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-
-- Node.js (v14 or higher)
-- npm or yarn
+- Node.js v14 or higher
 - Modern web browser with WebGL support
+- 2GB RAM minimum
 
 ### Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/trevoralpert/Chess-Evolution.git
-   cd Chess-Evolution
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/trevoralpert/Chess-Evolution.git
+cd Chess-Evolution
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+# Install dependencies
+npm install
 
-3. **Start the development server**
-   ```bash
-   npm run dev
-   ```
+# Start development server
+npm run dev
 
-4. **Open your browser**
-   ```
-   http://localhost:3000
-   ```
+# Open in browser
+http://localhost:3000
+```
 
-### Production Deployment
+### Production Build
 
 ```bash
+# Start production server
 npm start
 ```
+
+## 🛠️ Tech Stack
+
+### Backend
+- **[Node.js](https://nodejs.org/)** - JavaScript runtime
+- **[Express](https://expressjs.com/)** - Web application framework
+- **[Socket.io](https://socket.io/)** - Real-time bidirectional communication
+- **Custom Game Engine** - Handles game logic, timing, and state management
+
+### Frontend
+- **[Three.js](https://threejs.org/)** - 3D graphics library for WebGL
+- **Vanilla JavaScript** - No framework dependencies for maximum performance
+- **[GLTFLoader](https://threejs.org/docs/#examples/en/loaders/GLTFLoader)** - Loads professional 3D models
+- **WebGL** - Hardware-accelerated 3D rendering
+
+### Asset Creation
+- **[Meshy.ai](https://www.meshy.ai/)** - AI-powered 3D model generation for all custom pieces
+- **GLB Format** - Optimized 3D models with textures and materials
+
+### Architecture
+- **Real-time Multiplayer** - WebSocket-based with delta updates
+- **Modular System Design** - Separate managers for timing, evolution, battles
+- **Event-driven Architecture** - Decoupled components via Socket.io events
+- **Performance Optimized** - Object pooling, frustum culling, instanced rendering
 
 ## 🎮 How to Play
 
 ### Basic Controls
+- **Left Click** - Select piece and move
+- **Right Click** - Open evolution menu
+- **Drag** - Rotate the globe
+- **Scroll** - Zoom in/out
 
-- **Click to Select**: Click on your pieces to select them
-- **Click to Move**: Click on highlighted squares to move selected pieces
-- **Green Highlights**: Valid movement positions
-- **Red Highlights**: Attack positions
-- **Blue Highlights**: Special ability positions (splitting, jumping)
+### Core Mechanics
+1. **Real-time Movement** - 7-second cooldown after each move (no turns!)
+2. **Battle System** - Higher value pieces win, but underdogs can contest with dice
+3. **Evolution Points** - Earn through combat, use to transform pieces
+4. **Victory** - Capture the enemy King or be the last player standing
 
-### Game Mechanics
-
-#### 🏁 Starting Setup
-- Each player begins with a **King** and **8 Pawns** in a 3x3 formation
-- Players spawn at different polar regions of the sphere
-- Initial piece placement adapts to spherical geometry
-
-#### ⚔️ Battle System
-- **Automatic Battles**: Higher-value pieces defeat lower-value pieces
-- **Contest System**: When lower-value pieces attack higher-value pieces, defenders can choose to contest
-- **Dice Battles**: Contested battles resolved with dice rolls (highest single die wins)
-- **King Invincibility**: Kings win all battles when attacking
-
-#### 🧬 Evolution Mechanics
-- Pieces gain **evolution points** through combat and achievements
-- **Circumnavigation Bonus**: Pawns and Splitters gain +8 points for reaching opposite poles
-- **Strategic Banking**: Players can save evolution points for major upgrades
-- **Evolution Paths**: Each piece type has unique evolution possibilities
-
-#### 🏆 Victory Conditions
-- **King Capture**: Eliminate opponents by capturing their Kings
-- **Last Standing**: Be the final player remaining
-- **Territorial Control**: Dominate the sphere through strategic positioning
-
-## 📋 Piece Types & Evolution
-
-### Starting Pieces
-
-| Piece | Points | Symbol | Description |
-|-------|---------|---------|-------------|
-| **Pawn** | 1 | ♟ | Forward movement, diagonal attacks |
-| **King** | 3 | ♔ | Game-ending piece, omnidirectional movement |
-
-### Traditional Chess Pieces
-
-| Piece | Points | Symbol | Movement |
-|-------|---------|---------|----------|
-| **Bishop** | 3 | ♗ | Diagonal movement |
-| **Knight** | 3 | ♘ | L-shaped movement, can jump |
-| **Rook** | 5 | ♖ | Orthogonal movement |
-| **Queen** | 9 | ♕ | Omnidirectional movement |
-
-### Evolved Pieces
-
-| Piece | Points | Symbol | Special Abilities |
-|-------|---------|---------|------------------|
-| **Splitter** | 2 | ◊ | Can split into multiple pieces |
-| **Jumper** | 4 | ◈ | Captures by jumping over pieces |
-| **Super Jumper** | 6 | ◉ | Multiple captures in sequence |
-| **Hyper Jumper** | 8 | ⬟ | Extended jumping range |
-| **Mistress Jumper** | 10 | ⬢ | Ultimate jumping with landing attacks |
-| **Hybrid Queen** | 12 | ⬡ | Combines Queen and Jumper abilities |
-
-## 🏗️ Technical Architecture
-
-### Technology Stack
-
-- **Backend**: Node.js with Express
-- **Real-time**: Socket.io for multiplayer synchronization
-- **Frontend**: Vanilla JavaScript with Three.js
-- **3D Graphics**: Three.js with GLTFLoader
-- **3D Models**: Professional GLB models for all pieces
-- **Grid System**: Discrete spherical coordinate system
-
-### Project Structure
+## 📁 Project Structure
 
 ```
-Project_5/
-├── server/
-│   ├── index.js              # Main server application
-│   ├── gameConfig.js         # Game configuration and grid utilities
-│   └── pieceTypes.js         # Piece definitions and battle logic
-├── public/
-│   ├── index.html            # Main HTML file
-│   ├── main.js               # Client-side game logic
-│   ├── battleSystem.js       # Battle animations and effects
-│   └── utils/
-│       └── gridToSphere.js   # Coordinate transformation utilities
-├── chess piece models/
-│   └── Final pieces/         # Professional GLB 3D models
-└── localdocs/                # Documentation and development notes
+Chess-Evolution/
+├── server/                    # Backend Node.js application
+│   ├── index.js              # Main server & Socket.io setup
+│   ├── gameConfig.js         # Game configuration & grid utilities
+│   ├── pieceTypes.js         # Piece definitions & battle logic
+│   ├── evolutionManager.js   # Evolution system & banking
+│   ├── timingManager.js      # Real-time move system
+│   ├── aiManager.js          # AI opponent logic
+│   └── ...                   # Other game systems
+├── public/                   # Frontend assets
+│   ├── index.html           # Main game interface
+│   ├── main.js              # Client game logic
+│   ├── main-simple.js       # Simplified renderer
+│   ├── battleSystem.js      # Battle animations
+│   └── utils/               # Utility functions
+├── chess piece models/       # 3D GLB models
+│   └── Final pieces/        # Production-ready models
+├── data/                    # Game statistics
+├── localdocs/              # Development documentation
+└── package.json            # Dependencies
 ```
 
-### Core Systems
+## 🌟 Key Features
 
-#### 🔧 Grid System
-- **Discrete Coordinates**: 20x24 grid mapped to sphere surface
-- **Wraparound Logic**: Horizontal movement wraps around longitude
-- **Polar Handling**: Special movement rules at north/south poles
-- **Position Validation**: Ensures moves stay within valid game boundaries
+### Multiplayer Systems
+- **Up to 8 players** simultaneously
+- **Lobby System** - Create/join custom games
+- **Tournament Mode** - Single elimination brackets
+- **Spectator Mode** - Watch live games
+- **Replay System** - Record and playback games
 
-#### 🌐 Multiplayer Architecture
-- **Socket.io Events**: Real-time communication between clients and server
-- **State Synchronization**: Centralized game state with client predictions
-- **Connection Management**: Automatic reconnection and player slot reuse
-- **Scalable Design**: Supports up to 8 concurrent players
+### Game Modes
+- **Standard** - Classic EvoChess experience
+- **Blitz** - 1-3 second move timers
+- **Custom** - Adjustable rules and evolution rates
 
-#### 🎨 3D Rendering
-- **Three.js Engine**: WebGL-based 3D graphics
-- **GLTF Models**: Professional 3D models for all piece types
-- **Orbit Controls**: Smooth camera navigation around the sphere
-- **Visual Effects**: Battle animations, evolution effects, and UI highlights
+### AI Opponents
+- **4 Difficulty Levels** - Easy, Medium, Hard, Expert
+- **Distinct Personalities** - Aggressive, Defensive, Balanced, Evolution-focused
+- **Dynamic Addition** - Add/remove AI players anytime
+
+### Progression Systems
+- **Statistics Tracking** - Win rate, favorite pieces, battle stats
+- **Achievements** - Unlock rewards for special accomplishments
+- **Leaderboards** - Global and seasonal rankings
 
 ## 🔧 Development
 
 ### Available Scripts
 
 ```bash
-# Development with auto-reload
-npm run dev
-
-# Production server
-npm start
-
-# Install dependencies
-npm install
+npm run dev      # Start development server
+npm start        # Start production server
+npm test         # Run tests (when implemented)
 ```
 
-### Development Workflow
+### Core Systems Overview
 
-1. **Phase 1**: Foundation & Core Systems ✅
-2. **Phase 2**: Battle Contest System ✅
-3. **Phase 3**: Movement & Interaction ✅
-4. **Phase 4**: Advanced Movement Mechanics (In Progress)
-5. **Phase 5**: Sphere Geometry & Polar Systems
-6. **Phase 6**: Evolution & Strategy Systems
-7. **Phase 7**: Timing & Collision Systems
-8. **Phase 8**: Victory & Communication
-9. **Phase 9**: Visual Polish & Effects
-10. **Phase 10**: Balance & Testing
+1. **Grid System** (`gameConfig.js`)
+   - 20×8 spherical grid mapping
+   - Longitude wraparound logic
+   - Distance calculations on sphere
 
-### Current Status
+2. **Real-time System** (`timingManager.js`)
+   - Individual player cooldowns
+   - Move queuing and validation
+   - Collision detection (500ms window)
 
-- **✅ Complete**: Core multiplayer functionality, battle system, 3D models
-- **🔄 In Progress**: Advanced movement mechanics (Splitter splitting)
-- **📋 Planned**: Evolution banking, timing systems, visual polish
+3. **Evolution System** (`evolutionManager.js`)
+   - Point banking and spending
+   - Evolution path validation
+   - Time-alive tracking
 
-## 🎯 Game Design Philosophy
-
-### Core Principles
-
-1. **Spatial Innovation**: Breaking the 2D chess paradigm with spherical geometry
-2. **Dynamic Evolution**: Pieces grow stronger through strategic gameplay
-3. **Balanced Asymmetry**: Different starting positions create unique strategies
-4. **Real-time Tension**: Simultaneous moves create pressure and excitement
-5. **Strategic Depth**: Multiple paths to victory reward different playstyles
-
-### Unique Innovations
-
-- **Spherical Wraparound**: Traditional chess pieces adapted for globe geometry
-- **Evolution Banking**: Strategic choice between immediate upgrades and long-term planning
-- **Battle Contests**: Defender choice adds psychological strategy layer
-- **Polar Mechanics**: Special movement rules at sphere poles create tactical opportunities
-- **Simultaneous Play**: Real-time elements without losing chess's strategic depth
+4. **Battle System** (`pieceTypes.js`)
+   - Point-based resolution
+   - Contest mechanics
+   - Dice roll calculations
 
 ## 🤝 Contributing
 
-We welcome contributions to BrainLift Globe Chess! Here's how to get started:
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
 
-1. **Fork the repository**
-2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
-3. **Follow the development workflow** outlined above
-4. **Submit a pull request** with detailed description
+### Development Workflow
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit changes (`git commit -m 'Add AmazingFeature'`)
+4. Push to branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-### Code Style Guidelines
+### Code Style
+- Use ES6+ features
+- Follow existing patterns
+- Comment complex logic
+- Test thoroughly
 
-- Use modern ES6+ JavaScript features
-- Follow functional programming patterns where appropriate
-- Maintain consistent naming conventions (camelCase for variables, PascalCase for classes)
-- Write self-documenting code with descriptive variable names
-- Implement proper error handling and logging
-
-## 📈 Performance & Optimization
+## 📊 Performance
 
 ### Current Optimizations
+- Geometry instancing for pieces
+- Frustum culling for off-screen objects
+- Delta compression for network updates
+- Cached materials and textures
 
-- **Model Caching**: GLB models loaded once and reused
-- **Efficient Raycasting**: Optimized click detection system
-- **State Management**: Centralized game state with minimal network traffic
-- **Geometry Optimization**: Efficient sphere coordinate calculations
+### System Requirements
+- **Minimum**: 2GB RAM, WebGL-capable browser
+- **Recommended**: 4GB RAM, dedicated graphics
+- **Network**: Stable broadband connection
 
-### Future Optimizations
+## 🐛 Known Issues
 
-- **WebGL Instancing**: For rendering multiple identical pieces
-- **Frustum Culling**: Hide pieces outside camera view
-- **Level of Detail**: Reduce model complexity at distance
-- **Compression**: Optimize network protocol for larger games
-
-## 🐛 Known Issues & Limitations
-
-### Current Limitations
-
-- **Player Limit**: Currently supports up to 8 players
-- **Mobile Support**: Optimized for desktop browsers (mobile support planned)
-- **Reconnection**: Basic reconnection logic (advanced features planned)
-
-### Planned Improvements
-
-- **Mobile Responsive**: Touch controls and mobile UI
-- **Spectator Mode**: Watch games without participating
-- **Replay System**: Record and replay game sessions
-- **AI Opponents**: Computer players for practice games
+- Mobile support is in development
+- Performance may degrade with 8 players on older systems
+- Some browsers may have WebGL compatibility issues
 
 ## 📜 License
 
@@ -274,20 +227,18 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- **Three.js Community**: For the excellent 3D graphics library
-- **Socket.io Team**: For seamless real-time multiplayer capabilities
-- **Chess Community**: For inspiring the evolution of this classic game
-- **WebGL Contributors**: For making 3D web graphics accessible
+- Built during **G2P5 Game Week** - proving AI-augmented development
+- **[Meshy.ai](https://www.meshy.ai/)** for AI-powered 3D model generation
+- Three.js community for excellent documentation
+- Socket.io team for real-time infrastructure
+- All contributors and playtesters
 
-## 📞 Contact & Support
+## 📞 Contact & Links
 
-- **Developer**: Trevor Alpert
-- **Project Repository**: [GitHub - Chess Evolution](https://github.com/trevoralpert/Chess-Evolution)
-- **Issues**: Report bugs and request features via GitHub Issues
-- **Documentation**: See `/localdocs/` folder for detailed development notes
+- **GitHub**: [https://github.com/trevoralpert/Chess-Evolution](https://github.com/trevoralpert/Chess-Evolution)
+- **Discord**: Coming soon
+- **Website**: Coming soon
 
 ---
 
-**Ready to revolutionize chess?** Join a game and experience strategy in three dimensions! 🌍♟️
-
-*"Stop playing on squares. Start playing on spheres."* - BrainLift Philosophy
+**Welcome to the sphere. Your evolution awaits.** 🌍♟️
