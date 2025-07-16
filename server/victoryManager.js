@@ -1,7 +1,8 @@
 class VictoryManager {
-  constructor(io, gameState) {
+  constructor(io, gameState, timingManager = null) {
     this.io = io;
     this.gameState = gameState;
+    this.timingManager = timingManager;
     this.victoryConditions = {
       lastPlayerStanding: true,
       territoryControl: true,
@@ -184,12 +185,29 @@ class VictoryManager {
     const players = Object.values(this.gameState.players);
     const alivePlayers = players.filter(p => p.pieces && p.pieces.length > 0);
     
+    console.log(`Victory check: ${alivePlayers.length} alive players, ${Object.keys(this.gameState.players).length} total players`);
+    
+    // Don't check victory conditions if there's only one player and game just started
+    // This prevents immediate victory declaration when only one player joins
     if (alivePlayers.length <= 1) {
-      // Last player standing
-      if (alivePlayers.length === 1) {
-        this.declareVictory(alivePlayers[0], 'last_player_standing');
+      // Only declare victory if we had multiple players before (actual game happened)
+      // or if the game has been running for some time
+      const totalPlayers = Object.keys(this.gameState.players).length;
+      const gameTime = this.gameState.gameStartTime ? (Date.now() - this.gameState.gameStartTime) : 0;
+      const hasGameStarted = gameTime > 10000; // 10 seconds
+      
+      console.log(`Single player check: totalPlayers=${totalPlayers}, gameTime=${gameTime}ms, hasGameStarted=${hasGameStarted}`);
+      
+      if (totalPlayers > 1 || hasGameStarted) {
+        console.log(`Declaring victory: totalPlayers > 1 (${totalPlayers > 1}) OR hasGameStarted (${hasGameStarted})`);
+        // Last player standing
+        if (alivePlayers.length === 1) {
+          this.declareVictory(alivePlayers[0], 'last_player_standing');
+        } else {
+          this.declareVictory(null, 'draw');
+        }
       } else {
-        this.declareVictory(null, 'draw');
+        console.log(`Not declaring victory: game just started with single player`);
       }
       return;
     }
@@ -346,6 +364,11 @@ class VictoryManager {
     // Stop victory checks
     if (this.victoryCheckInterval) {
       clearInterval(this.victoryCheckInterval);
+    }
+
+    // Stop all timers to end the game
+    if (this.timingManager) {
+      this.timingManager.stopAllTimers();
     }
 
     if (!victoryPlayer) {

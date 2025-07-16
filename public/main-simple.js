@@ -49,6 +49,312 @@ document.body.appendChild(renderer.domElement);
 
 console.log('Three.js scene initialized successfully');
 
+// Performance Optimization System
+class PerformanceOptimizer {
+  constructor() {
+    this.modelCache = new Map(); // Cache for GLB models
+    this.geometryCache = new Map(); // Cache for geometries
+    this.materialCache = new Map(); // Cache for materials
+    this.pooledObjects = new Map(); // Object pools for reuse
+    this.lastGameState = null; // For delta updates
+    this.frameCount = 0;
+    this.lastFPSUpdate = 0;
+    this.fps = 0;
+    this.memoryUsage = 0;
+    this.renderQueue = []; // Queue for batched updates
+    this.updateThrottles = new Map(); // Throttled update functions
+    
+    // Initialize performance monitoring
+    this.initPerformanceMonitoring();
+  }
+  
+  initPerformanceMonitoring() {
+    // FPS monitoring
+    setInterval(() => {
+      const now = performance.now();
+      const deltaTime = now - this.lastFPSUpdate;
+      this.fps = Math.round(1000 / deltaTime * this.frameCount);
+      this.frameCount = 0;
+      this.lastFPSUpdate = now;
+      
+      // Memory usage monitoring
+      if (performance.memory) {
+        this.memoryUsage = Math.round(performance.memory.usedJSHeapSize / 1024 / 1024);
+      }
+      
+      // Update performance UI
+      this.updatePerformanceUI();
+    }, 1000);
+  }
+  
+  updatePerformanceUI() {
+    const perfElement = document.getElementById('performance-info');
+    if (perfElement) {
+      perfElement.innerHTML = `
+        <div>FPS: ${this.fps}</div>
+        <div>Memory: ${this.memoryUsage}MB</div>
+        <div>Objects: ${scene.children.length}</div>
+        <div>Pieces: ${Object.keys(pieceMeshes || {}).length}</div>
+      `;
+    }
+  }
+  
+  // Throttled update functions
+  createThrottledFunction(key, func, delay = 100) {
+    if (!this.updateThrottles.has(key)) {
+      this.updateThrottles.set(key, {
+        timeout: null,
+        lastCall: 0
+      });
+    }
+    
+    const throttle = this.updateThrottles.get(key);
+    const now = Date.now();
+    
+    if (now - throttle.lastCall >= delay) {
+      throttle.lastCall = now;
+      func();
+    } else {
+      clearTimeout(throttle.timeout);
+      throttle.timeout = setTimeout(() => {
+        throttle.lastCall = Date.now();
+        func();
+      }, delay - (now - throttle.lastCall));
+    }
+  }
+  
+  // Model caching system
+  async getCachedModel(pieceType) {
+    if (this.modelCache.has(pieceType)) {
+      return this.modelCache.get(pieceType);
+    }
+    
+    try {
+      const model = await loadModel(pieceType);
+      this.modelCache.set(pieceType, model);
+      return model;
+    } catch (error) {
+      console.warn(`Failed to load model for ${pieceType}:`, error);
+      return null;
+    }
+  }
+  
+  // Geometry caching
+  getCachedGeometry(type, params) {
+    const key = `${type}_${JSON.stringify(params)}`;
+    if (this.geometryCache.has(key)) {
+      return this.geometryCache.get(key);
+    }
+    
+    let geometry;
+    switch (type) {
+      case 'sphere':
+        geometry = new THREE.SphereGeometry(params.radius, params.widthSegments, params.heightSegments);
+        break;
+      case 'box':
+        geometry = new THREE.BoxGeometry(params.width, params.height, params.depth);
+        break;
+      case 'cylinder':
+        geometry = new THREE.CylinderGeometry(params.radiusTop, params.radiusBottom, params.height);
+        break;
+      default:
+        return null;
+    }
+    
+    this.geometryCache.set(key, geometry);
+    return geometry;
+  }
+  
+  // Material caching
+  getCachedMaterial(type, params) {
+    const key = `${type}_${JSON.stringify(params)}`;
+    if (this.materialCache.has(key)) {
+      return this.materialCache.get(key);
+    }
+    
+    let material;
+    switch (type) {
+      case 'standard':
+        material = new THREE.MeshStandardMaterial(params);
+        break;
+      case 'basic':
+        material = new THREE.MeshBasicMaterial(params);
+        break;
+      case 'lambert':
+        material = new THREE.MeshLambertMaterial(params);
+        break;
+      default:
+        return null;
+    }
+    
+    this.materialCache.set(key, material);
+    return material;
+  }
+  
+  // Object pooling
+  getPooledObject(type) {
+    const pool = this.pooledObjects.get(type) || [];
+    if (pool.length > 0) {
+      return pool.pop();
+    }
+    return null;
+  }
+  
+  returnToPool(type, object) {
+    // Reset object state
+    object.position.set(0, 0, 0);
+    object.rotation.set(0, 0, 0);
+    object.scale.set(1, 1, 1);
+    object.visible = true;
+    
+    const pool = this.pooledObjects.get(type) || [];
+    pool.push(object);
+    this.pooledObjects.set(type, pool);
+  }
+  
+  // Delta update system
+  processDeltaUpdate(newGameState) {
+    if (!this.lastGameState) {
+      this.lastGameState = JSON.parse(JSON.stringify(newGameState));
+      return { fullUpdate: true };
+    }
+    
+    const delta = {
+      addedPieces: [],
+      removedPieces: [],
+      movedPieces: [],
+      updatedPlayers: []
+    };
+    
+    // Check for piece changes
+    const oldPieces = this.lastGameState.pieces || {};
+    const newPieces = newGameState.pieces || {};
+    
+    // Find removed pieces
+    Object.keys(oldPieces).forEach(pieceId => {
+      if (!newPieces[pieceId]) {
+        delta.removedPieces.push(pieceId);
+      }
+    });
+    
+    // Find added and moved pieces
+    Object.keys(newPieces).forEach(pieceId => {
+      if (!oldPieces[pieceId]) {
+        delta.addedPieces.push(newPieces[pieceId]);
+      } else {
+        const oldPiece = oldPieces[pieceId];
+        const newPiece = newPieces[pieceId];
+        
+        if (oldPiece.row !== newPiece.row || 
+            oldPiece.col !== newPiece.col ||
+            oldPiece.type !== newPiece.type) {
+          delta.movedPieces.push(newPiece);
+        }
+      }
+    });
+    
+    // Check for player changes
+    const oldPlayers = this.lastGameState.players || {};
+    const newPlayers = newGameState.players || {};
+    
+    Object.keys(newPlayers).forEach(playerId => {
+      if (!oldPlayers[playerId] || 
+          JSON.stringify(oldPlayers[playerId]) !== JSON.stringify(newPlayers[playerId])) {
+        delta.updatedPlayers.push(newPlayers[playerId]);
+      }
+    });
+    
+    this.lastGameState = JSON.parse(JSON.stringify(newGameState));
+    return delta;
+  }
+  
+  // Batched rendering updates
+  queueRenderUpdate(type, data) {
+    this.renderQueue.push({ type, data, timestamp: Date.now() });
+  }
+  
+  processRenderQueue() {
+    const batch = this.renderQueue.splice(0, 10); // Process 10 items per frame
+    
+    batch.forEach(item => {
+      switch (item.type) {
+        case 'piece_update':
+          this.updatePieceEfficient(item.data);
+          break;
+        case 'piece_remove':
+          this.removePieceEfficient(item.data);
+          break;
+        case 'effect_create':
+          this.createEffectEfficient(item.data);
+          break;
+      }
+    });
+    
+    if (this.renderQueue.length > 0) {
+      requestAnimationFrame(() => this.processRenderQueue());
+    }
+  }
+  
+  // Efficient piece updates
+  updatePieceEfficient(piece) {
+    const mesh = pieceMeshes[piece.id];
+    if (mesh) {
+      const position = getWorldPosition(piece.row, piece.col);
+      mesh.position.set(position.x, position.y, position.z);
+      mesh.userData.piece = piece;
+    }
+  }
+  
+  removePieceEfficient(pieceId) {
+    const mesh = pieceMeshes[pieceId];
+    if (mesh) {
+      scene.remove(mesh);
+      
+      // Dispose of geometries and materials
+      if (mesh.geometry) {
+        mesh.geometry.dispose();
+      }
+      if (mesh.material) {
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach(mat => mat.dispose());
+        } else {
+          mesh.material.dispose();
+        }
+      }
+      
+      delete pieceMeshes[pieceId];
+    }
+  }
+  
+  // Memory cleanup
+  cleanup() {
+    // Clear caches
+    this.modelCache.clear();
+    this.geometryCache.forEach(geometry => geometry.dispose());
+    this.geometryCache.clear();
+    this.materialCache.forEach(material => material.dispose());
+    this.materialCache.clear();
+    
+    // Clear pools
+    this.pooledObjects.forEach(pool => {
+      pool.forEach(obj => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+      });
+    });
+    this.pooledObjects.clear();
+    
+    // Clear throttles
+    this.updateThrottles.forEach(throttle => {
+      if (throttle.timeout) clearTimeout(throttle.timeout);
+    });
+    this.updateThrottles.clear();
+  }
+}
+
+// Initialize performance optimizer
+const performanceOptimizer = new PerformanceOptimizer();
+
 // Mouse down tracking for click detection (needed regardless of camera controls)
 let mouseDownTime = 0;
 window.addEventListener('mousedown', (e) => {
@@ -488,9 +794,25 @@ socket.on('game-full', () => {
 });
 
 socket.on('game-state-update', async (newGameState) => {
-  gameState = newGameState;
-  await updateVisuals();
-  updateUI();
+  // Process delta updates for performance
+  const delta = performanceOptimizer.processDeltaUpdate(newGameState);
+  
+  if (delta.fullUpdate) {
+    // Full update on first load
+    gameState = newGameState;
+    await updateVisuals();
+    updateUI();
+  } else {
+    // Delta update - only update changed elements
+    gameState = newGameState;
+    await updateVisualsDelta(delta);
+    
+    // Throttled UI updates
+    performanceOptimizer.createThrottledFunction('ui-update', () => {
+      updateUI();
+    }, 200);
+  }
+  
   console.log('Game state updated:', gameState);
   console.log('Players in game state:', Object.keys(gameState.players));
   console.log('My socket ID:', socket.id);
@@ -1291,8 +1613,7 @@ async function updateVisuals() {
   // Remove pieces that no longer exist
   Object.keys(pieceMeshes).forEach(pieceId => {
     if (!gameState.pieces[pieceId]) {
-      scene.remove(pieceMeshes[pieceId]);
-      delete pieceMeshes[pieceId];
+      performanceOptimizer.removePieceEfficient(pieceId);
     }
   });
   
@@ -1300,12 +1621,12 @@ async function updateVisuals() {
   const piecePromises = Object.values(gameState.pieces).map(async piece => {
     if (!pieceMeshes[piece.id]) {
       try {
-        await createPieceMesh(piece);
+        await createPieceMeshOptimized(piece);
       } catch (error) {
         console.error(`Failed to create mesh for piece ${piece.id}:`, error);
       }
     } else {
-      updatePieceMesh(piece);
+      updatePieceMeshOptimized(piece);
     }
   });
   
@@ -1313,37 +1634,67 @@ async function updateVisuals() {
   await Promise.all(piecePromises);
 }
 
+// Delta update function for better performance
+async function updateVisualsDelta(delta) {
+  // Remove pieces
+  delta.removedPieces.forEach(pieceId => {
+    performanceOptimizer.removePieceEfficient(pieceId);
+  });
+  
+  // Add new pieces
+  const addPromises = delta.addedPieces.map(async piece => {
+    try {
+      await createPieceMeshOptimized(piece);
+    } catch (error) {
+      console.error(`Failed to create mesh for piece ${piece.id}:`, error);
+    }
+  });
+  
+  // Update moved pieces
+  delta.movedPieces.forEach(piece => {
+    performanceOptimizer.updatePieceEfficient(piece);
+  });
+  
+  // Wait for all additions to complete
+  await Promise.all(addPromises);
+}
+
 async function createPieceMesh(piece) {
+  // Use optimized version
+  return await createPieceMeshOptimized(piece);
+}
+
+async function createPieceMeshOptimized(piece) {
   const player = gameState.players[piece.playerId];
   const position = getWorldPosition(piece.row, piece.col);
   
   let mesh;
   
-  // Try to load GLB model first
+  // Try to load GLB model with caching
   try {
-    const gltf = await loadModel(piece.type);
+    const gltf = await performanceOptimizer.getCachedModel(piece.type);
     if (gltf && gltf.scene) {
-      console.log(`Using GLB model for ${piece.type}`);
+      console.log(`Using cached GLB model for ${piece.type}`);
       
       // Clone the model scene
       mesh = gltf.scene.clone();
       
-      // Apply player color tinting to materials
+      // Apply player color tinting to materials with caching
       const playerColor = getColorFromString(player.color);
       mesh.traverse((child) => {
         if (child.isMesh && child.material) {
-          // Create a copy of the material to avoid affecting other instances
+          // Create material and cache it
           if (Array.isArray(child.material)) {
             child.material = child.material.map(mat => {
               const newMat = mat.clone();
-              newMat.color.multiplyScalar(0.7); // Darken the base color
-              newMat.color.lerp(new THREE.Color(playerColor), 0.3); // Blend with player color
+              newMat.color.multiplyScalar(0.7);
+              newMat.color.lerp(new THREE.Color(playerColor), 0.3);
               return newMat;
             });
           } else {
             child.material = child.material.clone();
-            child.material.color.multiplyScalar(0.7); // Darken the base color
-            child.material.color.lerp(new THREE.Color(playerColor), 0.3); // Blend with player color
+            child.material.color.multiplyScalar(0.7);
+            child.material.color.lerp(new THREE.Color(playerColor), 0.3);
           }
         }
       });
@@ -1365,7 +1716,7 @@ async function createPieceMesh(piece) {
     // Use piece-specific color if available, otherwise use player color
     const pieceColor = getPieceColor(piece.type) || getColorFromString(player.color);
     
-    const material = new THREE.MeshStandardMaterial({
+    const material = performanceOptimizer.getCachedMaterial('standard', {
       color: pieceColor,
       metalness: 0.3,
       roughness: 0.7
@@ -1387,7 +1738,36 @@ async function createPieceMesh(piece) {
     console.log(`${piece.symbol} King at grid (${piece.row}, ${piece.col})`);
   }
   
-  // Add text label with piece symbol
+  // Add text label with piece symbol (cached)
+  const labelTexture = createCachedTextLabel(piece.symbol);
+  const labelMaterial = new THREE.SpriteMaterial({ map: labelTexture });
+  const label = new THREE.Sprite(labelMaterial);
+  label.scale.set(0.5, 0.5, 1);
+  label.position.set(0, 0.3, 0);
+  
+  mesh.add(label);
+  scene.add(mesh);
+  pieceMeshes[piece.id] = mesh;
+}
+
+// Optimized piece update function
+function updatePieceMeshOptimized(piece) {
+  const mesh = pieceMeshes[piece.id];
+  if (mesh) {
+    const position = getWorldPosition(piece.row, piece.col);
+    mesh.position.set(position.x, position.y, position.z);
+    mesh.userData.piece = piece;
+  }
+}
+
+// Cached text label creation
+const textLabelCache = new Map();
+
+function createCachedTextLabel(symbol) {
+  if (textLabelCache.has(symbol)) {
+    return textLabelCache.get(symbol);
+  }
+  
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
   canvas.width = 64;
@@ -1396,17 +1776,12 @@ async function createPieceMesh(piece) {
   context.fillStyle = 'white';
   context.font = '32px Arial';
   context.textAlign = 'center';
-  context.fillText(piece.symbol, 32, 40);
+  context.fillText(symbol, 32, 40);
   
   const texture = new THREE.CanvasTexture(canvas);
-  const labelMaterial = new THREE.SpriteMaterial({ map: texture });
-  const label = new THREE.Sprite(labelMaterial);
-  label.scale.set(0.5, 0.5, 1);
-  label.position.set(0, 0.3, 0);
+  textLabelCache.set(symbol, texture);
   
-  mesh.add(label);
-  scene.add(mesh);
-  pieceMeshes[piece.id] = mesh;
+  return texture;
 }
 
 // Helper function to get appropriate scale for GLB models
@@ -2559,6 +2934,13 @@ function onMouseClick(event) {
           }
         }
         if (move.type === 'split') {
+          // Check if there's enough time left to make a move (at least 2 seconds)
+          if (currentTimer && currentTimer.timeLeft < 2000) {
+            gameInfoEl.textContent = `Not enough time left to make a move!`;
+            console.log('Move blocked - less than 2 seconds remaining');
+            return;
+          }
+
           // Send split command to server
           socket.emit('split-piece', {
             pieceId: currentSelectedPieceId,
@@ -2571,6 +2953,13 @@ function onMouseClick(event) {
           console.log(`Splitting piece ${currentSelectedPieceId} to (${move.row}, ${move.col})`);
 
         } else {
+          // Check if there's enough time left to make a move (at least 2 seconds)
+          if (currentTimer && currentTimer.timeLeft < 2000) {
+            gameInfoEl.textContent = `Not enough time left to make a move!`;
+            console.log('Move blocked - less than 2 seconds remaining');
+            return;
+          }
+
           // Send regular move command to server
           socket.emit('move-piece', {
             pieceId: currentSelectedPieceId,
@@ -2613,6 +3002,40 @@ window.addEventListener('contextmenu', (event) => {
 });
 window.addEventListener('mousedown', onMouseClick);
 
+// Touch event handling for mobile
+let touchStartTime = 0;
+let touchStartPos = { x: 0, y: 0 };
+
+function onTouchStart(e) {
+  e.preventDefault();
+  touchStartTime = Date.now();
+  const touch = e.touches[0];
+  
+  touchStartPos.x = touch.clientX;
+  touchStartPos.y = touch.clientY;
+}
+
+function onTouchEnd(e) {
+  e.preventDefault();
+  const touchDuration = Date.now() - touchStartTime;
+  const touch = e.changedTouches[0];
+  const touchEndPos = { x: touch.clientX, y: touch.clientY };
+  
+  // Calculate distance moved
+  const deltaX = touchEndPos.x - touchStartPos.x;
+  const deltaY = touchEndPos.y - touchStartPos.y;
+  const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+  
+  // If touch was brief and didn't move much, treat as tap
+  if (touchDuration < 300 && distance < 20) {
+    onMouseClick({ clientX: touchEndPos.x, clientY: touchEndPos.y });
+  }
+}
+
+// Add touch event listeners
+window.addEventListener('touchstart', onTouchStart, { passive: false });
+window.addEventListener('touchend', onTouchEnd, { passive: false });
+
 // Handle window resize
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -2623,6 +3046,9 @@ window.addEventListener('resize', () => {
 // Animation loop
 function animate() {
   requestAnimationFrame(animate);
+  
+  // Update frame counter for performance monitoring
+  performanceOptimizer.frameCount++;
   
   if (controls) {
     controls.update();
@@ -3417,6 +3843,45 @@ socket.on('leaderboard', (data) => {
   displayLeaderboard(currentLeaderboard, data.category);
 });
 
+// Delta update handlers for better performance
+socket.on('piece-update', (data) => {
+  const { pieceId, piece } = data;
+  if (gameState.pieces) {
+    gameState.pieces[pieceId] = piece;
+    performanceOptimizer.updatePieceEfficient(piece);
+    
+    // Throttled UI update
+    performanceOptimizer.createThrottledFunction('ui-update', () => {
+      updateUI();
+    }, 200);
+  }
+});
+
+socket.on('piece-removed', (data) => {
+  const { pieceId } = data;
+  if (gameState.pieces && gameState.pieces[pieceId]) {
+    delete gameState.pieces[pieceId];
+    performanceOptimizer.removePieceEfficient(pieceId);
+    
+    // Throttled UI update
+    performanceOptimizer.createThrottledFunction('ui-update', () => {
+      updateUI();
+    }, 200);
+  }
+});
+
+socket.on('player-update', (data) => {
+  const { playerId, player } = data;
+  if (gameState.players) {
+    gameState.players[playerId] = player;
+    
+    // Throttled UI update
+    performanceOptimizer.createThrottledFunction('ui-update', () => {
+      updateUI();
+    }, 200);
+  }
+});
+
 socket.on('achievements', (data) => {
   playerAchievements = data.achievements;
   displayAchievements(playerAchievements);
@@ -3766,3 +4231,547 @@ animate();
 
 console.log('Globe Chess client fully initialized');
 console.log('Click on pieces to see valid moves'); 
+
+// Performance Optimization System (duplicate removed)
+
+// Enhanced Visual Effects System
+class VisualEffectsManager {
+  constructor(scene, renderer) {
+    this.scene = scene;
+    this.renderer = renderer;
+    this.activeEffects = new Map();
+    this.animationQueue = [];
+    this.particleSystem = null;
+    this.transitionManager = new TransitionManager();
+    
+    // Initialize particle system
+    this.initParticleSystem();
+  }
+  
+  initParticleSystem() {
+    // Create particle system for various effects
+    this.particleSystem = {
+      pool: [],
+      active: [],
+      maxParticles: 1000
+    };
+    
+    // Pre-create particle pool
+    for (let i = 0; i < this.particleSystem.maxParticles; i++) {
+      const particle = this.createParticle();
+      this.particleSystem.pool.push(particle);
+    }
+  }
+  
+  createParticle() {
+    const geometry = new THREE.SphereGeometry(0.02, 4, 4);
+    const material = new THREE.MeshBasicMaterial({ 
+      color: 0xffffff,
+      transparent: true,
+      opacity: 1
+    });
+    
+    const particle = new THREE.Mesh(geometry, material);
+    particle.visible = false;
+    
+    // Add particle properties
+    particle.userData = {
+      velocity: new THREE.Vector3(),
+      life: 1.0,
+      maxLife: 1.0,
+      size: 0.02,
+      color: new THREE.Color(0xffffff)
+    };
+    
+    this.scene.add(particle);
+    return particle;
+  }
+  
+  getParticle() {
+    if (this.particleSystem.pool.length > 0) {
+      const particle = this.particleSystem.pool.pop();
+      this.particleSystem.active.push(particle);
+      return particle;
+    }
+    return null;
+  }
+  
+  returnParticle(particle) {
+    particle.visible = false;
+    particle.userData.life = 1.0;
+    particle.userData.velocity.set(0, 0, 0);
+    
+    const index = this.particleSystem.active.indexOf(particle);
+    if (index > -1) {
+      this.particleSystem.active.splice(index, 1);
+      this.particleSystem.pool.push(particle);
+    }
+  }
+  
+  // Enhanced piece movement with smooth transitions
+  animatePieceMovement(piece, fromPos, toPos, duration = 1000) {
+    const mesh = pieceMeshes[piece.id];
+    if (!mesh) return;
+    
+    // Create smooth curve for movement
+    const curve = new THREE.QuadraticBezierCurve3(
+      fromPos,
+      new THREE.Vector3(
+        (fromPos.x + toPos.x) / 2,
+        Math.max(fromPos.y, toPos.y) + 0.5, // Arc above surface
+        (fromPos.z + toPos.z) / 2
+      ),
+      toPos
+    );
+    
+    const startTime = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Smooth easing
+      const easeProgress = this.easeInOutCubic(progress);
+      
+      // Update position along curve
+      const position = curve.getPoint(easeProgress);
+      mesh.position.copy(position);
+      
+      // Add rotation animation
+      mesh.rotation.y += 0.1;
+      
+      // Add scale animation
+      const scale = 1 + Math.sin(progress * Math.PI) * 0.1;
+      mesh.scale.set(scale, scale, scale);
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        // Reset scale
+        mesh.scale.set(1, 1, 1);
+      }
+    };
+    
+    animate();
+  }
+  
+  // Enhanced battle effects with particles
+  createBattleEffect(pos1, pos2, winner, intensity = 1.0) {
+    // Create lightning effect
+    this.createLightningEffect(pos1, pos2, intensity);
+    
+    // Create particle explosion
+    this.createParticleExplosion(pos1, 0xff4444, 20 * intensity);
+    this.createParticleExplosion(pos2, 0x4444ff, 20 * intensity);
+    
+    // Create shockwave
+    this.createShockwave(winner === 'pos1' ? pos1 : pos2, intensity);
+    
+    // Screen shake effect
+    this.createScreenShake(intensity * 0.5);
+  }
+  
+  createLightningEffect(pos1, pos2, intensity) {
+    const segments = 20;
+    const points = [];
+    
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      const x = pos1.x + (pos2.x - pos1.x) * t + (Math.random() - 0.5) * 0.2 * intensity;
+      const y = pos1.y + (pos2.y - pos1.y) * t + (Math.random() - 0.5) * 0.2 * intensity;
+      const z = pos1.z + (pos2.z - pos1.z) * t + (Math.random() - 0.5) * 0.2 * intensity;
+      
+      points.push(new THREE.Vector3(x, y, z));
+    }
+    
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      opacity: 0.8,
+      transparent: true,
+      linewidth: 3
+    });
+    
+    const lightning = new THREE.Line(geometry, material);
+    this.scene.add(lightning);
+    
+    // Animate lightning
+    const startTime = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = elapsed / 300; // 300ms duration
+      
+      if (progress < 1) {
+        // Flickering effect
+        material.opacity = 0.8 * (1 - progress) * (Math.random() * 0.5 + 0.5);
+        requestAnimationFrame(animate);
+      } else {
+        this.scene.remove(lightning);
+        geometry.dispose();
+        material.dispose();
+      }
+    };
+    
+    animate();
+  }
+  
+  createParticleExplosion(center, color, count) {
+    for (let i = 0; i < count; i++) {
+      const particle = this.getParticle();
+      if (!particle) continue;
+      
+      particle.position.copy(center);
+      particle.visible = true;
+      
+      // Random velocity
+      const speed = 0.02 + Math.random() * 0.08;
+      particle.userData.velocity.set(
+        (Math.random() - 0.5) * speed,
+        Math.random() * speed,
+        (Math.random() - 0.5) * speed
+      );
+      
+      // Set color and life
+      particle.material.color.setHex(color);
+      particle.userData.life = 1.0;
+      particle.userData.maxLife = 1.0 + Math.random() * 2.0;
+    }
+  }
+  
+  createShockwave(center, intensity) {
+    const geometry = new THREE.RingGeometry(0, 0.1, 16);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.6,
+      side: THREE.DoubleSide
+    });
+    
+    const shockwave = new THREE.Mesh(geometry, material);
+    shockwave.position.copy(center);
+    shockwave.lookAt(center.clone().add(new THREE.Vector3(0, 1, 0)));
+    
+    this.scene.add(shockwave);
+    
+    // Animate shockwave
+    const startTime = Date.now();
+    const maxRadius = 2.0 * intensity;
+    const duration = 800;
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = elapsed / duration;
+      
+      if (progress < 1) {
+        const radius = maxRadius * progress;
+        shockwave.scale.set(radius, radius, 1);
+        material.opacity = 0.6 * (1 - progress);
+        
+        requestAnimationFrame(animate);
+      } else {
+        this.scene.remove(shockwave);
+        geometry.dispose();
+        material.dispose();
+      }
+    };
+    
+    animate();
+  }
+  
+  createScreenShake(intensity) {
+    const originalPosition = camera.position.clone();
+    const shakeIntensity = 0.02 * intensity;
+    const duration = 300;
+    const startTime = Date.now();
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = elapsed / duration;
+      
+      if (progress < 1) {
+        const shakeAmount = shakeIntensity * (1 - progress);
+        camera.position.x = originalPosition.x + (Math.random() - 0.5) * shakeAmount;
+        camera.position.y = originalPosition.y + (Math.random() - 0.5) * shakeAmount;
+        camera.position.z = originalPosition.z + (Math.random() - 0.5) * shakeAmount;
+        
+        requestAnimationFrame(animate);
+      } else {
+        camera.position.copy(originalPosition);
+      }
+    };
+    
+    animate();
+  }
+  
+  // Enhanced evolution effects
+  createEvolutionEffect(position, fromType, toType) {
+    // Create spiral particle effect
+    this.createSpiralEffect(position, 0x00ff00, 1500);
+    
+    // Create type transition effect
+    this.createTypeTransitionEffect(position, fromType, toType);
+    
+    // Create radial burst
+    this.createRadialBurst(position, 0x00ff00, 30);
+  }
+  
+  createSpiralEffect(center, color, duration) {
+    const particleCount = 50;
+    const spiralParticles = [];
+    
+    for (let i = 0; i < particleCount; i++) {
+      const particle = this.getParticle();
+      if (!particle) continue;
+      
+      particle.position.copy(center);
+      particle.visible = true;
+      particle.material.color.setHex(color);
+      
+      // Spiral parameters
+      particle.userData.spiralAngle = (i / particleCount) * Math.PI * 4;
+      particle.userData.spiralRadius = 0;
+      particle.userData.spiralSpeed = 0.1 + Math.random() * 0.1;
+      particle.userData.spiralHeight = 0;
+      
+      spiralParticles.push(particle);
+    }
+    
+    const startTime = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = elapsed / duration;
+      
+      if (progress < 1) {
+        spiralParticles.forEach(particle => {
+          if (!particle.visible) return;
+          
+          // Update spiral motion
+          particle.userData.spiralAngle += particle.userData.spiralSpeed;
+          particle.userData.spiralRadius = progress * 0.8;
+          particle.userData.spiralHeight = progress * 1.5;
+          
+          // Calculate position
+          const x = center.x + Math.cos(particle.userData.spiralAngle) * particle.userData.spiralRadius;
+          const y = center.y + particle.userData.spiralHeight;
+          const z = center.z + Math.sin(particle.userData.spiralAngle) * particle.userData.spiralRadius;
+          
+          particle.position.set(x, y, z);
+          particle.material.opacity = 1 - progress;
+        });
+        
+        requestAnimationFrame(animate);
+      } else {
+        // Clean up particles
+        spiralParticles.forEach(particle => {
+          this.returnParticle(particle);
+        });
+      }
+    };
+    
+    animate();
+  }
+  
+  createTypeTransitionEffect(position, fromType, toType) {
+    // Create floating text effect showing evolution
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = 256;
+    canvas.height = 64;
+    
+    context.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    context.fillStyle = 'white';
+    context.font = '24px Arial';
+    context.textAlign = 'center';
+    context.fillText(`${fromType} → ${toType}`, canvas.width / 2, canvas.height / 2 + 8);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ 
+      map: texture,
+      transparent: true,
+      opacity: 1
+    });
+    
+    const sprite = new THREE.Sprite(material);
+    sprite.position.copy(position);
+    sprite.position.y += 0.8;
+    sprite.scale.set(0.5, 0.2, 1);
+    
+    this.scene.add(sprite);
+    
+    // Animate text
+    const startTime = Date.now();
+    const duration = 2000;
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = elapsed / duration;
+      
+      if (progress < 1) {
+        // Float upward
+        sprite.position.y = position.y + 0.8 + progress * 0.5;
+        
+        // Fade out
+        material.opacity = 1 - progress;
+        
+        requestAnimationFrame(animate);
+      } else {
+        this.scene.remove(sprite);
+        texture.dispose();
+        material.dispose();
+      }
+    };
+    
+    animate();
+  }
+  
+  createRadialBurst(center, color, count) {
+    for (let i = 0; i < count; i++) {
+      const particle = this.getParticle();
+      if (!particle) continue;
+      
+      particle.position.copy(center);
+      particle.visible = true;
+      particle.material.color.setHex(color);
+      
+      // Radial velocity
+      const angle = (i / count) * Math.PI * 2;
+      const speed = 0.05 + Math.random() * 0.03;
+      
+      particle.userData.velocity.set(
+        Math.cos(angle) * speed,
+        Math.random() * 0.02,
+        Math.sin(angle) * speed
+      );
+      
+      particle.userData.life = 1.0;
+      particle.userData.maxLife = 1.0 + Math.random() * 1.0;
+    }
+  }
+  
+  // Update particle system
+  updateParticles(deltaTime) {
+    this.particleSystem.active.forEach(particle => {
+      if (!particle.visible) return;
+      
+      // Update position
+      particle.position.add(particle.userData.velocity);
+      
+      // Update life
+      particle.userData.life -= deltaTime / 1000;
+      
+      // Update opacity based on life
+      particle.material.opacity = particle.userData.life / particle.userData.maxLife;
+      
+      // Apply gravity
+      particle.userData.velocity.y -= 0.001;
+      
+      // Check if particle should be returned to pool
+      if (particle.userData.life <= 0) {
+        this.returnParticle(particle);
+      }
+    });
+  }
+  
+  // Utility functions
+  easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
+  }
+  
+  // Cleanup
+  cleanup() {
+    this.activeEffects.clear();
+    this.animationQueue.length = 0;
+    
+    // Clean up particles
+    [...this.particleSystem.pool, ...this.particleSystem.active].forEach(particle => {
+      this.scene.remove(particle);
+      if (particle.geometry) particle.geometry.dispose();
+      if (particle.material) particle.material.dispose();
+    });
+  }
+}
+
+// Transition manager for smooth UI transitions
+class TransitionManager {
+  constructor() {
+    this.activeTransitions = new Map();
+  }
+  
+  fadeIn(element, duration = 500) {
+    element.style.opacity = '0';
+    element.style.display = 'block';
+    
+    const startTime = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      element.style.opacity = progress.toString();
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    animate();
+  }
+  
+  fadeOut(element, duration = 500) {
+    const startTime = Date.now();
+    const startOpacity = parseFloat(element.style.opacity) || 1;
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      element.style.opacity = (startOpacity * (1 - progress)).toString();
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        element.style.display = 'none';
+      }
+    };
+    
+    animate();
+  }
+  
+  slideIn(element, direction = 'left', duration = 500) {
+    const startTime = Date.now();
+    const startPos = direction === 'left' ? -element.offsetWidth : element.offsetWidth;
+    
+    element.style.transform = `translateX(${startPos}px)`;
+    element.style.display = 'block';
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      const currentPos = startPos * (1 - this.easeOutCubic(progress));
+      element.style.transform = `translateX(${currentPos}px)`;
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    animate();
+  }
+  
+  easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+}
+
+// Initialize visual effects manager
+const visualEffects = new VisualEffectsManager(scene, renderer);
+
+// Update particle system in animation loop
+const originalAnimate = window.animate;
+window.animate = function() {
+  originalAnimate();
+  visualEffects.updateParticles(16.67); // Assume 60 FPS
+};
+
+// ... existing code ... 

@@ -16,8 +16,15 @@ class TimingManager {
   initialize(gameState) {
     this.gameState = gameState;
     this.turnQueue = Object.keys(gameState.players);
-    this.currentActivePlayer = this.turnQueue[0];
-    this.startPlayerTimer(this.currentActivePlayer);
+    
+    // Only start timers if there are multiple players
+    if (this.turnQueue.length > 1) {
+      this.currentActivePlayer = this.turnQueue[0];
+      this.startPlayerTimer(this.currentActivePlayer);
+    } else {
+      this.currentActivePlayer = null;
+      console.log('Single player mode - no turn timers needed');
+    }
   }
 
   startPlayerTimer(playerId) {
@@ -118,6 +125,14 @@ class TimingManager {
 
   nextTurn() {
     if (this.turnQueue.length === 0) return;
+
+    // Don't start timers if there's only one player (prevents infinite loop)
+    const activePlayers = this.turnQueue.filter(playerId => this.gameState.players[playerId]);
+    if (activePlayers.length <= 1) {
+      console.log('Only one player remaining, stopping turn timers');
+      this.currentActivePlayer = null;
+      return;
+    }
 
     // Find next active player
     const currentIndex = this.turnQueue.indexOf(this.currentActivePlayer);
@@ -234,6 +249,13 @@ class TimingManager {
   addPlayer(playerId) {
     if (!this.turnQueue.includes(playerId)) {
       this.turnQueue.push(playerId);
+      
+      // If this is the second player, start the timer system
+      if (this.turnQueue.length === 2 && !this.currentActivePlayer) {
+        this.currentActivePlayer = this.turnQueue[0];
+        this.startPlayerTimer(this.currentActivePlayer);
+        console.log('Second player joined - starting turn timers');
+      }
     }
   }
 
@@ -252,6 +274,31 @@ class TimingManager {
       turnQueue: this.turnQueue,
       pendingMoves: Object.keys(this.pendingMoves)
     };
+  }
+
+  stopAllTimers() {
+    // Clear all player timers
+    Object.keys(this.playerTimers).forEach(playerId => {
+      this.clearPlayerTimer(playerId);
+    });
+
+    // Clear game timer if it exists
+    if (this.gameTimer) {
+      clearTimeout(this.gameTimer);
+      this.gameTimer = null;
+    }
+
+    // Clear turn queue and active player
+    this.turnQueue = [];
+    this.currentActivePlayer = null;
+    this.isPaused = false;
+
+    // Notify all clients that timers are stopped
+    this.io.emit('timers-stopped', {
+      message: 'All timers stopped due to game end'
+    });
+
+    console.log('All timers stopped');
   }
 }
 

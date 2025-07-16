@@ -31,7 +31,8 @@ const gameState = {
   playerCount: 0,
   pendingBattles: {}, // battleId -> battle info
   currentTurn: 0,
-  activePlayer: null
+  activePlayer: null,
+  gameStartTime: null
 };
 
 // Tournament management
@@ -56,7 +57,7 @@ const evolutionManager = new EvolutionManager();
 const timingManager = new TimingManager(io);
 
 // Victory and elimination management
-const victoryManager = new VictoryManager(io, gameState);
+const victoryManager = new VictoryManager(io, gameState, timingManager);
 
 // Chat and communication management
 const chatManager = new ChatManager(io);
@@ -144,6 +145,7 @@ io.on('connection', (socket) => {
   // Start recording if this is the first player
   if (gameState.playerCount === 1) {
     spectatorManager.startRecording('main', gameState);
+    gameState.gameStartTime = Date.now(); // Set game start time
   }
   
   // Create starting pieces for the player
@@ -377,7 +379,13 @@ io.on('connection', (socket) => {
       pieces: [],
       isAI: true,
       aiDifficulty: difficulty || 'MEDIUM',
-      name: `AI ${AI_DIFFICULTY[difficulty || 'MEDIUM'].name}`
+      name: `AI ${AI_DIFFICULTY[difficulty || 'MEDIUM'].name}`,
+      stats: {
+        piecesLost: 0,
+        piecesEvolved: 0,
+        battlesWon: 0,
+        battlesLost: 0
+      }
     };
     
     // Add to game state
@@ -387,8 +395,15 @@ io.on('connection', (socket) => {
     // Register with AI manager
     aiManager.addAIPlayer(aiPlayerId, difficulty || 'MEDIUM', personality || {});
     
+    // Initialize evolution bank with starting points
+    evolutionManager.initializePlayerBank(aiPlayerId);
+    evolutionManager.addEvolutionPoints(aiPlayerId, 5, 'game_start');
+    
     // Create starting pieces for AI
     createStartingPieces(aiPlayer);
+    
+    // Add AI player to timing system
+    timingManager.addPlayer(aiPlayerId);
     
     // Broadcast updated game state
     broadcastGameState();
@@ -1938,6 +1953,14 @@ function completeBattleResolution(winner, loser) {
   const battleLoserPlayer = gameState.players[loser.playerId];
   
   if (battleWinnerPlayer && battleLoserPlayer) {
+    // Initialize stats if missing
+    if (!battleWinnerPlayer.stats) {
+      battleWinnerPlayer.stats = { piecesLost: 0, piecesEvolved: 0, battlesWon: 0, battlesLost: 0 };
+    }
+    if (!battleLoserPlayer.stats) {
+      battleLoserPlayer.stats = { piecesLost: 0, piecesEvolved: 0, battlesWon: 0, battlesLost: 0 };
+    }
+
     // Update player stats
     battleWinnerPlayer.stats.battlesWon = (battleWinnerPlayer.stats.battlesWon || 0) + 1;
     battleLoserPlayer.stats.battlesLost = (battleLoserPlayer.stats.battlesLost || 0) + 1;
@@ -2560,6 +2583,9 @@ function getValidMoves(pieceId) {
   return validMoves;
 }
 
+// Store last game state for delta updates
+let lastBroadcastState = null;
+
 function broadcastGameState() {
   const clientGameState = {
     players: gameState.players,
@@ -2574,6 +2600,22 @@ function broadcastGameState() {
   
   // Also broadcast to spectators
   spectatorManager.broadcastToSpectators('main', 'game-state-update', clientGameState);
+  
+  // Store for delta updates
+  lastBroadcastState = JSON.parse(JSON.stringify(clientGameState));
+}
+
+// Optimized broadcast for specific updates
+function broadcastPieceUpdate(pieceId, piece) {
+  io.emit('piece-update', { pieceId, piece });
+}
+
+function broadcastPieceRemoved(pieceId) {
+  io.emit('piece-removed', { pieceId });
+}
+
+function broadcastPlayerUpdate(playerId, player) {
+  io.emit('player-update', { playerId, player });
 }
 
 function getPlayerColor(index) {
