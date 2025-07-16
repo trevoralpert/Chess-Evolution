@@ -732,46 +732,54 @@ function createGridOverlay() {
     
     console.log(`Grid configuration: ${gridRows} rows × ${gridCols} cols`);
     
-    // Create grid squares covering the entire sphere
+    // Create beach ball pattern with continuous curved bands
     for (let row = 0; row < gridRows; row++) {
+      // Each row is a band around the sphere - alternate colors by row
+      const isBlueRing = row % 2 === 0;
+      
       for (let col = 0; col < gridCols; col++) {
         try {
-          // Calculate position using correct grid size
-          const { phi, theta } = gridToSpherical(gridRows, gridCols, row, col);
-          const position = sphericalToCartesian(globeRadius + 0.05, phi, theta); // Closer to sphere surface
-        
-        // Debug first few positions
-        if (row < 2 && col < 2) {
-          console.log(`Position (${row}, ${col}): phi=${phi}, theta=${theta}, pos=`, position);
+          // Calculate phi range for this latitude band
+          const phiStart = (row / gridRows) * Math.PI;
+          const phiEnd = ((row + 1) / gridRows) * Math.PI;
+          
+          // Calculate theta range for this longitude segment
+          const thetaStart = (col / gridCols) * Math.PI * 2;
+          const thetaEnd = ((col + 1) / gridCols) * Math.PI * 2;
+          
+          // Create curved segment using SphereGeometry
+          // This creates a section of a sphere between specific phi/theta ranges
+          const segmentGeometry = new THREE.SphereGeometry(
+            globeRadius + 0.05, // radius (slightly larger than base sphere)
+            8, // widthSegments (longitude divisions for smoothness)
+            4, // heightSegments (latitude divisions for smoothness)
+            thetaStart, // phiStart (longitude start)
+            thetaEnd - thetaStart, // phiLength (longitude span)
+            phiStart, // thetaStart (latitude start) 
+            phiEnd - phiStart // thetaLength (latitude span)
+          );
+          
+          const segmentMaterial = new THREE.MeshBasicMaterial({ 
+            color: isBlueRing ? 0x2266ff : 0xff2266, // Alternating by row (latitude)
+            transparent: true,
+            opacity: 0.9,
+            side: THREE.DoubleSide
+          });
+          
+          const segment = new THREE.Mesh(segmentGeometry, segmentMaterial);
+          segment.position.set(0, 0, 0); // Centered at origin
+          segment.userData = { gridRow: row, gridCol: col, isBlueSquare: isBlueRing };
+          scene.add(segment);
+          gridSquares.push(segment);
+          
+                     // Debug first few segments
+           if (row < 2 && col < 2) {
+             console.log(`Segment (${row}, ${col}): phi=${phiStart}-${phiEnd}, theta=${thetaStart}-${thetaEnd}`);
+           }
+        } catch (error) {
+           console.error(`❌ Error creating curved band segment at (${row}, ${col}):`, error);
         }
-        
-        // Calculate square size based on latitude for proper spherical coverage
-        const latFactor = Math.sin(THREE.MathUtils.degToRad(phi));
-        const squareSize = 0.8 + (latFactor * 0.4); // Larger squares for better coverage
-        
-        // Create chess-board pattern with alternating colors for ALL squares (including poles)
-        const squareGeometry = new THREE.PlaneGeometry(squareSize, squareSize);
-        
-        // Calculate chess-board pattern: alternate colors based on grid position
-        const isBlueSquare = (row + col) % 2 === 0;
-        
-        const squareMaterial = new THREE.MeshBasicMaterial({ 
-          color: isBlueSquare ? 0x2266ff : 0xff2266, // Blue and red alternating
-          transparent: true,
-          opacity: 0.9,
-          side: THREE.DoubleSide
-        });
-        
-        const square = new THREE.Mesh(squareGeometry, squareMaterial);
-        square.position.set(position.x, position.y, position.z);
-        square.lookAt(0, 0, 0);
-        square.userData = { gridRow: row, gridCol: col, isBlueSquare: isBlueSquare };
-        scene.add(square);
-        gridSquares.push(square);
-      } catch (error) {
-        console.error(`❌ Error creating grid square at (${row}, ${col}):`, error);
       }
-    }
   }
   
   console.log(`✅ Created ${gridSquares.length} grid squares and ${poleMarkers.length} pole markers`);
