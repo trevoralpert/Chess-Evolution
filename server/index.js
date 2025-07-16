@@ -11,6 +11,8 @@ const LobbyManager = require('./lobbyManager');
 const StatisticsManager = require('./statisticsManager');
 const EvolutionManager = require('./evolutionManager');
 const TimingManager = require('./timingManager');
+const VictoryManager = require('./victoryManager');
+const ChatManager = require('./chatManager');
 
 const app = express();
 const server = http.createServer(app);
@@ -53,6 +55,12 @@ const evolutionManager = new EvolutionManager();
 // Timing and collision management
 const timingManager = new TimingManager(io);
 
+// Victory and elimination management
+const victoryManager = new VictoryManager(io, gameState);
+
+// Chat and communication management
+const chatManager = new ChatManager(io);
+
 // Set up move executor for timing manager
 timingManager.setMoveExecutor((playerId, moveData) => {
   const result = handlePieceMove(playerId, moveData);
@@ -70,11 +78,28 @@ timingManager.setMoveExecutor((playerId, moveData) => {
     
     // Send confirmation back to the client
     io.emit('move-result', { success: true, message: result.message, playerId: playerId });
+    
+    // Send game event to chat
+    const player = gameState.players[playerId];
+    if (player) {
+      chatManager.sendGameEvent('main', 'piece_moved', {
+        playerName: player.name,
+        piece: gameState.pieces[moveData.pieceId]?.symbol || 'piece',
+        row: moveData.targetRow,
+        col: moveData.targetCol
+      });
+    }
   }
 });
 
 // Setup cleanup intervals
 evolutionManager.setupCleanupInterval();
+
+// Initialize victory system and main chat room
+setTimeout(() => {
+  victoryManager.initializeVictorySystem();
+  chatManager.createChatRoom('main', 'Game Chat', 'game');
+}, 1000);
 
 io.on('connection', (socket) => {
   console.log(`New client connected: ${socket.id}`);
@@ -131,6 +156,9 @@ io.on('connection', (socket) => {
   if (gameState.playerCount === 1) {
     timingManager.initialize(gameState);
   }
+  
+  // Add player to main chat room
+  chatManager.joinChatRoom('main', socket.id, player.name, socket.id);
   
   // Broadcast updated game state
   broadcastGameState();
@@ -728,6 +756,37 @@ io.on('connection', (socket) => {
     socket.emit('evolution-stats', { stats });
   });
 
+  // Chat system handlers
+  socket.on('send-chat-message', (data) => {
+    const { roomId, message } = data;
+    const player = gameState.players[socket.id];
+    
+    if (!player) {
+      socket.emit('chat-error', { error: 'Not connected as a player' });
+      return;
+    }
+    
+    const result = chatManager.sendMessage(roomId || 'main', socket.id, player.name, message);
+    
+    if (!result.success) {
+      socket.emit('chat-error', { error: result.error });
+    }
+  });
+
+  socket.on('get-chat-history', (data) => {
+    const { roomId } = data;
+    const roomInfo = chatManager.getChatRoomInfo(roomId || 'main');
+    
+    if (roomInfo) {
+      socket.emit('chat-room-info', { roomInfo });
+    }
+  });
+
+  socket.on('get-chat-stats', () => {
+    const stats = chatManager.getPlayerStats(socket.id);
+    socket.emit('chat-stats', { stats });
+  });
+
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`);
     
@@ -769,6 +828,9 @@ io.on('connection', (socket) => {
     
     // Remove player from timing system
     timingManager.removePlayer(socket.id);
+    
+    // Clean up chat system
+    chatManager.cleanupPlayer(socket.id);
     
     // If game is empty, finish recording
     if (gameState.playerCount === 0) {
@@ -1966,14 +2028,21 @@ function completeBattleResolution(winner, loser) {
   // Check for checkmate (King capture) and player elimination
   if (loser.type === 'KING') {
     console.log(`CHECKMATE! King ${loser.symbol} captured - Player ${loser.playerId} eliminated!`);
-    eliminatePlayer(loser.playerId);
     
-    // Check for victory condition
-    const remainingPlayers = Object.keys(gameState.players).length;
-    if (remainingPlayers === 1) {
-      const victoryPlayer = Object.values(gameState.players)[0];
-      declareVictory(victoryPlayer);
-    }
+    // Send battle result to chat
+    chatManager.sendGameEvent('main', 'battle_result', {
+      winner: winner.symbol,
+      loser: loser.symbol
+    });
+    
+    // Use new victory manager for elimination
+    victoryManager.handlePlayerElimination(loser.playerId, 'king_captured');
+  } else {
+    // Send battle result to chat for non-elimination battles
+    chatManager.sendGameEvent('main', 'battle_result', {
+      winner: winner.symbol,
+      loser: loser.symbol
+    });
   }
   
   // Handle AI battle integration

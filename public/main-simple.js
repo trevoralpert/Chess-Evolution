@@ -3495,6 +3495,124 @@ socket.on('evolution-point-award', (data) => {
   }
 });
 
+// Chat system variables
+let chatVisible = true;
+let chatMessages = [];
+
+// Chat system functions
+function initializeChatSystem() {
+  const chatInput = document.getElementById('chat-input');
+  const sendButton = document.getElementById('send-chat');
+  const toggleButton = document.getElementById('toggle-chat');
+  
+  // Send message on Enter key
+  chatInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      sendChatMessage();
+    }
+  });
+  
+  // Send message on button click
+  sendButton.addEventListener('click', sendChatMessage);
+  
+  // Toggle chat visibility
+  toggleButton.addEventListener('click', toggleChat);
+  
+  console.log('Chat system initialized');
+}
+
+function sendChatMessage() {
+  const chatInput = document.getElementById('chat-input');
+  const message = chatInput.value.trim();
+  
+  if (message.length === 0) return;
+  if (message.length > 200) {
+    showNotification('Chat Error', 'Message too long (max 200 characters)', 'error');
+    return;
+  }
+  
+  socket.emit('send-chat-message', {
+    roomId: 'main',
+    message: message
+  });
+  
+  chatInput.value = '';
+}
+
+function toggleChat() {
+  const chatUI = document.getElementById('chat-ui');
+  const toggleButton = document.getElementById('toggle-chat');
+  
+  if (chatVisible) {
+    chatUI.style.height = '40px';
+    chatUI.style.overflow = 'hidden';
+    toggleButton.textContent = 'Show';
+    chatVisible = false;
+  } else {
+    chatUI.style.height = '300px';
+    chatUI.style.overflow = 'visible';
+    toggleButton.textContent = 'Hide';
+    chatVisible = true;
+  }
+}
+
+function addChatMessage(messageData) {
+  const messagesContainer = document.getElementById('chat-messages');
+  const messageElement = document.createElement('div');
+  
+  const timestamp = new Date(messageData.timestamp).toLocaleTimeString();
+  const messageStyle = getChatMessageStyle(messageData.type);
+  
+  messageElement.innerHTML = `
+    <div style="margin-bottom: 4px; ${messageStyle}">
+      <span style="color: #888; font-size: 10px;">[${timestamp}]</span>
+      <span style="color: ${getPlayerColor(messageData.playerId)}; font-weight: bold;">${messageData.playerName}:</span>
+      <span style="color: #fff;">${messageData.message}</span>
+    </div>
+  `;
+  
+  messagesContainer.appendChild(messageElement);
+  
+  // Auto-scroll to bottom
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  
+  // Remove placeholder message if it exists
+  const placeholder = messagesContainer.querySelector('[style*="font-style: italic"]');
+  if (placeholder) {
+    placeholder.remove();
+  }
+  
+  // Keep only last 50 messages
+  while (messagesContainer.children.length > 50) {
+    messagesContainer.removeChild(messagesContainer.firstChild);
+  }
+}
+
+function getChatMessageStyle(messageType) {
+  const styles = {
+    'chat': '',
+    'system': 'color: #ffff00; font-style: italic;',
+    'game_event': 'color: #00cc88; font-style: italic;',
+    'player_joined': 'color: #00ff00; font-style: italic;',
+    'player_left': 'color: #ff8800; font-style: italic;'
+  };
+  
+  return styles[messageType] || '';
+}
+
+function getPlayerColor(playerId) {
+  if (playerId === 'system') return '#ffff00';
+  if (playerId === socket.id) return '#00ff00';
+  
+  const player = gameState.players[playerId];
+  return player ? player.color : '#ffffff';
+}
+
+function updateChatStatus(status) {
+  const chatStatus = document.getElementById('chat-status');
+  chatStatus.textContent = status;
+}
+
 // Timer system socket handlers
 socket.on('timer-started', (data) => {
   console.log('Timer started:', data);
@@ -3573,6 +3691,74 @@ socket.on('collision-contest-prompt', (data) => {
   if (data.defendingPiece.playerId === socket.id) {
     showNotification('Defend!', 'Choose to contest or decline the battle', 'info');
   }
+});
+
+// Chat system socket handlers
+socket.on('chat-message', (data) => {
+  console.log('Chat message received:', data);
+  addChatMessage(data);
+});
+
+socket.on('chat-history', (data) => {
+  console.log('Chat history received:', data);
+  data.messages.forEach(message => {
+    addChatMessage(message);
+  });
+});
+
+socket.on('chat-error', (data) => {
+  console.log('Chat error:', data);
+  showNotification('Chat Error', data.error, 'error');
+  updateChatStatus(`Error: ${data.error}`);
+});
+
+socket.on('player-eliminated', (data) => {
+  console.log('Player eliminated:', data);
+  showNotification('Player Eliminated', 
+    `${data.playerName} has been eliminated! (${data.eliminationReason.replace('_', ' ')})`, 
+    'warning');
+});
+
+socket.on('elimination-message', (data) => {
+  console.log('Elimination message:', data);
+  showNotification('Elimination', data.message, 'info');
+});
+
+socket.on('elimination-effects', (data) => {
+  console.log('Elimination effects:', data);
+  showNotification('Elimination Effects', data.message, 'warning');
+});
+
+socket.on('piece-removal-effect', (data) => {
+  console.log('Piece removal effect:', data);
+  // This could trigger visual effects for piece removal
+});
+
+socket.on('victory-message', (data) => {
+  console.log('Victory message:', data);
+  showNotification('Victory!', data.message, 'success');
+});
+
+socket.on('game-victory', (data) => {
+  console.log('Game victory:', data);
+  showNotification('Game Over', 
+    `🎉 ${data.winnerName} wins by ${data.victoryType.replace('_', ' ')}! 🎉`, 
+    'success');
+});
+
+socket.on('territory-update', (data) => {
+  console.log('Territory update:', data);
+  // This could be used to update territory visualization
+});
+
+socket.on('game-draw', (data) => {
+  console.log('Game draw:', data);
+  showNotification('Draw!', data.message, 'info');
+});
+
+// Initialize chat system when page loads
+window.addEventListener('load', () => {
+  initializeChatSystem();
 });
 
 // Start animation
