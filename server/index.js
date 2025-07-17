@@ -1672,35 +1672,35 @@ function checkSplitterBalance(piece, playerId) {
   const player = gameState.players[playerId];
   const currentTurn = gameState.currentTurn || 0;
   
-  // Check cooldown: 3 turns between splits
+  // Check cooldown: 1 turn between splits (reduced from 3)
   const lastSplitTurn = piece.lastSplitTurn || 0;
-  const cooldownPassed = (currentTurn - lastSplitTurn) >= 3;
+  const cooldownPassed = (currentTurn - lastSplitTurn) >= 1;
   
   if (!cooldownPassed) {
     return { 
       allowed: false, 
-      reason: `Splitter must wait ${3 - (currentTurn - lastSplitTurn)} more turns before splitting again` 
+      reason: `Splitter must wait ${1 - (currentTurn - lastSplitTurn)} more turns before splitting again` 
     };
   }
   
-  // Check evolution point cost: 2 points required
+  // Check evolution point cost: 1 point required (reduced from 2)
   const bank = evolutionManager.getPlayerBankInfo(playerId);
-  if (bank.points < 2) {
+  if (bank.points < 1) {
     return { 
       allowed: false, 
-      reason: `Splitter needs 2 evolution points to split (has ${bank.points})` 
+      reason: `Splitter needs 1 evolution point to split (has ${bank.points})` 
     };
   }
   
-  // Check population limit: max 3 splitters per player
+  // Check population limit: max 5 splitters per player (increased from 3)
   const splitterCount = player.pieces.filter(pieceId => 
     gameState.pieces[pieceId] && gameState.pieces[pieceId].type === 'SPLITTER'
   ).length;
   
-  if (splitterCount >= 3) {
+  if (splitterCount >= 5) {
     return { 
       allowed: false, 
-      reason: `Maximum 3 splitters per player (currently have ${splitterCount})` 
+      reason: `Maximum 5 splitters per player (currently have ${splitterCount})` 
     };
   }
   
@@ -1710,9 +1710,9 @@ function checkSplitterBalance(piece, playerId) {
 function applySplitCosts(piece, playerId) {
   const currentTurn = gameState.currentTurn || 0;
   
-  // Deduct evolution points from bank
+  // Deduct evolution points from bank (reduced from 2 to 1)
   const bank = evolutionManager.getPlayerBankInfo(playerId);
-  evolutionManager.addEvolutionPoints(playerId, -2, 'splitter_split_cost');
+  evolutionManager.addEvolutionPoints(playerId, -1, 'splitter_split_cost');
   
   // Set cooldown
   piece.lastSplitTurn = currentTurn;
@@ -1721,14 +1721,14 @@ function applySplitCosts(piece, playerId) {
   piece.splitWeakened = true;
   piece.weakenedUntilTurn = currentTurn + 2;
   
-  console.log(`Splitter split cost applied: -2 evolution points, cooldown until turn ${currentTurn + 3}`);
+  console.log(`Splitter split cost applied: -1 evolution points, cooldown until turn ${currentTurn + 1}`);
   
   // Broadcast split cost event
   const updatedBank = evolutionManager.getPlayerBankInfo(playerId);
   io.emit('split-cost-applied', {
     pieceId: piece.id,
     evolutionPoints: updatedBank.points,
-    cooldownTurns: 3,
+    cooldownTurns: 1,
     weakenedTurns: 2
   });
 }

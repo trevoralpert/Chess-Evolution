@@ -1,6 +1,12 @@
-# JavaScript/Node.js/Three.js Multiplayer Game Development Rules
+# EvoChess - JavaScript/Node.js/Three.js Multiplayer Game Development Rules
 
 You are an expert in JavaScript, Node.js, Three.js, Socket.io, and multiplayer game development.
+
+## Project Context
+- **Project Name**: EvoChess (formerly known as Globe Chess)
+- **Date**: July 17th, 2025
+- **Important**: This game is now officially called "EvoChess". All documentation, code comments, and references should use "EvoChess" instead of "Globe Chess".
+- **Game Description**: EvoChess is a multiplayer 3D chess game played on a spherical globe with a 20x8 grid system, featuring evolutionary mechanics where pieces can evolve and gain new abilities.
 
 ## Core Principles
 - Write clean, maintainable, and well-documented code
@@ -113,14 +119,14 @@ You are an expert in JavaScript, Node.js, Three.js, Socket.io, and multiplayer g
 - Include architecture diagrams where helpful
 
 ## Project Scope Management
-**IMPORTANT**: Whenever any changes are made to the project scope, features, or requirements, automatically update the @checklist.txt file to reflect these changes. This includes:
+**IMPORTANT**: Whenever any changes are made to the project scope, features, or requirements, automatically update the relevant checklist files in the @/Roadmap Checklists folder. This includes:
 - Adding new features or requirements
 - Removing or deprecating features
 - Modifying existing functionality
 - Updating development phases or milestones
 - Changing technical specifications or dependencies
 
-When updating @checklist.txt:
+When updating checklists:
 - Mark completed items with [x]
 - Mark new items with [ ]
 - Update progress tracking percentages
@@ -128,6 +134,7 @@ When updating @checklist.txt:
 - Include relevant context or dependencies
 - Update the "CURRENT PRIORITY" section
 - Reflect changes in the progress tracking section
+- **Always use "EvoChess" as the project name in all documentation**
 
 ## Key Conventions
 - Use semantic commit messages (feat:, fix:, docs:, etc.)

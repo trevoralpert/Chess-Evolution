@@ -1,0 +1,97 @@
+# Globe Chess - Tomorrow's TODO List
+
+## HIGH PRIORITY FIXES (Game Breaking)
+
+### 1. Splitter Mechanics
+- [ ] Implement actual splitting behavior (create two pieces)
+- [ ] Fix movement to be split, not sideways
+- [ ] Add visual feedback for split action
+- [ ] Test split piece tracking and management
+
+### 2. Pawn Capture System
+- [ ] Debug why pawns can't capture properly
+- [ ] Add battle dice roll visualization
+- [ ] Create battle feedback UI (show calculations)
+- [ ] Add delay explanation during battles
+- [ ] Test diagonal capture movements
+
+### 3. Polar Movement Rules
+- [ ] Define clear movement rules around polar caps
+- [ ] Fix king vulnerability at poles (pawns can't check)
+- [ ] Decide on pawn promotion rules (at outer ring?)
+- [ ] Implement and test polar movement logic
+- [ ] Consider special polar position rules
+
+### 4. Move Timer Logic
+- [ ] Debug timer synchronization issues
+- [ ] Fix timer-related movement bugs
+- [ ] Ensure moves only allowed when timer at 0
+- [ ] Test timer behavior with multiple players
+- [ ] Fix any edge cases with timer expiration
+
+## MEDIUM PRIORITY (Core Features)
+
+### 5. Evolution System
+- [ ] Fix evolution point accumulation
+- [ ] Implement evolution logic properly
+- [ ] Test evolution UI functionality
+- [ ] Add visual feedback for evolution
+- [ ] Verify point banking system
+
+### 6. Equator Crossing Bonus
+- [ ] Add point award for pawns crossing midline
+- [ ] Create visual feedback for bonus
+- [ ] Test with multiple pieces
+- [ ] Update UI to show bonus points
+- [ ] Add to tutorial/help system
+
+## LOW PRIORITY (Polish)
+
+### 7. Camera System
+- [ ] Fix auto-camera issues
+- [ ] Investigate polar orbit restriction workaround
+- [ ] Test camera behavior in different scenarios
+- [ ] Consider alternative camera control options
+
+### 8. Battle Visualization
+- [ ] Design dice roll animation
+- [ ] Create battle calculation display
+- [ ] Add sound effects for battles
+- [ ] Improve battle outcome clarity
+
+## DISCUSSION TOPICS
+
+1. **Polar Cap Design Philosophy**
+   - Should kings at poles be safer?
+   - How do we balance polar positions?
+   - Special rules for polar movement?
+
+2. **Pawn Promotion Mechanics**
+   - Promote at outer ring or opposite pole?
+   - What pieces can pawns promote to?
+   - Evolution points for promotion?
+
+3. **Battle System Transparency**
+   - How much math to show players?
+   - Quick mode vs detailed battle view?
+   - Battle history/replay?
+
+4. **Evolution Strategy**
+   - Point costs for different evolutions?
+   - Strategic timing of evolutions?
+   - Visual indicators for evolution readiness?
+
+## TESTING CHECKLIST
+- [ ] Test with 2 human players
+- [ ] Test with 4+ AI players
+- [ ] Test all piece types thoroughly
+- [ ] Test polar positions extensively
+- [ ] Test evolution scenarios
+- [ ] Test battle edge cases
+- [ ] Test timer edge cases
+
+## NOTES FOR DISCUSSION
+- Consider simplified rule variants for casual play
+- Think about tutorial/onboarding for complex mechanics
+- Discuss long-term feature roadmap
+- Review player feedback priorities

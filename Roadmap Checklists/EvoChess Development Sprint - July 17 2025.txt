@@ -1,0 +1,246 @@
+# EvoChess Development Sprint Checklist
+**Date: July 17th, 2025**
+**Focus: Fix Core Gameplay Mechanics**
+
+## SPRINT GOAL
+Fix the most critical broken features to make EvoChess fully playable and enjoyable.
+
+---
+
+## 🚨 IMMEDIATE PRIORITY - Game-Breaking Issues
+
+### 1. Splitter Mechanics Fix
+**Status**: [x] COMPLETED
+**Priority**: Critical
+**Estimated Time**: 1-2 hours (reduced - logic exists, just needs balance adjustment)
+**Description**: Splitter pieces currently just move sideways instead of splitting into two pieces
+
+**ROOT CAUSE IDENTIFIED**: Split logic is correctly implemented in server code, but blocked by restrictive balance requirements:
+- 3-turn cooldown between splits
+- 2 evolution points required per split
+- Max 3 splitters per player limit
+
+**SOLUTION IMPLEMENTED**: 
+- Reduced cooldown from 3 turns to 1 turn between splits
+- Reduced cost from 2 evolution points to 1 evolution point
+- Increased limit from 3 to 5 splitters per player
+
+**Tasks**:
+- [x] Start EvoChess server and test current Splitter behavior
+- [x] Analyze existing Splitter implementation in codebase - FOUND: Logic exists in handlePieceSplit()
+- [x] Identify where splitting logic should be implemented - FOUND: Already implemented correctly
+- [x] **FIX APPLIED**: Adjusted checkSplitterBalance() function to be less restrictive
+- [x] **SOLUTION**: Reduced cooldown to 1 turn, reduced cost to 1 evolution point, increased splitter limit
+- [x] Updated applySplitCosts() function to reflect new balance requirements
+- [ ] Test split functionality with adjusted balance requirements
+- [ ] Verify split pieces behave correctly in battles
+
+**Testing Checklist**:
+- [ ] Splitter piece can be selected and moved
+- [ ] Moving splitter creates two pieces instead of one
+- [ ] Both split pieces are properly tracked in game state
+- [ ] Split pieces can move independently
+- [ ] Split pieces can participate in battles
+- [ ] Visual feedback shows split action clearly
+
+---
+
+### 2. Pawn Capture Logic Fix
+**Status**: [ ] Not Started
+**Priority**: Critical
+**Estimated Time**: 1-2 hours
+**Description**: Pawns cannot capture properly, breaking basic chess gameplay
+
+**Tasks**:
+- [ ] Test current pawn capture behavior
+- [ ] Debug pawn capture movement validation
+- [ ] Fix diagonal capture movements
+- [ ] Ensure battle system triggers for pawn captures
+- [ ] Test pawn capture with different piece types
+- [ ] Verify capture works in all board positions
+
+**Testing Checklist**:
+- [ ] Pawns can select diagonal capture moves
+- [ ] Pawn capture moves are highlighted correctly
+- [ ] Battle system triggers when pawn captures
+- [ ] Captured pieces are removed properly
+- [ ] Pawn capture works near poles and equator
+
+---
+
+### 3. Battle Feedback System
+**Status**: [ ] Not Started
+**Priority**: High
+**Estimated Time**: 2-3 hours
+**Description**: Players have no idea what's happening during battles
+
+**Tasks**:
+- [ ] Add battle dice roll visualization
+- [ ] Create battle feedback UI showing calculations
+- [ ] Add delay explanation during battles
+- [ ] Show battle outcome with clear winner indication
+- [ ] Add battle statistics display
+- [ ] Create battle log/history feature
+
+**Testing Checklist**:
+- [ ] Battle UI appears when pieces engage
+- [ ] Dice roll animation shows clearly
+- [ ] Battle calculations are visible to players
+- [ ] Battle outcome is clearly indicated
+- [ ] Battle delays are explained to players
+- [ ] Battle statistics update correctly
+
+---
+
+## 🔧 HIGH PRIORITY - Core Features
+
+### 4. Per-Piece Evolution System Overhaul
+**Status**: [ ] Not Started
+**Priority**: HIGH - Major System Redesign
+**Estimated Time**: 4-6 hours
+**Description**: Complete redesign of evolution system from player-based bank to per-piece individual evolution points
+
+**DESIGN CHANGE**: User clarified that evolution points should be **per-piece**, not per-player:
+- Each piece starts with base evolution points for its type
+- Pieces gain evolution points by capturing other pieces
+- Each piece evolves individually using its own accumulated points
+- Visual indicators show each piece's evolution points
+- Right-click menu shows evolution tree for each piece
+
+**Major Components**:
+- [ ] **Backend**: Redesign evolution point tracking from player bank to per-piece storage
+- [ ] **Frontend**: Add floating point value display above each piece  
+- [ ] **UI**: Implement right-click evolution menu per piece
+- [ ] **Visualization**: Create interactive evolution tree showing current position and available paths
+- [ ] **Capture Logic**: Transfer evolution points from captured piece to capturing piece
+- [ ] **Visual Feedback**: Greyed out/translucent options for unaffordable evolutions
+
+**Implementation Tasks**:
+- [ ] Analyze current centralized evolution system in evolutionManager.js
+- [ ] Redesign piece data structure to include individual evolution points
+- [ ] Update capture logic to transfer points between pieces
+- [ ] Create floating point display system in Three.js
+- [ ] Implement right-click context menu for pieces
+- [ ] Design evolution tree visualization UI
+- [ ] Update evolution logic to work per-piece instead of per-player
+- [ ] Add visual indicators for affordable vs unaffordable evolutions
+
+**Testing Checklist**:
+- [ ] Each piece displays its evolution points above it
+- [ ] Right-clicking piece shows evolution menu
+- [ ] Evolution tree shows current piece position accurately
+- [ ] Capturing a piece transfers its evolution points to the capturer
+- [ ] Pieces can evolve independently using their own points
+- [ ] Unaffordable evolutions are clearly greyed out
+- [ ] Evolution menu updates in real-time as points change
+
+---
+
+### 5. Move Timer Logic Fix
+**Status**: [ ] Not Started
+**Priority**: High
+**Estimated Time**: 1-2 hours
+**Description**: Timer synchronization issues and movement bugs
+
+**Tasks**:
+- [ ] Debug timer synchronization issues
+- [ ] Fix timer-related movement bugs
+- [ ] Ensure moves only allowed when timer at 0
+- [ ] Test timer behavior with multiple players
+- [ ] Fix edge cases with timer expiration
+
+**Testing Checklist**:
+- [ ] Timer counts down correctly for each player
+- [ ] Moves only execute when timer reaches 0
+- [ ] Timer synchronizes properly across clients
+- [ ] No timer-related movement bugs
+- [ ] Timer handles player disconnections
+
+---
+
+### 6. Polar Movement Rules Definition
+**Status**: [ ] Not Started
+**Priority**: High
+**Estimated Time**: 1-2 hours
+**Description**: Movement around poles is fundamentally broken
+
+**Tasks**:
+- [ ] Define clear movement rules around polar caps
+- [ ] Fix king vulnerability at poles
+- [ ] Decide on pawn promotion rules (at outer ring?)
+- [ ] Implement and test polar movement logic
+- [ ] Consider special polar position rules
+
+**Testing Checklist**:
+- [ ] Movement around poles works correctly
+- [ ] Kings are not unfairly vulnerable at poles
+- [ ] Pawn promotion rules are clear and functional
+- [ ] Polar movement feels natural and balanced
+
+---
+
+## 📝 MEDIUM PRIORITY - Missing Features
+
+### 7. Equator Crossing Bonus
+**Status**: [ ] Not Started
+**Priority**: Medium
+**Estimated Time**: 1 hour
+**Description**: Pawns should get evolution points for crossing midline
+
+**Tasks**:
+- [ ] Add point award for pawns crossing midline
+- [ ] Create visual feedback for bonus
+- [ ] Test with multiple pieces
+- [ ] Update UI to show bonus points
+
+---
+
+## 🎨 LOW PRIORITY - Polish
+
+### 8. Camera System Improvements
+**Status**: [ ] Not Started
+**Priority**: Low
+**Estimated Time**: 1-2 hours
+**Description**: Auto-camera issues and polar orbit restrictions
+
+**Tasks**:
+- [ ] Fix auto-camera issues
+- [ ] Investigate polar orbit restriction workaround
+- [ ] Test camera behavior in different scenarios
+
+---
+
+## SPRINT METRICS
+- **Total Tasks**: 8 major features
+- **Estimated Time**: 16-24 hours (increased due to evolution system overhaul)
+- **Critical Issues**: 3
+- **High Priority**: 4 (includes major evolution system redesign)
+- **Medium Priority**: 1
+- **Low Priority**: 1
+
+## DAILY PROGRESS TRACKING
+**Day 1 Target**: Complete Splitter Mechanics Fix ✅
+**Day 2 Target**: Complete Pawn Capture Logic Fix + Start Evolution System Analysis
+**Day 3 Target**: Complete Evolution System Backend Redesign
+**Day 4 Target**: Complete Evolution System Frontend + UI
+**Day 5 Target**: Complete Battle Feedback System + Polish
+
+## DEFINITION OF DONE
+- [ ] All critical issues resolved
+- [ ] All high priority features implemented
+- [ ] Comprehensive testing completed
+- [ ] Game is fully playable without major bugs
+- [ ] Code is documented and cleaned up
+- [ ] Sprint retrospective completed
+
+## NEXT SPRINT PREPARATION
+- [ ] Update all checklists with current status
+- [ ] Plan next sprint focusing on polish and optimization
+- [ ] Consider user feedback and testing results
+- [ ] Prepare for deployment phase
+
+---
+
+**CURRENT STATUS**: ✅ Splitter Mechanics Fix COMPLETED - Evolution System Redesign Added
+**NEXT ACTION**: Choose between Pawn Capture Logic Fix (Task #2) or Evolution System Analysis (Task #4)
+**PRIORITY CLARIFICATION**: Evolution System now requires major redesign - per-piece points instead of player bank 

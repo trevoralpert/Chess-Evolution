@@ -1,0 +1,33 @@
+# EvoChess Name Transition Document
+**Date: July 17th, 2025**
+
+## Official Name Change
+As of today, this project is officially named **EvoChess** (previously Globe Chess).
+
+## Why EvoChess?
+The name better reflects the evolutionary mechanics that are core to the gameplay:
+- Pieces can evolve and gain new abilities
+- Players earn evolution points
+- Strategic evolution choices create dynamic gameplay
+
+## Action Items
+- [ ] Update all code comments to use "EvoChess"
+- [ ] Rename main window title in index.html
+- [ ] Update package.json project name
+- [ ] Update README.md with new branding
+- [ ] Update all server console logs
+- [ ] Update all client-side UI text
+- [ ] Rename any files containing "globe" to "evo"
+
+## Documentation Updates
+All new documentation should use "EvoChess" exclusively. Historical documents may retain references to "Globe Chess" for context.
+
+## Code References
+When referencing the project in code:
+- Variable names: `evoChess`, `evoChessGame`, etc.
+- Class names: `EvoChessGame`, `EvoChessPlayer`, etc.
+- File names: `evochess-`, `evo-chess-`, etc.
+- Comments: "EvoChess" or "the game"
+
+---
+This document serves as the official record of the name transition.

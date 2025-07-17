@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "evochess": {
+      "command": "node",
+      "args": ["/Users/trevoralpert/Desktop/GAUNTLET_AI/Project_5/evochess-mcp-server/index.js"]
+    }
+  }
+} 

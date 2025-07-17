@@ -4510,10 +4510,24 @@ function addAIPlayer() {
   
   const personality = getAIPersonality(personalityType);
   
+  console.log('Adding AI player...');
   socket.emit('add-ai-player', {
     difficulty,
     personality
   });
+  
+  // Update button state for visual feedback
+  const addAIBtn = document.getElementById('add-ai-btn');
+  if (addAIBtn) {
+    addAIBtn.textContent = 'Adding AI...';
+    addAIBtn.disabled = true;
+    
+    // Re-enable after a short delay
+    setTimeout(() => {
+      addAIBtn.textContent = 'Add AI Player';
+      addAIBtn.disabled = false;
+    }, 2000);
+  }
 }
 
 function removeAllAI() {
@@ -5339,25 +5353,8 @@ socket.on('game-draw', (data) => {
 window.addEventListener('load', () => {
   initializeChatSystem();
   
-  // Add AI player button handler
-  const addAIBtn = document.getElementById('add-ai-btn');
-  if (addAIBtn) {
-    addAIBtn.addEventListener('click', () => {
-      console.log('Adding AI player...');
-      socket.emit('add-ai-player', {
-        difficulty: 'MEDIUM',
-        personality: 'balanced'
-      });
-      addAIBtn.textContent = 'Adding AI...';
-      addAIBtn.disabled = true;
-      
-      // Re-enable after a short delay
-      setTimeout(() => {
-        addAIBtn.textContent = 'Add AI Player';
-        addAIBtn.disabled = false;
-      }, 2000);
-    });
-  }
+  // Add AI player button handler - removed duplicate listener
+  // The button handler is already set up in the addAIPlayer function above
 });
 
 // Start animation
