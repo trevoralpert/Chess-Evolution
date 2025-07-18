@@ -123,14 +123,24 @@ class EvolutionManager {
             ],
             'SPLITTER': [
                 {
-                    id: 'splitter_to_super_splitter',
-                    name: 'Super Splitter',
-                    targetType: 'SUPER_SPLITTER',
-                    cost: 10,
-                    timeRequirement: 480, // 8 minutes alive
-                    description: 'Enhanced Splitter with faster reproduction',
-                    icon: '⚡💫',
-                    rarity: 'epic'
+                    id: 'splitter_to_bishop',
+                    name: 'Bishop Evolution',
+                    targetType: 'BISHOP',
+                    cost: 3,
+                    timeRequirement: 0,
+                    description: 'Evolve to Bishop - Diagonal movement',
+                    icon: '♗',
+                    rarity: 'common'
+                },
+                {
+                    id: 'splitter_to_knight',
+                    name: 'Knight Evolution',
+                    targetType: 'KNIGHT',
+                    cost: 3,
+                    timeRequirement: 0,
+                    description: 'Evolve to Knight - L-shaped movement',
+                    icon: '♘',
+                    rarity: 'common'
                 }
             ],
             'JUMPER': [
@@ -179,7 +189,6 @@ class EvolutionManager {
             'SUPER_ROOK': { minBattlesWon: 5, minPiecesKilled: 3 },
             'SUPER_BISHOP': { minBattlesWon: 5, minPiecesKilled: 3 },
             'HYBRID_QUEEN': { minBattlesWon: 10, minPiecesKilled: 8, minEvolutionPoints: 50 },
-            'SUPER_SPLITTER': { minSplits: 5, minTimeAlive: 480 },
             'SUPER_JUMPER': { minJumps: 10, minMultiCaptures: 3 },
             'HYPER_JUMPER': { minJumps: 25, minMultiCaptures: 8 },
             'MISTRESS_JUMPER': { minJumps: 50, minMultiCaptures: 15, minBattlesWon: 15 }

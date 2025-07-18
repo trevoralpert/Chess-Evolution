@@ -1950,11 +1950,11 @@ function handlePieceSplit(playerId, splitData) {
   
   // Check if this split is valid according to piece split rules
   const validMoves = getValidMoves(pieceId);
-  const isValidSplit = validMoves.some(move => 
+  const matchingSplitMove = validMoves.find(move => 
     move.row === targetRow && move.col === targetCol && move.type === 'split'
   );
   
-  if (!isValidSplit) {
+  if (!matchingSplitMove) {
     const errorMsg = `Invalid split: (${targetRow}, ${targetCol}) is not a valid split position for piece ${pieceId}`;
     console.log(errorMsg);
     const playerSocket = io.sockets.sockets.get(playerId);
@@ -1976,18 +1976,47 @@ function handlePieceSplit(playerId, splitData) {
     return null;
   }
   
-  // Check if target position is occupied
+  // Check if target position is occupied and handle enemy capture
   const targetPosKey = GridUtils.getPositionKey(targetRow, targetCol);
   const targetPieceId = gameState.grid[targetPosKey];
   
+  let capturedPiece = null;
   if (targetPieceId) {
-    const errorMsg = `Invalid split: target position is occupied`;
-    console.log(errorMsg);
-    const playerSocket = io.sockets.sockets.get(playerId);
-    if (playerSocket) {
-      playerSocket.emit('split-result', { success: false, message: errorMsg });
+    const targetPiece = gameState.pieces[targetPieceId];
+    if (targetPiece && targetPiece.playerId !== playerId) {
+      // Enemy piece - capture it!
+      capturedPiece = targetPiece;
+      console.log(`Splitter capture: ${piece.symbol} splits onto and captures ${capturedPiece.symbol}`);
+      
+      // Remove captured piece from game
+      delete gameState.grid[targetPosKey];
+      delete gameState.pieces[targetPieceId];
+      
+      // Remove from player's pieces array
+      const capturedPlayer = gameState.players[capturedPiece.playerId];
+      if (capturedPlayer) {
+        capturedPlayer.pieces = capturedPlayer.pieces.filter(id => id !== targetPieceId);
+      }
+      
+      // Award kill to splitting piece
+      piece.kills = (piece.kills || 0) + 1;
+      
+      // Award evolution points for capture
+      const bank = evolutionManager.addEvolutionPoints(piece.playerId, 1, 'split_capture');
+      console.log(`${piece.symbol} gains evolution point for split capture! (${bank.points} total)`);
+      
+      // Clean up evolution tracking for dead piece
+      evolutionManager.handlePieceDeath(targetPieceId);
+      
+    } else if (targetPiece && targetPiece.playerId === playerId) {
+      const errorMsg = `Invalid split: cannot split onto own piece`;
+      console.log(errorMsg);
+      const playerSocket = io.sockets.sockets.get(playerId);
+      if (playerSocket) {
+        playerSocket.emit('split-result', { success: false, message: errorMsg });
+      }
+      return null;
     }
-    return null;
   }
   
   // Create the split piece (duplicate)
@@ -2026,7 +2055,9 @@ function handlePieceSplit(playerId, splitData) {
   // Update evolution manager piece stats
   evolutionManager.updatePieceStats(pieceId, 'splits');
   
-  const successMsg = `Splitter ${piece.symbol} split to (${targetRow}, ${targetCol})`;
+  const successMsg = capturedPiece ? 
+    `Splitter ${piece.symbol} split to (${targetRow}, ${targetCol}) and captured ${capturedPiece.symbol}` :
+    `Splitter ${piece.symbol} split to (${targetRow}, ${targetCol})`;
   console.log(successMsg);
   
   // Broadcast split event
@@ -2035,7 +2066,13 @@ function handlePieceSplit(playerId, splitData) {
     newPieceId: splitPieceId,
     originalPosition: { row: piece.row, col: piece.col },
     newPosition: { row: targetRow, col: targetCol },
-    playerId: playerId
+    playerId: playerId,
+    capturedPiece: capturedPiece ? {
+      id: capturedPiece.id,
+      type: capturedPiece.type,
+      symbol: capturedPiece.symbol,
+      position: { row: targetRow, col: targetCol }
+    } : null
   });
   
   // Advance turn counter
@@ -2143,13 +2180,12 @@ function handleMultiJumpCapture(playerId, pieceId, matchingMove, targetRow, targ
 function handleBattle(attackingPiece, defendingPiece) {
   console.log(`Battle: ${attackingPiece.symbol} (${attackingPiece.value}pts) vs ${defendingPiece.symbol} (${defendingPiece.value}pts)`);
   
-  // Check if this should trigger a contest
-  if (shouldTriggerContest(attackingPiece, defendingPiece)) {
-    initiateBattleContest(attackingPiece, defendingPiece);
-  } else {
-    // Resolve battle immediately
-    resolveBattleImmediate(attackingPiece, defendingPiece);
-  }
+  // SIMPLIFIED BATTLE SYSTEM: Attacker always wins in direct attacks
+  // No more value-based restrictions or contests
+  console.log(`Direct attack: ${attackingPiece.symbol} captures ${defendingPiece.symbol}`);
+  
+  // Winner is always the attacker in direct attacks
+  completeBattleResolution(attackingPiece, defendingPiece);
 }
 
 function initiateBattleContest(attackingPiece, defendingPiece) {
@@ -2442,43 +2478,31 @@ function handleMoveCollision(playerId, moveData, conflictingMove) {
   
   console.log(`Move collision detected: ${piece1.symbol} vs ${piece2.symbol} at (${moveData.targetRow}, ${moveData.targetCol})`);
   
-  // Create a battle between the two pieces
-  const battleId = `collision-${Date.now()}`;
-  const pendingBattle = {
-    id: battleId,
-    attackingPiece: piece1,
-    defendingPiece: piece2,
-    type: 'collision',
-    targetRow: moveData.targetRow,
-    targetCol: moveData.targetCol
-  };
+  // SIMPLIFIED COLLISION SYSTEM: Always use dice battle for simultaneous moves
+  // No more contests - go straight to dice battle
+  console.log(`Simultaneous move collision - initiating dice battle!`);
   
-  gameState.pendingBattles[battleId] = pendingBattle;
+  // Notify both players about the collision battle
+  io.emit('collision-battle-start', {
+    piece1: {
+      id: piece1.id,
+      type: piece1.type,
+      symbol: piece1.symbol,
+      value: piece1.value,
+      playerId: piece1.playerId
+    },
+    piece2: {
+      id: piece2.id,
+      type: piece2.type,
+      symbol: piece2.symbol,
+      value: piece2.value,
+      playerId: piece2.playerId
+    },
+    targetPosition: { row: moveData.targetRow, col: moveData.targetCol }
+  });
   
-  // Check if this should trigger a contest
-  if (shouldTriggerContest(piece1, piece2)) {
-    const timeLimit = getContestTimeLimit(piece1, piece2);
-    
-    // Notify defending player about the collision contest
-    io.to(piece2.playerId).emit('collision-contest-prompt', {
-      battleId: battleId,
-      attackingPiece: piece1,
-      defendingPiece: piece2,
-      timeLimit: timeLimit,
-      targetPosition: { row: moveData.targetRow, col: moveData.targetCol }
-    });
-    
-    // Start contest timer
-    setTimeout(() => {
-      if (gameState.pendingBattles[battleId]) {
-        console.log(`Collision contest timeout for battle ${battleId}`);
-        handleContestResponse(piece2.playerId, { battleId, wantsToContest: false });
-      }
-    }, timeLimit);
-  } else {
-    // Immediate battle resolution
-    resolveBattleImmediate(piece1, piece2);
-  }
+  // Go straight to dice battle for collisions
+  resolveBattleWithDice(piece1, piece2);
 }
 
 function calculateBattleAnimationDuration(battleLog) {
@@ -2539,10 +2563,16 @@ function getAvailableEvolutionPaths(piece) {
       break;
     case 'SPLITTER':
       availablePaths.push({
-        id: 'splitter_to_super_splitter',
-        targetType: 'SUPER_SPLITTER',
-        cost: 2,
-        description: 'Evolve to Super Splitter - Enhanced splitting abilities'
+        id: 'splitter_to_bishop',
+        targetType: 'BISHOP',
+        cost: 3,
+        description: 'Evolve to Bishop - Diagonal movement'
+      });
+      availablePaths.push({
+        id: 'splitter_to_knight',
+        targetType: 'KNIGHT',
+        cost: 3,
+        description: 'Evolve to Knight - L-shaped movement'
       });
       break;
     // Add more evolution paths as needed
@@ -2915,17 +2945,11 @@ function getValidMoves(pieceId) {
           if (isNorthPole) {
             // North pole splitters move toward south (+1 row) 
             moveDirections = [{ row: 1, col: 0 }];
-            attackDirections = [
-              { row: 1, col: -1 }, { row: 1, col: 1 },  // Forward diagonals
-              { row: 0, col: -1 }, { row: 0, col: 1 }   // Sideways
-            ];
+            attackDirections = []; // Splitters have NO attack moves - they only capture by splitting
           } else {
             // South pole splitters move toward north (-1 row)
             moveDirections = [{ row: -1, col: 0 }];
-            attackDirections = [
-              { row: -1, col: -1 }, { row: -1, col: 1 }, // Forward diagonals
-              { row: 0, col: -1 }, { row: 0, col: 1 }    // Sideways
-            ];
+            attackDirections = []; // Splitters have NO attack moves - they only capture by splitting
           }
         }
       }
@@ -2983,8 +3007,14 @@ function getValidMoves(pieceId) {
             const occupyingPieceId = gameState.grid[posKey];
             
             if (!occupyingPieceId) {
-              // Only allow split to empty squares
+              // Can split to empty squares
               validMoves.push({ row: targetRow, col: targetCol, type: 'split' });
+            } else {
+              // Can split onto enemy pieces (captures them)
+              const occupyingPiece = gameState.pieces[occupyingPieceId];
+              if (occupyingPiece && occupyingPiece.playerId !== piece.playerId) {
+                validMoves.push({ row: targetRow, col: targetCol, type: 'split', capture: occupyingPieceId });
+              }
             }
           }
         });
