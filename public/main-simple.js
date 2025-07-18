@@ -3282,20 +3282,48 @@ function highlightValidMoves() {
     modeIndicator.style.background = 'rgba(0, 50, 0, 0.8)';
   }
   
-  // Add new highlights
+  // Check for positions with multiple move types
+  const positionMoveTypes = {};
   validMoves.forEach(move => {
+    const key = `${move.row},${move.col}`;
+    if (!positionMoveTypes[key]) {
+      positionMoveTypes[key] = [];
+    }
+    positionMoveTypes[key].push(move);
+  });
+  
+  // Add new highlights
+  const processedPositions = new Set();
+  
+  validMoves.forEach(move => {
+    const posKey = `${move.row},${move.col}`;
+    
+    // Skip if we already processed this position
+    if (processedPositions.has(posKey)) return;
+    processedPositions.add(posKey);
+    
     const position = getWorldPosition(move.row, move.col);
+    const movesAtPosition = positionMoveTypes[posKey];
     
     // Different colors and shapes for different move types
     let highlightColor, highlightGeometry;
     
-    if (move.type === 'attack') {
+    // Check if this position has multiple move types (specifically move + split)
+    const hasMultipleTypes = movesAtPosition.length > 1 && 
+                           movesAtPosition.some(m => m.type === 'split') && 
+                           movesAtPosition.some(m => m.type === 'move');
+    
+    if (hasMultipleTypes) {
+      // Special highlight for positions with multiple options
+      highlightColor = 0xffff00; // Yellow for multi-option
+      highlightGeometry = new THREE.TorusGeometry(0.2, 0.05, 8, 16); // Ring shape
+    } else if (move.type === 'attack') {
       highlightColor = 0xff4444; // Red for attack
       highlightGeometry = new THREE.SphereGeometry(0.15, 8, 8);
     } else if (move.type === 'split') {
-      highlightColor = 0xff6b6b; // Lighter red for split
-      highlightGeometry = new THREE.OctahedronGeometry(0.12); // Different shape for split
-
+      highlightColor = 0x44ff44; // Green for split (same as regular move)
+      // Create a torus (3D ring) for split moves - more clickable than flat ring
+      highlightGeometry = new THREE.TorusGeometry(0.4, 0.05, 8, 32);
     } else if (move.type === 'jump-capture') {
       highlightColor = 0xff8800; // Orange for jump capture
       highlightGeometry = new THREE.TetrahedronGeometry(0.12); // Pyramid shape for jump
@@ -3317,7 +3345,7 @@ function highlightValidMoves() {
       color: highlightColor,
       transparent: true,
       opacity: 0.8,
-      wireframe: move.type === 'split' || move.type === 'jump-capture' || move.type === 'multi-jump-capture' || move.type === 'dual-move-queen' || move.type === 'dual-move-jumper', // Wireframe for special moves
+      wireframe: move.type === 'jump-capture' || move.type === 'multi-jump-capture' || move.type === 'dual-move-queen' || move.type === 'dual-move-jumper', // Wireframe for special moves (not split since it uses ring geometry)
       depthTest: true,
       depthWrite: true
     });
@@ -3674,28 +3702,28 @@ function onMouseClick(event) {
       console.log('Clicked piece:', piece.symbol, piece.type);
       
       // Check if this piece belongs to the current player
-      const currentPlayer = Object.values(gameState.players).find(p => p.id === socket.id);
-      console.log('Socket ID:', socket.id);
+      const currentPlayer = Object.values(gameState.players).find(p => p.id === window.globalSocket.id);
+      console.log('Socket ID:', window.globalSocket.id);
       console.log('Current player:', currentPlayer);
       console.log('Piece player ID:', piece.playerId);
       console.log('Player ID match:', currentPlayer && piece.playerId === currentPlayer.id);
       
       // More robust ownership check - also check if piece belongs to socket ID directly
       const isOwnPiece = (currentPlayer && piece.playerId === currentPlayer.id) || 
-                        (piece.playerId === socket.id);
+                        (piece.playerId === window.globalSocket.id);
       
       if (isOwnPiece) {
         clickHandled = true;
         if (isRightClick) {
           // Right-click: Request evolution options
-          socket.emit('request-evolution-choice', { pieceId: piece.id });
+          window.globalSocket.emit('request-evolution-choice', { pieceId: piece.id });
         } else {
           // Left-click: Select piece and show moves
           selectedPieceId = piece.id;
           highlightSelectedPiece(piece.id);
           
           // Request valid moves for this piece
-          socket.emit('get-valid-moves', { pieceId: piece.id });
+          window.globalSocket.emit('get-valid-moves', { pieceId: piece.id });
           
           // Update UI
           gameInfoEl.textContent = `Selected: ${piece.symbol} ${piece.type}`;
@@ -3720,6 +3748,9 @@ function onMouseClick(event) {
       console.log('🎯 Current selected piece ID:', currentSelectedPieceId);
       
       if (currentSelectedPieceId) {
+        // For splitters, we handle split and move actions directly based on the move type
+        // No dialog needed since different visual indicators are used
+        
         // Check if this is a dual movement piece and requires mode selection
         const selectedPiece = gameState.pieces[currentSelectedPieceId];
         const isDualMovement = selectedPiece && selectedPiece.type === 'HYBRID_QUEEN';
@@ -3755,7 +3786,7 @@ function onMouseClick(event) {
 
           // Send split command to server
           console.log(`🔄 SPLIT MOVE DETECTED - Sending split-piece event for ${currentSelectedPieceId} to (${move.row}, ${move.col})`);
-          socket.emit('split-piece', {
+          window.globalSocket.emit('split-piece', {
             pieceId: currentSelectedPieceId,
             targetRow: move.row,
             targetCol: move.col
@@ -3779,7 +3810,7 @@ function onMouseClick(event) {
           console.log('  targetRow:', move.row, 'targetCol:', move.col);
           console.log('  Current piece position:', gameState.pieces[currentSelectedPieceId]?.mesh?.position);
           
-          socket.emit('move-piece', {
+          window.globalSocket.emit('move-piece', {
             pieceId: currentSelectedPieceId,
             targetRow: move.row,
             targetCol: move.col
@@ -4033,6 +4064,26 @@ window.addEventListener('keydown', (e) => {
       clientY: window.innerHeight / 2
     });
     onMouseClick(event);
+  }
+  
+  // Debug key to convert selected pawn to splitter
+  if (e.key === 't' || e.key === 'T') {
+    if (selectedPieceId && gameState.pieces[selectedPieceId]) {
+      const piece = gameState.pieces[selectedPieceId];
+      if (piece.type === 'PAWN') {
+        console.log('🔧 DEBUG: Converting PAWN to SPLITTER for testing');
+        // Send evolution command directly
+        window.globalSocket.emit('debug-evolve-piece', {
+          pieceId: selectedPieceId,
+          newType: 'SPLITTER'
+        });
+        showNotification('Debug', 'Converting PAWN to SPLITTER for testing', 'info');
+      } else {
+        showNotification('Debug', 'Select a PAWN first to convert to SPLITTER', 'warning');
+      }
+    } else {
+      showNotification('Debug', 'No piece selected - select a PAWN first', 'warning');
+    }
   }
 });
 
@@ -6292,6 +6343,130 @@ function bankEvolutionPoints(pieceId) {
 // Make these functions globally accessible for onclick handlers
 window.chooseEvolution = chooseEvolution;
 window.bankEvolutionPoints = bankEvolutionPoints;
+
+// Move choice dialog for splitters
+function showMoveChoiceDialog(pieceId, targetRow, targetCol, moveOptions) {
+  // Create dialog HTML
+  const dialogHtml = `
+    <div id="move-choice-dialog" style="
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.9);
+      border: 2px solid #ff6b6b;
+      border-radius: 10px;
+      padding: 20px;
+      color: white;
+      text-align: center;
+      z-index: 10000;
+      min-width: 300px;
+      max-width: 400px;
+    ">
+      <h3 style="margin: 0 0 20px 0; color: #ff6b6b;">Choose Action</h3>
+      <p style="margin-bottom: 20px;">Position (${targetRow}, ${targetCol}) - Multiple actions available:</p>
+      
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button id="move-choice-regular" style="
+          background-color: #4CAF50;
+          color: white;
+          border: none;
+          padding: 10px 20px;
+          border-radius: 5px;
+          cursor: pointer;
+          font-size: 16px;
+          pointer-events: auto;
+          position: relative;
+          z-index: 10001;
+        ">
+          <div style="font-size: 24px;">→</div>
+          <div>Move</div>
+          <div style="font-size: 12px; opacity: 0.8;">Regular movement</div>
+        </button>
+        
+        <button id="move-choice-split" style="
+          background-color: #ff6b6b;
+          color: white;
+          border: none;
+          padding: 10px 20px;
+          border-radius: 5px;
+          cursor: pointer;
+          font-size: 16px;
+          pointer-events: auto;
+          position: relative;
+          z-index: 10001;
+        ">
+          <div style="font-size: 24px;">⧨</div>
+          <div>Split</div>
+          <div style="font-size: 12px; opacity: 0.8;">Create two pieces</div>
+        </button>
+      </div>
+      
+      <button id="move-choice-cancel" style="
+        background-color: #666;
+        color: white;
+        border: none;
+        padding: 5px 15px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        margin-top: 15px;
+        pointer-events: auto;
+        position: relative;
+        z-index: 10001;
+      ">Cancel</button>
+    </div>
+  `;
+  
+  // Add to document
+  document.body.insertAdjacentHTML('beforeend', dialogHtml);
+  
+  // Add event listeners
+  document.getElementById('move-choice-regular').addEventListener('click', function() {
+    executeMoveChoice(pieceId, targetRow, targetCol, 'move');
+    closeMoveChoiceDialog();
+  });
+  
+  document.getElementById('move-choice-split').addEventListener('click', function() {
+    executeMoveChoice(pieceId, targetRow, targetCol, 'split');
+    closeMoveChoiceDialog();
+  });
+  
+  document.getElementById('move-choice-cancel').addEventListener('click', function() {
+    closeMoveChoiceDialog();
+  });
+}
+
+function closeMoveChoiceDialog() {
+  const dialog = document.getElementById('move-choice-dialog');
+  if (dialog) {
+    dialog.remove();
+  }
+}
+
+function executeMoveChoice(pieceId, targetRow, targetCol, moveType) {
+  if (moveType === 'split') {
+    console.log(`🔄 SPLIT chosen - Sending split-piece event for ${pieceId} to (${targetRow}, ${targetCol})`);
+    window.globalSocket.emit('split-piece', {
+      pieceId: pieceId,
+      targetRow: targetRow,
+      targetCol: targetCol
+    });
+    gameInfoEl.textContent = `Splitting piece...`;
+  } else {
+    console.log('🚀 MOVE chosen - Sending move-piece event');
+    window.globalSocket.emit('move-piece', {
+      pieceId: pieceId,
+      targetRow: targetRow,
+      targetCol: targetCol
+    });
+    gameInfoEl.textContent = `Moving piece...`;
+  }
+  
+  // Clear highlights after action
+  clearValidMoveHighlights();
+  selectedPieceId = null;
+}
 
 function closeEvolutionDialog() {
   const dialog = document.getElementById('evolution-choice-dialog');

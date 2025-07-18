@@ -13,6 +13,7 @@ class VictoryManager {
     this.eliminationEffects = {};
     this.gameStartTime = Date.now();
     this.victoryCheckInterval = null;
+    this.evolutionInProgress = false; // Flag to disable checks during evolution
   }
 
   initializeVictorySystem() {
@@ -21,15 +22,40 @@ class VictoryManager {
     
     // Start periodic victory checks
     this.victoryCheckInterval = setInterval(() => {
-      this.checkVictoryConditions();
+      if (!this.evolutionInProgress) { // Only check if evolution not in progress
+        this.checkVictoryConditions();
+      }
     }, 5000); // Check every 5 seconds
     
     console.log('Victory system initialized with territory influence');
   }
 
+  // Add methods to control evolution state
+  pauseForEvolution() {
+    this.evolutionInProgress = true;
+    console.log('Victory checks paused for evolution');
+  }
+
+  resumeAfterEvolution() {
+    this.evolutionInProgress = false;
+    console.log('Victory checks resumed after evolution');
+  }
+
   calculateTerritoryInfluence() {
     const GRID_ROWS = 20;
     const GRID_COLS = 8;
+    
+    // Don't calculate territory during evolution or early game
+    if (this.evolutionInProgress) {
+      console.log('Territory calculation skipped - evolution in progress');
+      return;
+    }
+    
+    const gameTime = Date.now() - this.gameStartTime;
+    if (gameTime < 60000) { // 1 minute minimum before territory checks
+      console.log(`Territory calculation skipped - game too young (${gameTime}ms < 60000ms)`);
+      return;
+    }
     
     // Reset territory influence
     this.territoryInfluence = {};
@@ -183,37 +209,77 @@ class VictoryManager {
 
   checkVictoryConditions() {
     const players = Object.values(this.gameState.players);
-    const alivePlayers = players.filter(p => p.pieces && p.pieces.length > 0);
     
-    console.log(`Victory check: ${alivePlayers.length} alive players, ${Object.keys(this.gameState.players).length} total players`);
+    // Filter out eliminated players first
+    const activePlayers = players.filter(p => !p.eliminated);
+    
+    // Then check which active players have pieces
+    const alivePlayers = activePlayers.filter(p => {
+      // Validate pieces array exists and has valid pieces
+      if (!p.pieces || !Array.isArray(p.pieces)) return false;
+      
+      // Count actual valid pieces in the game state
+      const validPieceCount = p.pieces.filter(pieceId => {
+        const piece = this.gameState.pieces[pieceId];
+        return piece && piece.playerId === p.id;
+      }).length;
+      
+      return validPieceCount > 0;
+    });
+    
+    console.log(`Victory check: ${alivePlayers.length} alive players out of ${activePlayers.length} active, ${players.length} total`);
+    alivePlayers.forEach(p => {
+      const validPieces = p.pieces.filter(pieceId => {
+        const piece = this.gameState.pieces[pieceId];
+        return piece && piece.playerId === p.id;
+      });
+      console.log(`  Player ${p.name} (${p.id}): ${validPieces.length} valid pieces, isAI: ${p.isAI}`);
+      
+      // Log piece details if evolution was recent
+      if (this.evolutionInProgress || validPieces.length === 0) {
+        console.log(`    Piece details:`, validPieces.map(pid => {
+          const piece = this.gameState.pieces[pid];
+          return { id: pid, type: piece?.type, exists: !!piece };
+        }));
+      }
+    });
+    
+    // CRITICAL FIX: Don't declare victory during active gameplay
+    // Only check victory conditions if it's been at least 10 minutes since game start
+    const gameTime = this.gameState.gameStartTime ? (Date.now() - this.gameState.gameStartTime) : 0;
+    const MIN_GAME_TIME_FOR_VICTORY = 600000; // 10 minutes (increased from 30 seconds)
     
     // Don't check victory conditions if there's only one player and game just started
     // This prevents immediate victory declaration when only one player joins
     if (alivePlayers.length <= 1) {
       // Only declare victory if we had multiple players before (actual game happened)
       // or if the game has been running for some time
-      const totalPlayers = Object.keys(this.gameState.players).length;
-      const gameTime = this.gameState.gameStartTime ? (Date.now() - this.gameState.gameStartTime) : 0;
-      const hasGameStarted = gameTime > 10000; // 10 seconds
+      const totalPlayers = activePlayers.length; // Use active players, not total
+      const hasGameStarted = gameTime > MIN_GAME_TIME_FOR_VICTORY; // MUCH more conservative
       
-      console.log(`Single player check: totalPlayers=${totalPlayers}, gameTime=${gameTime}ms, hasGameStarted=${hasGameStarted}`);
+      console.log(`Single player check: activePlayers=${totalPlayers}, gameTime=${gameTime}ms, hasGameStarted=${hasGameStarted}`);
       
-      if (totalPlayers > 1 || hasGameStarted) {
-        console.log(`Declaring victory: totalPlayers > 1 (${totalPlayers > 1}) OR hasGameStarted (${hasGameStarted})`);
+      // Additional validation: ensure we actually had a multi-player game
+      const hadMultiplePlayers = totalPlayers > 1 || Object.keys(this.gameState.players).length > 1;
+      
+      // CRITICAL FIX: Only declare victory if game has been running for at least 10 minutes
+      // This prevents premature victory declarations during active gameplay
+      if (hadMultiplePlayers && hasGameStarted && alivePlayers.length === 1) {
+        console.log(`Declaring victory: had multiple players and game has been running for 10+ minutes`);
         // Last player standing
-        if (alivePlayers.length === 1) {
-          this.declareVictory(alivePlayers[0], 'last_player_standing');
-        } else {
-          this.declareVictory(null, 'draw');
-        }
+        this.declareVictory(alivePlayers[0], 'last_player_standing');
+      } else if (hadMultiplePlayers && hasGameStarted && alivePlayers.length === 0) {
+        console.log(`Declaring draw: had multiple players but no one left after 10+ minutes`);
+        this.declareVictory(null, 'draw');
       } else {
-        console.log(`Not declaring victory: game just started with single player`);
+        console.log(`Not declaring victory: conditions not met (hadMultiplePlayers=${hadMultiplePlayers}, hasGameStarted=${hasGameStarted}, gameTime=${gameTime}ms)`);
       }
       return;
     }
 
-    // Check territory control victory
-    if (this.victoryConditions.territoryControl) {
+    // CRITICAL FIX: Disable territory control victory for now to prevent false positives
+    // Territory control victory can be re-enabled later after thorough testing
+    if (false && this.victoryConditions.territoryControl) {
       const territoryWinner = this.checkTerritoryVictory();
       if (territoryWinner) {
         this.declareVictory(territoryWinner, 'territory_control');
@@ -221,7 +287,7 @@ class VictoryManager {
       }
     }
 
-    // Update territory influence
+    // Update territory influence (but don't use it for victory)
     this.calculateTerritoryInfluence();
   }
 
@@ -230,8 +296,22 @@ class VictoryManager {
     const MIN_STRONGHOLDS = 3;
     const MIN_GAME_TIME = 300000; // 5 minutes
 
+    // Don't check territory victory during evolution
+    if (this.evolutionInProgress) {
+      console.log('Territory check skipped - evolution in progress');
+      return null;
+    }
+
     // Only check territory victory after minimum game time
-    if (Date.now() - this.gameStartTime < MIN_GAME_TIME) {
+    const gameTime = Date.now() - this.gameStartTime;
+    if (gameTime < MIN_GAME_TIME) {
+      console.log(`Territory check skipped - game too young (${gameTime}ms < ${MIN_GAME_TIME}ms)`);
+      return null;
+    }
+
+    // Make sure we have territory data
+    if (!this.territoryInfluence || Object.keys(this.territoryInfluence).length === 0) {
+      console.log('Territory check skipped - no territory data');
       return null;
     }
 
@@ -240,7 +320,15 @@ class VictoryManager {
         playerId,
         ...this.territoryInfluence[playerId]
       }))
+      .filter(t => t.territoryPercentage > 0) // Filter out players with no territory
       .sort((a, b) => b.territoryPercentage - a.territoryPercentage)[0];
+
+    if (!territoryLeader) {
+      console.log('Territory check skipped - no territory leader found');
+      return null;
+    }
+
+    console.log(`Territory leader: ${territoryLeader.playerId} with ${territoryLeader.territoryPercentage}% and ${territoryLeader.strongholds} strongholds`);
 
     if (territoryLeader.territoryPercentage >= MIN_TERRITORY_PERCENT && 
         territoryLeader.strongholds >= MIN_STRONGHOLDS) {
@@ -361,6 +449,15 @@ class VictoryManager {
   }
 
   declareVictory(victoryPlayer, victoryType) {
+    // Prevent duplicate victory declarations
+    if (this.gameState.gameEnded) {
+      console.log('Victory already declared - ignoring duplicate declaration');
+      return;
+    }
+
+    // Mark game as ended
+    this.gameState.gameEnded = true;
+
     // Stop victory checks
     if (this.victoryCheckInterval) {
       clearInterval(this.victoryCheckInterval);
@@ -472,6 +569,27 @@ class VictoryManager {
     if (this.victoryCheckInterval) {
       clearInterval(this.victoryCheckInterval);
     }
+  }
+
+  // CRITICAL FIX: Add method to reset game state if victory was prematurely declared
+  resetGameState() {
+    console.log('Resetting game state - victory was prematurely declared');
+    
+    // Reset game ended flag
+    this.gameState.gameEnded = false;
+    
+    // Restart victory checks with the new conservative logic
+    if (this.victoryCheckInterval) {
+      clearInterval(this.victoryCheckInterval);
+    }
+    
+    this.victoryCheckInterval = setInterval(() => {
+      if (!this.evolutionInProgress) {
+        this.checkVictoryConditions();
+      }
+    }, 5000); // Check every 5 seconds
+    
+    console.log('Game state reset - victory checks restarted with conservative logic');
   }
 }
 

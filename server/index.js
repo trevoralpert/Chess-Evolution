@@ -31,12 +31,26 @@ const gameState = {
   players: {},
   pieces: {}, // pieceId -> piece object
   grid: {}, // positionKey -> pieceId
+  gridConfig: {
+    rows: GAME_CONFIG.GRID_ROWS,
+    cols: GAME_CONFIG.GRID_COLS
+  },
   playerCount: 0,
   pendingBattles: {}, // battleId -> battle info
+  pendingEvolutions: {}, // Track pending evolution choices
+  isInTournament: false,
+  tournamentId: null,
+  matchId: null,
   currentTurn: 0,
+  gameStartTime: null,
   activePlayer: null,
-  gameStartTime: null
+  gameEnded: false  // CRITICAL FIX: Always start with false
 };
+
+// CRITICAL FIX: Force reset game state on server startup
+console.log('🔄 Server starting - resetting game state...');
+gameState.gameEnded = false;
+console.log('✅ Game state reset - gameEnded:', gameState.gameEnded);
 
 // Tournament management
 const tournamentManager = new TournamentManager();
@@ -103,6 +117,35 @@ evolutionManager.setupCleanupInterval();
 setTimeout(() => {
   victoryManager.initializeVictorySystem();
   chatManager.createChatRoom('main', 'Game Chat', 'game');
+  
+  // CRITICAL FIX: Auto-reset game state if victory was prematurely declared
+  // This handles the case where the game was ended incorrectly and needs to be restarted
+  setTimeout(() => {
+    if (gameState.gameEnded) {
+      const activePlayersCount = Object.values(gameState.players).filter(p => !p.eliminated).length;
+      const gameTime = gameState.gameStartTime ? (Date.now() - gameState.gameStartTime) : 0;
+      const hasActivePieces = Object.keys(gameState.pieces).length > 0;
+      
+      // If game is marked as ended but there are still active players and pieces,
+      // and the game hasn't been running for 10+ minutes, reset the game state
+      if (activePlayersCount > 0 && hasActivePieces && gameTime < 600000) {
+        console.log(`🔄 DETECTED PREMATURE VICTORY - Resetting game state`);
+        console.log(`  Active players: ${activePlayersCount}`);
+        console.log(`  Active pieces: ${Object.keys(gameState.pieces).length}`);
+        console.log(`  Game time: ${gameTime}ms`);
+        
+        victoryManager.resetGameState();
+        
+        // Broadcast game reset notification
+        io.emit('game-reset', {
+          message: 'Game has been reset due to premature victory declaration',
+          reason: 'premature_victory',
+          activePlayersCount,
+          activePiecesCount: Object.keys(gameState.pieces).length
+        });
+      }
+    }
+  }, 2000); // Check 2 seconds after victory system init
 }, 1000);
 
 io.on('connection', (socket) => {
@@ -740,10 +783,23 @@ io.on('connection', (socket) => {
 
   socket.on('make-evolution-choice', (data) => {
     const { pieceId, pathId } = data;
+    
+    console.log(`📝 Evolution choice started for piece ${pieceId}, path ${pathId}`);
+    console.log(`📝 Current player count: ${Object.keys(gameState.players).length}`);
+    console.log(`📝 Players with pieces:`, Object.entries(gameState.players).map(([id, p]) => 
+      `${p.name}: ${p.pieces.filter(pid => gameState.pieces[pid]).length} pieces`
+    ));
+    
+    // Pause victory checks during evolution
+    victoryManager.pauseForEvolution();
+    
     const result = evolutionManager.processEvolutionChoice(socket.id, pieceId, pathId);
     
     if (!result.success) {
       socket.emit('evolution-choice-failed', { error: result.error });
+      
+      // Resume victory checks on failure
+      victoryManager.resumeAfterEvolution();
       return;
     }
     
@@ -752,6 +808,10 @@ io.on('connection', (socket) => {
     if (piece) {
       const oldType = piece.type;
       const newType = result.evolution.toType;
+      
+      console.log(`📝 Evolving piece ${pieceId} from ${oldType} to ${newType}`);
+      console.log(`📝 Player ${socket.id} pieces before evolution:`, gameState.players[socket.id].pieces);
+      console.log(`📝 Piece exists in gameState.pieces:`, !!gameState.pieces[pieceId]);
       
       // Update piece type and properties
       const newPieceData = PIECE_TYPES[newType];
@@ -763,22 +823,36 @@ io.on('connection', (socket) => {
         // Update game state
         gameState.pieces[pieceId] = piece;
         
+        console.log(`📝 Evolution complete. Piece ${pieceId} is now ${newType}`);
+        console.log(`📝 Updated piece:`, piece);
+        console.log(`📝 Player ${socket.id} pieces after evolution:`, gameState.players[socket.id].pieces);
+        console.log(`📝 All pieces for player:`, gameState.players[socket.id].pieces.map(pid => ({
+          id: pid,
+          exists: !!gameState.pieces[pid],
+          type: gameState.pieces[pid]?.type
+        })));
+        
         // Record evolution in statistics
         statisticsManager.recordEvolution(socket.id, oldType, newType, result.evolution.cost);
         
-        // Broadcast evolution event
-        io.emit('evolution-completed', {
-          pieceId: pieceId,
-          playerId: socket.id,
-          oldType: oldType,
-          newType: newType,
-          cost: result.evolution.cost,
-          newPoints: result.evolution.newPoints,
-          position: { row: piece.row, col: piece.col }
-        });
-        
-        // Update game state
-        broadcastGameState();
+            // Broadcast evolution event
+    io.emit('evolution-completed', {
+      pieceId: pieceId,
+      playerId: socket.id,
+      oldType: oldType,
+      newType: newType,
+      cost: result.evolution.cost,
+      newPoints: result.evolution.newPoints,
+      position: { row: piece.row, col: piece.col }
+    });
+    
+    // Update game state
+    broadcastGameState();
+    
+    // Keep victory checks paused for a bit longer after evolution
+    setTimeout(() => {
+      victoryManager.resumeAfterEvolution();
+    }, 3000); // 3 second delay after evolution
       }
     }
     
@@ -790,6 +864,8 @@ io.on('connection', (socket) => {
     
     // Resume cooldowns after evolution choice is complete
     timingManager.resumeAllCooldowns();
+    
+    // Victory checks will be resumed after evolution-completed is broadcast
   });
 
   socket.on('cancel-evolution-choice', (data) => {
@@ -887,6 +963,48 @@ io.on('connection', (socket) => {
   });
 
   // Handle quit game request
+  // Debug command to evolve a piece for testing
+  socket.on('debug-evolve-piece', (data) => {
+    const { pieceId, newType } = data;
+    const piece = gameState.pieces[pieceId];
+    
+    if (!piece || piece.playerId !== socket.id) {
+      console.log('Debug evolve failed - invalid piece');
+      return;
+    }
+    
+    console.log(`🔧 DEBUG: Evolving ${piece.type} to ${newType}`);
+    
+    // Pause victory checks during debug evolution
+    victoryManager.pauseForEvolution();
+    
+    // Update piece type
+    const oldType = piece.type;
+    piece.type = newType;
+    piece.symbol = PIECE_TYPES[newType].symbol;
+    piece.value = PIECE_TYPES[newType].points;
+    
+    // Ensure piece is still properly tracked in game state
+    gameState.pieces[pieceId] = piece;
+    
+    // Broadcast the evolution
+    io.emit('piece-evolved', {
+      pieceId: pieceId,
+      oldType: oldType,
+      newType: newType,
+      playerId: socket.id,
+      position: { row: piece.row, col: piece.col }
+    });
+    
+    // Update game state
+    broadcastGameState();
+    
+    // Resume victory checks after a delay
+    setTimeout(() => {
+      victoryManager.resumeAfterEvolution();
+    }, 2000);
+  });
+
   socket.on('quit-game', () => {
     console.log(`Player ${socket.id} requested to quit game`);
     
@@ -1173,8 +1291,14 @@ function startGameFromLobby(lobbyId) {
   gameState.grid = {};
   gameState.playerCount = 0;
   gameState.pendingBattles = {};
+  gameState.pendingEvolutions = {}; // Track pending evolution choices
+  gameState.isInTournament = false;
+  gameState.tournamentId = null;
+  gameState.matchId = null;
   gameState.currentTurn = 0;
+  gameState.gameStartTime = null;
   gameState.activePlayer = null;
+  gameState.gameEnded = false; // Track if game has ended
   
   // Create players from lobby
   lobby.players.forEach((lobbyPlayer, index) => {
@@ -1679,18 +1803,7 @@ function checkSplitterBalance(piece, playerId) {
     };
   }
   
-  // Check population limit: max 5 splitters per player (increased from 3)
-  const splitterCount = player.pieces.filter(pieceId => 
-    gameState.pieces[pieceId] && gameState.pieces[pieceId].type === 'SPLITTER'
-  ).length;
-  
-  if (splitterCount >= 5) {
-    return { 
-      allowed: false, 
-      reason: `Maximum 5 splitters per player (currently have ${splitterCount})` 
-    };
-  }
-  
+  // Population limit removed - unlimited splitters allowed
   return { allowed: true };
 }
 
@@ -1790,9 +1903,19 @@ function handlePieceSplit(playerId, splitData) {
   const { pieceId, targetRow, targetCol } = splitData;
   const piece = gameState.pieces[pieceId];
   
-  // Validate split
-  if (!piece || piece.playerId !== playerId) {
-    const errorMsg = `Invalid split: piece ${pieceId} does not belong to player ${playerId}`;
+  // CRITICAL FIX: Check if game has actually ended by looking at player count, not just the flag
+  const activePlayers = Object.values(gameState.players).filter(p => !p.eliminated);
+  const alivePlayers = activePlayers.filter(p => {
+    if (!p.pieces || !Array.isArray(p.pieces)) return false;
+    return p.pieces.filter(pieceId => {
+      const piece = gameState.pieces[pieceId];
+      return piece && piece.playerId === p.id;
+    }).length > 0;
+  });
+  
+  // Only block splits if there's actually less than 2 players with pieces
+  if (alivePlayers.length < 2) {
+    const errorMsg = `Cannot split: only ${alivePlayers.length} player(s) remaining`;
     console.log(errorMsg);
     const playerSocket = io.sockets.sockets.get(playerId);
     if (playerSocket) {
@@ -1801,9 +1924,12 @@ function handlePieceSplit(playerId, splitData) {
     return null;
   }
   
-  // Only splitters can split
-  if (piece.type !== 'SPLITTER') {
-    const errorMsg = `Invalid split: only Splitters can split`;
+  // REMOVED: Check if game has ended flag - this was causing false positives
+  // The above check for actual player count is more reliable
+  
+  // Validate split
+  if (!piece || piece.playerId !== playerId) {
+    const errorMsg = `Invalid split: piece ${pieceId} does not belong to player ${playerId}`;
     console.log(errorMsg);
     const playerSocket = io.sockets.sockets.get(playerId);
     if (playerSocket) {
@@ -1911,6 +2037,9 @@ function handlePieceSplit(playerId, splitData) {
     newPosition: { row: targetRow, col: targetCol },
     playerId: playerId
   });
+  
+  // Advance turn counter
+  gameState.currentTurn++;
   
   broadcastGameState();
   
@@ -2764,21 +2893,40 @@ function getValidMoves(pieceId) {
     let moveDirections = movementPattern.directions || [];
     let attackDirections = movementPattern.attackDirections || movementPattern.directions;
     
-    // For pawns, determine movement direction based on spawn location
-    if (piece.type === 'PAWN') {
+    // For pawns and splitters, determine movement direction based on spawn location
+    if (piece.type === 'PAWN' || piece.type === 'SPLITTER') {
       const player = gameState.players[piece.playerId];
       if (player) {
         const spawnRow = player.spawnArea.baseRow;
         const isNorthPole = spawnRow <= 9; // North half of sphere
         
-        if (isNorthPole) {
-          // North pole pawns move toward south (+1 row)
-          moveDirections = [{ row: 1, col: 0 }];
-          attackDirections = [{ row: 1, col: -1 }, { row: 1, col: 1 }];
-        } else {
-          // South pole pawns move toward north (-1 row)
-          moveDirections = [{ row: -1, col: 0 }];
-          attackDirections = [{ row: -1, col: -1 }, { row: -1, col: 1 }];
+        if (piece.type === 'PAWN') {
+          if (isNorthPole) {
+            // North pole pawns move toward south (+1 row)
+            moveDirections = [{ row: 1, col: 0 }];
+            attackDirections = [{ row: 1, col: -1 }, { row: 1, col: 1 }];
+          } else {
+            // South pole pawns move toward north (-1 row)
+            moveDirections = [{ row: -1, col: 0 }];
+            attackDirections = [{ row: -1, col: -1 }, { row: -1, col: 1 }];
+          }
+        } else if (piece.type === 'SPLITTER') {
+          // Splitters only move forward (no backward movement)
+          if (isNorthPole) {
+            // North pole splitters move toward south (+1 row) 
+            moveDirections = [{ row: 1, col: 0 }];
+            attackDirections = [
+              { row: 1, col: -1 }, { row: 1, col: 1 },  // Forward diagonals
+              { row: 0, col: -1 }, { row: 0, col: 1 }   // Sideways
+            ];
+          } else {
+            // South pole splitters move toward north (-1 row)
+            moveDirections = [{ row: -1, col: 0 }];
+            attackDirections = [
+              { row: -1, col: -1 }, { row: -1, col: 1 }, // Forward diagonals
+              { row: 0, col: -1 }, { row: 0, col: 1 }    // Sideways
+            ];
+          }
         }
       }
     }
@@ -2793,27 +2941,7 @@ function getValidMoves(pieceId) {
         const occupyingPieceId = gameState.grid[posKey];
         
         if (!occupyingPieceId) {
-          // For SPLITTER pieces, don't add regular moves to positions that will have split moves
-          // This prevents conflicts between move types
-          if (piece.type === 'SPLITTER' && movementPattern.splitDirections) {
-            // Check if this position will have a split move
-            const hasSplitMove = movementPattern.splitDirections.some(splitDir => {
-              const splitTargetRow = piece.row + splitDir.row;
-              const splitTargetCol = GridUtils.normalizeCol(piece.col + splitDir.col);
-              const matches = splitTargetRow === targetRow && splitTargetCol === targetCol;
-              if (matches) {
-                console.log(`🚫 Skipping regular move to (${targetRow},${targetCol}) - will have split move`);
-              }
-              return matches;
-            });
-            
-            // Only add regular move if there's no split move to the same position
-            if (!hasSplitMove) {
-              validMoves.push({ row: targetRow, col: targetCol, type: 'move' });
-            }
-          } else {
-            validMoves.push({ row: targetRow, col: targetCol, type: 'move' });
-          }
+          validMoves.push({ row: targetRow, col: targetCol, type: 'move' });
         }
       }
     });
@@ -2837,21 +2965,30 @@ function getValidMoves(pieceId) {
     });
     
     // Check split directions (SPLITTER only)
-    if (piece.type === 'SPLITTER' && movementPattern.splitDirections) {
-      movementPattern.splitDirections.forEach(dir => {
-        const targetRow = piece.row + dir.row;
-        const targetCol = GridUtils.normalizeCol(piece.col + dir.col);
+    if (piece.type === 'SPLITTER') {
+      const player = gameState.players[piece.playerId];
+      if (player) {
+        // Splitters can only split sideways (left/right), never forward or backward
+        const splitDirs = [
+          { row: 0, col: -1 }, // Left
+          { row: 0, col: 1 }   // Right
+        ];
         
-        if (GridUtils.isValidPosition(targetRow, targetCol)) {
-          const posKey = GridUtils.getPositionKey(targetRow, targetCol);
-          const occupyingPieceId = gameState.grid[posKey];
+        splitDirs.forEach(dir => {
+          const targetRow = piece.row + dir.row;
+          const targetCol = GridUtils.normalizeCol(piece.col + dir.col);
           
-          if (!occupyingPieceId) {
-            // Only allow split to empty squares
-            validMoves.push({ row: targetRow, col: targetCol, type: 'split' });
+          if (GridUtils.isValidPosition(targetRow, targetCol)) {
+            const posKey = GridUtils.getPositionKey(targetRow, targetCol);
+            const occupyingPieceId = gameState.grid[posKey];
+            
+            if (!occupyingPieceId) {
+              // Only allow split to empty squares
+              validMoves.push({ row: targetRow, col: targetCol, type: 'split' });
+            }
           }
-        }
-      });
+        });
+      }
     }
     
   } else {
@@ -3076,11 +3213,14 @@ function startTournamentMatch(tournamentId, match) {
     grid: {},
     playerCount: 0,
     pendingBattles: {},
-    currentTurn: 0,
-    activePlayer: null,
+    pendingEvolutions: {}, // Track pending evolution choices
+    isInTournament: true,
     tournamentId: tournamentId,
     matchId: match.id,
-    isInTournament: true
+    currentTurn: 0,
+    gameStartTime: null,
+    activePlayer: null,
+    gameEnded: false // Track if game has ended
   };
 
   // Initialize players for this match
@@ -3185,4 +3325,4 @@ server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`Grid system: ${GAME_CONFIG.GRID_ROWS}x${GAME_CONFIG.GRID_COLS}`);
   console.log(`Max players: ${GAME_CONFIG.MAX_PLAYERS}`);
-}); 
+});

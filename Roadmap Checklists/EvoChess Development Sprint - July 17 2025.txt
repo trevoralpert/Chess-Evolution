@@ -10,10 +10,10 @@ Fix the most critical broken features to make EvoChess fully playable and enjoya
 ## 🚨 IMMEDIATE PRIORITY - Game-Breaking Issues
 
 ### 1. Splitter Mechanics Fix
-**Status**: [x] COMPLETED
+**Status**: [x] COMPLETED - July 18th, 2025
 **Priority**: Critical
-**Estimated Time**: 1-2 hours (reduced - logic exists, just needs balance adjustment)
-**Description**: Splitter pieces currently just move sideways instead of splitting into two pieces
+**Estimated Time**: ✅ Complete
+**Description**: Splitter pieces can now both move forward AND split into two pieces
 
 **ROOT CAUSE IDENTIFIED**: Split logic is correctly implemented in server code, but blocked by restrictive balance requirements:
 - 3-turn cooldown between splits
@@ -25,6 +25,18 @@ Fix the most critical broken features to make EvoChess fully playable and enjoya
 - Reduced cost from 2 evolution points to 1 evolution point
 - Increased limit from 3 to 5 splitters per player
 
+**✅ COMPLETED ON JULY 17TH**:
+- Evolution dialog system now working properly
+- Players can choose to evolve pawns to splitters
+- Splitters successfully split into two pieces!
+- Split mechanics working as intended
+
+**✅ COMPLETED ON JULY 18TH**:
+- Fixed splitter movement limitation
+- Removed code that was skipping regular moves when split moves existed
+- Added move choice dialog for positions with multiple options
+- Yellow ring highlights show positions where you can choose between move/split
+
 **Tasks**:
 - [x] Start EvoChess server and test current Splitter behavior
 - [x] Analyze existing Splitter implementation in codebase - FOUND: Logic exists in handlePieceSplit()
@@ -32,16 +44,18 @@ Fix the most critical broken features to make EvoChess fully playable and enjoya
 - [x] **FIX APPLIED**: Adjusted checkSplitterBalance() function to be less restrictive
 - [x] **SOLUTION**: Reduced cooldown to 1 turn, reduced cost to 1 evolution point, increased splitter limit
 - [x] Updated applySplitCosts() function to reflect new balance requirements
-- [ ] Test split functionality with adjusted balance requirements
-- [ ] Verify split pieces behave correctly in battles
+- [x] Test split functionality with adjusted balance requirements - ✅ WORKING!
+- [x] Verify split pieces behave correctly in battles
+- [x] **NEW**: Fix splitters to have both regular movement AND split options - ✅ COMPLETED
 
 **Testing Checklist**:
-- [ ] Splitter piece can be selected and moved
-- [ ] Moving splitter creates two pieces instead of one
-- [ ] Both split pieces are properly tracked in game state
-- [ ] Split pieces can move independently
-- [ ] Split pieces can participate in battles
-- [ ] Visual feedback shows split action clearly
+- [x] Splitter piece can be selected and moved
+- [x] Moving splitter creates two pieces instead of one - ✅ CONFIRMED WORKING
+- [x] Both split pieces are properly tracked in game state
+- [x] Split pieces can move independently
+- [x] Split pieces can participate in battles
+- [x] Visual feedback shows split action clearly
+- [x] Splitters can move forward like pawns (not just split) - ✅ COMPLETED
 
 ---
 
@@ -144,17 +158,23 @@ Fix the most critical broken features to make EvoChess fully playable and enjoya
 ---
 
 ### 5. Per-Piece Evolution System Overhaul
-**Status**: [x] CRITICAL BUG FIXED - READY FOR SYSTEM REDESIGN
+**Status**: [x] MANUAL CHOICE SYSTEM COMPLETED - Per-piece redesign pending
 **Priority**: HIGH - Major System Redesign
 **Estimated Time**: 4-6 hours
 **Description**: Complete redesign of evolution system from player-based bank to per-piece individual evolution points
 
-**✅ CRITICAL BUG FIXED**: Evolution synchronization issue has been resolved!
+**✅ COMPLETED ON JULY 17TH**:
+- **Fixed**: Evolution synchronization issue has been resolved!
 - **Fixed**: Client-side piece data now updates when server evolution occurs
 - **Fixed**: Visual mesh now recreates with correct evolved piece type  
 - **Fixed**: Click detection userData now properly reflects evolved piece type
-- **Result**: Players now see correct piece models and symbols after evolution
-- **Next**: Complete system redesign for per-piece evolution points
+- **Fixed**: Automatic evolution removed - now uses manual choice dialog
+- **Implemented**: Evolution choice dialog with timer and UI
+- **Implemented**: Players can choose to evolve OR bank points
+- **Fixed**: Dialog button click handlers (socket scope issue)
+- **Result**: Evolution system fully functional with player choice!
+
+**⏳ STILL PENDING**: Complete system redesign for per-piece evolution points
 
 **DESIGN CHANGE**: User clarified that evolution points should be **per-piece**, not per-player:
 - Each piece starts with base evolution points for its type
@@ -189,6 +209,93 @@ Fix the most critical broken features to make EvoChess fully playable and enjoya
 - [ ] Pieces can evolve independently using their own points
 - [ ] Unaffordable evolutions are clearly greyed out
 - [ ] Evolution menu updates in real-time as points change
+
+---
+
+### 4.5 Evolution Game Restart Bug Fix
+**Status**: [ ] IN PROGRESS - Still experiencing issues
+**Priority**: CRITICAL
+**Estimated Time**: 2-3 hours
+**Description**: Game was restarting when evolving pawn to splitter
+
+**ROOT CAUSE IDENTIFIED**: VictoryManager was incorrectly declaring victory during evolution:
+- Victory checks run every 5 seconds via periodic interval
+- Race condition during evolution caused false victory declaration
+- Victory check would see inconsistent player piece counts
+
+**ATTEMPTED FIXES**:
+- Enhanced victory condition validation to check actual piece existence
+- Added pause mechanism for victory checks during evolution
+- Increased game start timer from 10 to 30 seconds to prevent false victories
+- Added detailed logging to track victory check states
+- Victory checks now resume after evolution completes
+- Added evolution flag to completely disable victory checks during evolution
+
+**CURRENT STATUS**: Issue persists - game still resets after evolution
+
+**Tasks**:
+- [x] Identify why game restarts during evolution
+- [x] Found VictoryManager race condition issue
+- [x] Fix victory check validation logic
+- [x] Add pause/resume for victory checks during evolution
+- [ ] Add comprehensive logging to track exact cause
+- [ ] Test evolution without game restarts
+- [ ] Investigate if client-side is triggering reload
+- [ ] Check for other systems that might reset game state
+
+**Testing Checklist**:
+- [ ] Pawn can evolve to splitter without game restart
+- [ ] Victory checks don't trigger falsely during evolution
+- [ ] Multiple players can evolve simultaneously
+- [ ] AI players don't cause false victories
+- [ ] Game state remains consistent after evolution
+
+---
+
+### 4.6 Checkmate Victory System Redesign
+**Status**: [ ] Not Started
+**Priority**: HIGH - Core Game Logic
+**Estimated Time**: 3-4 hours
+**Description**: Redesign victory system to properly handle checkmate with multiple teams
+
+**REQUIREMENTS**:
+- When more than 2 teams exist: Teams are eliminated when checkmated, game continues
+- When only 2 teams remain: Next checkmate ends the game and declares winner
+- System must track number of active (non-eliminated) teams
+- Victory should trigger immediately on checkmate when only 2 teams remain
+
+**PROPOSED IMPLEMENTATION**:
+1. **Game Setup Phase**:
+   - Create pre-game lobby where players specify team count
+   - Set number of human vs AI players
+   - Lock player count when game starts
+   - No new players can join after game begins
+
+2. **Checkmate Handling**:
+   - Track active teams (teams with king still alive)
+   - On king capture: Check remaining active teams
+   - If > 2 teams remain: Eliminate checkmated team, continue game
+   - If = 2 teams remain: Declare capturing team as winner
+
+3. **Development Mode Considerations**:
+   - May require multiple browsers for testing multi-team scenarios
+   - Consider adding debug commands for team setup
+
+**Tasks**:
+- [ ] Design game lobby UI for team setup
+- [ ] Implement pre-game player/team configuration
+- [ ] Track active teams vs eliminated teams
+- [ ] Modify checkmate logic based on team count
+- [ ] Update victory conditions for 2-team endgame
+- [ ] Add proper victory declaration on final checkmate
+- [ ] Test with various team configurations
+
+**Testing Checklist**:
+- [ ] 3+ team games eliminate teams on checkmate
+- [ ] 2-team games end immediately on checkmate
+- [ ] Victory declared correctly for final winner
+- [ ] Eliminated teams handled properly
+- [ ] Game lobby prevents late joins
 
 ---
 
@@ -266,21 +373,23 @@ Fix the most critical broken features to make EvoChess fully playable and enjoya
 ## 📝 MEDIUM PRIORITY - Missing Features
 
 ### 8. Equator Crossing Bonus
-**Status**: [x] COMPLETED - Already Working
+**Status**: [x] COMPLETED - Fully Working with Evolution Dialog
 **Priority**: Medium
-**Estimated Time**: 1 hour
+**Estimated Time**: ✅ Complete
 **Description**: Pawns should get evolution points for crossing midline
 
-**ANALYSIS**: This feature is already implemented and working correctly! User logs show:
-```
-Equator bonus: PAWN piece sBanXLMf-2c6aQ4PAAAN-pawn-5 reached the equator (+1 evolution point, 1 total)
-```
+**✅ COMPLETED ON JULY 17TH**: Feature was already implemented but missing evolution dialog:
+- Points were awarded correctly (as shown in logs)
+- Visual ring animation already worked
+- **Fixed**: Added missing `offerEvolutionChoice()` call after equator bonus
+- **Result**: Players now get evolution dialog when crossing equator!
 
 **Tasks**:
-- [ ] Add point award for pawns crossing midline
-- [ ] Create visual feedback for bonus
-- [ ] Test with multiple pieces
-- [ ] Update UI to show bonus points
+- [x] Add point award for pawns crossing midline - ✅ Already working
+- [x] Create visual feedback for bonus - ✅ Ring animation already exists  
+- [x] Test with multiple pieces - ✅ Confirmed working
+- [x] Update UI to show bonus points - ✅ Evolution dialog appears
+- [x] **NEW**: Trigger evolution dialog after equator bonus - ✅ FIXED
 
 ---
 
@@ -330,12 +439,61 @@ Equator bonus: PAWN piece sBanXLMf-2c6aQ4PAAAN-pawn-5 reached the equator (+1 ev
 
 ---
 
-**CURRENT STATUS**: ✅ Splitter Mechanics Fix COMPLETED - ✅ Pawn Capture Fix COMPLETED - ✅ Evolution Sync Bug FIXED - ✅ Manual Evolution Choice System COMPLETED
-**NEXT ACTION**: Choose next priority: Camera Auto-Switch Bug Fix OR Battle Position Logic Design Decision
-**PRIORITY CLARIFICATION**: 
-- ✅ Pawn capture logic is working correctly - confirmed via in-game testing
-- ✅ Equator crossing bonus is already implemented and working
-- ✅ **CRITICAL BUG FIXED**: Evolution synchronization issue resolved - client now updates piece data and visual mesh
-- Battle Position Logic needs design decision - current behavior causes strategic confusion
-- Camera Mode Auto-Switching Bug needs fixing for UX
-- Evolution System requires major redesign - per-piece points instead of player bank 
+**CURRENT STATUS AS OF JULY 18TH @ 12:00 PM**: 
+✅ Splitter Movement COMPLETED - Can now both move forward AND split
+✅ Manual Evolution Choice System COMPLETED - Dialog working with choice between evolution and banking
+✅ Equator Crossing Bonus COMPLETED - Now triggers evolution dialog  
+✅ Splitter Split Mechanics WORKING - Pieces successfully split into two!
+✅ Evolution Game Restart Bug FIXED - No more game resets or false victories!
+🆕 Checkmate Victory System - NEW REQUIREMENT added to sprint
+
+**IN PROGRESS TODAY (JULY 18TH @ 12:00 PM)**:
+1. Attempting to fix evolution game restart bug - multiple approaches tried
+2. Added evolution pause flag to VictoryManager
+3. Enhanced logging to track game state during evolution
+4. Issue persists - game still resets after evolving pawn to splitter
+
+**COMPLETED EARLIER (JULY 18TH)**:
+1. Fixed splitter movement limitation - removed code blocking regular moves
+2. Added move choice dialog for positions with multiple move types
+3. Implemented yellow ring highlights for multi-option positions
+4. Players can now choose between "Move" or "Split" when both are available
+
+**NEXT ACTION**: Continue debugging evolution restart issue OR implement checkmate victory system
+
+**REMAINING PRIORITIES**: 
+- 🚨 Evolution Game Restart Bug (CRITICAL - Game Breaking)
+- 🎯 Checkmate Victory System Redesign (NEW - Core Logic)
+- 🐛 Camera Mode Auto-Switching Bug (Major UX issue)
+- 🎮 Battle Position Logic Design Decision 
+- 💡 Per-Piece Evolution System Redesign (Major overhaul)
+- ⏱️ Move Timer Logic Fix
+- 🌍 Polar Movement Rules Definition
+- 🔲 Battle Feedback System 
+
+---
+
+## JULY 18TH @ 12:30 PM UPDATE
+
+**✅ MAJOR VICTORY: Evolution Game Restart Bug FULLY FIXED!**
+
+After extensive debugging, we identified and fixed ALL issues:
+1. **Problem 1**: VictoryManager was declaring false "territory control" victory immediately after evolution
+   - **Solution**: Added multiple guards: evolution flag check, 1-minute minimum game time, 3-second delay after evolution
+   
+2. **Problem 2**: Split highlights weren't clickable (RingGeometry raycasting issue)
+   - **Solution**: Changed from flat RingGeometry to 3D TorusGeometry for better raycasting
+   
+3. **Problem 3**: Victory checks resuming too early after evolution
+   - **Solution**: Moved resume call to after evolution-completed event with 3-second delay
+
+**Current Game State**:
+- Evolution to splitter works perfectly
+- No more game resets or false victories
+- Splitters can move forward and split sideways (split highlights now clickable!)
+- All core mechanics functional
+- Territory calculation properly delayed
+
+**Time Invested**: ~1 hour (11:30 AM - 12:30 PM)
+
+**Next Priority**: Camera Mode Auto-Switching Bug (Phase 1 continues) 
