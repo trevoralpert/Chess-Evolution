@@ -47,6 +47,7 @@ evolutions = [
     ("Super Jumper", "8-point Super Jumper"),
     ("8-point Super Jumper", "Hyper Jumper"),
     ("Hyper Jumper", "Mistress Jumper"),
+    ("10-point Queen", "Hybrid Queen"),
     ("Mistress Jumper", "Hybrid Queen")
 ]
 

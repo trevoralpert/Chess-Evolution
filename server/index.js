@@ -223,6 +223,7 @@ io.on('connection', (socket) => {
   
   socket.on('get-valid-moves', (data) => {
     const validMoves = getValidMoves(data.pieceId);
+    console.log(`📋 Valid moves for piece ${data.pieceId}:`, validMoves.map(m => `(${m.row},${m.col}) type:${m.type}`));
     socket.emit('valid-moves', { pieceId: data.pieceId, moves: validMoves });
   });
   
@@ -819,6 +820,12 @@ io.on('connection', (socket) => {
   socket.on('get-evolution-stats', () => {
     const stats = evolutionManager.getEvolutionStats();
     socket.emit('evolution-stats', { stats });
+  });
+
+  // Evolution choice dialog handlers
+  socket.on('evolution-choice-response', (data) => {
+    const { pieceId, choice } = data;
+    handleEvolutionChoiceResponse(socket.id, pieceId, choice);
   });
 
   // Chat system handlers
@@ -1528,33 +1535,13 @@ function handlePieceMove(playerId, moveData) {
       piece.col = targetCol;
       gameState.grid[GridUtils.getPositionKey(targetRow, targetCol)] = pieceId;
       
-      // Check if jumper can evolve
-      if (canEvolve(piece)) {
-        const oldType = piece.type;
-        const evolvedPiece = evolvePiece(piece);
-        gameState.pieces[piece.id] = evolvedPiece;
-        
-        console.log(`Evolution: ${piece.symbol} evolved to ${evolvedPiece.symbol}!`);
-        
-        // Record evolution statistics
-        const player = gameState.players[piece.playerId];
-        if (player) {
-          player.stats.piecesEvolved = (player.stats.piecesEvolved || 0) + 1;
-          statisticsManager.recordEvolution(piece.playerId, oldType, evolvedPiece.type, 0);
-          
-          // Update session stats if available
-          if (player.stats.currentSession) {
-            player.stats.currentSession.pieces.evolved++;
-          }
-        }
-        
-        // Broadcast evolution event
-        io.emit('piece-evolution', {
-          pieceId: piece.id,
-          oldType: oldType,
-          newType: evolvedPiece.type,
-          position: { row: evolvedPiece.row, col: evolvedPiece.col }
-        });
+      // Award evolution points for jump capture
+      const bank = evolutionManager.addEvolutionPoints(piece.playerId, 1, 'jump_capture');
+      console.log(`${piece.symbol} gains evolution point for jump capture! (${bank.points} total)`);
+      
+      // Check if player has evolution points to offer choice dialog
+      if (bank.points > 0) {
+        offerEvolutionChoice(piece.playerId, piece.id, 'jump_capture');
       }
       
       // Broadcast jump capture event
@@ -1768,6 +1755,12 @@ function checkEquatorBonus(piece) {
       totalPoints: bank.points,
       position: { row: piece.row, col: piece.col }
     });
+    
+    // Offer evolution choice dialog to human players
+    const player = gameState.players[piece.playerId];
+    if (player && !player.isAI && bank.points > 0) {
+      offerEvolutionChoice(piece.playerId, piece.id, 'equator_bonus');
+    }
   }
 }
 
@@ -1983,20 +1976,13 @@ function handleMultiJumpCapture(playerId, pieceId, matchingMove, targetRow, targ
   piece.col = targetCol;
   gameState.grid[GridUtils.getPositionKey(targetRow, targetCol)] = pieceId;
   
-  // Check if jumper can evolve
-  if (canEvolve(piece)) {
-    const evolvedPiece = evolvePiece(piece);
-    gameState.pieces[piece.id] = evolvedPiece;
-    
-    console.log(`Evolution: ${piece.symbol} evolved to ${evolvedPiece.symbol}!`);
-    
-    // Broadcast evolution event
-    io.emit('piece-evolution', {
-      pieceId: piece.id,
-      oldType: piece.type,
-      newType: evolvedPiece.type,
-      position: { row: evolvedPiece.row, col: evolvedPiece.col }
-    });
+  // Award evolution points for multi-jump capture
+  const bank = evolutionManager.addEvolutionPoints(piece.playerId, capturedPieces.length, 'multi_jump_capture');
+  console.log(`${piece.symbol} gains ${capturedPieces.length} evolution points for multi-jump capture! (${bank.points} total)`);
+  
+  // Check if player has evolution points to offer choice dialog
+  if (bank.points > 0) {
+    offerEvolutionChoice(piece.playerId, piece.id, 'multi_jump_capture');
   }
   
   // Broadcast multi-jump capture event
@@ -2227,27 +2213,50 @@ function completeBattleResolution(winner, loser) {
     gameState.grid[GridUtils.getPositionKey(winner.row, winner.col)] = winner.id;
   }
   
-  // Check if winner can evolve
-  if (canEvolve(winner)) {
-    const evolvedPiece = evolvePiece(winner);
-    
-    // Update piece in game state
-    gameState.pieces[winner.id] = evolvedPiece;
-    
-    console.log(`Evolution: ${winner.symbol} evolved to ${evolvedPiece.symbol}!`);
-    
-    // Handle AI evolution integration
+  // Check if winner can evolve using new evolution system
+  // Only check if piece has evolution points, not kill counts
+  const bankInfo = evolutionManager.getPlayerBankInfo(winner.playerId);
+  const hasEvolutionPoints = bankInfo && bankInfo.points > 0;
+  
+  if (hasEvolutionPoints) {
+    // Handle AI evolution automatically (AI doesn't get choice dialog)
     if (gameState.players[winner.playerId] && gameState.players[winner.playerId].isAI) {
-      handleAIEvolution(winner.playerId, { oldType: winner.type, newType: evolvedPiece.type });
+      // AI still uses automatic evolution but through the new system
+      const availablePaths = evolutionManager.getAvailableEvolutionPaths(winner.playerId, winner.id);
+      if (availablePaths.length > 0) {
+        // AI picks the first available evolution path
+        const chosenPath = availablePaths[0];
+        const result = evolutionManager.processEvolutionChoice(winner.playerId, winner.id, chosenPath.id);
+        
+        if (result.success) {
+          // Apply the evolution
+          const oldType = winner.type;
+          const newType = result.evolution.toType;
+          const newPieceData = PIECE_TYPES[newType];
+          
+          if (newPieceData) {
+            winner.type = newType;
+            winner.symbol = newPieceData.symbol;
+            winner.value = newPieceData.points;
+            gameState.pieces[winner.id] = winner;
+            
+            console.log(`AI Evolution: ${winner.symbol} evolved to ${newPieceData.symbol}!`);
+            handleAIEvolution(winner.playerId, { oldType: oldType, newType: newType });
+            
+            // Broadcast evolution event
+            io.emit('piece-evolution', {
+              pieceId: winner.id,
+              oldType: oldType,
+              newType: newType,
+              position: { row: winner.row, col: winner.col }
+            });
+          }
+        }
+      }
+    } else {
+      // Offer choice dialog to human players
+      offerEvolutionChoice(winner.playerId, winner.id, 'battle_victory');
     }
-    
-    // Broadcast evolution event
-    io.emit('piece-evolution', {
-      pieceId: winner.id,
-      oldType: winner.type,
-      newType: evolvedPiece.type,
-      position: { row: evolvedPiece.row, col: evolvedPiece.col }
-    });
   }
   
   // Check for checkmate (King capture) and player elimination
@@ -2348,6 +2357,165 @@ function calculateBattleAnimationDuration(battleLog) {
   const initialDiceTime = 1; // 1 second for initial dice
   const tieBreakerTime = battleLog.rounds.length * 1; // 1 second per tie-breaker
   return initialDiceTime + tieBreakerTime;
+}
+
+function offerEvolutionChoice(playerId, pieceId, reason) {
+  const piece = gameState.pieces[pieceId];
+  if (!piece) return;
+  
+  // Get available evolution paths
+  const availablePaths = getAvailableEvolutionPaths(piece);
+  if (availablePaths.length === 0) return;
+  
+  // Get player's current evolution points
+  const bankInfo = evolutionManager.getPlayerBankInfo(playerId);
+  
+  // Pause all game timers while player makes choice
+  timingManager.pauseAllCooldowns();
+  
+  // Send evolution choice dialog to player
+  const playerSocket = io.sockets.sockets.get(playerId);
+  if (playerSocket) {
+    playerSocket.emit('evolution-choice-dialog', {
+      pieceId: pieceId,
+      piece: piece,
+      reason: reason,
+      availablePaths: availablePaths,
+      bankInfo: bankInfo,
+      timeLimit: 30 // 30 seconds to make choice
+    });
+  }
+  
+  // Set timeout for automatic banking if no choice made
+  setTimeout(() => {
+    if (gameState.pieces[pieceId] && gameState.pieces[pieceId].type === piece.type) {
+      // No evolution choice was made, bank the points
+      bankEvolutionPoints(playerId, pieceId, reason);
+    }
+  }, 30000); // 30 seconds
+}
+
+function getAvailableEvolutionPaths(piece) {
+  const availablePaths = [];
+  
+  // Based on piece type, determine available evolution paths
+  switch (piece.type) {
+    case 'PAWN':
+      availablePaths.push({
+        id: 'pawn_to_splitter',
+        targetType: 'SPLITTER',
+        cost: 1,
+        description: 'Evolve to Splitter - Can split into two pieces'
+      });
+      break;
+    case 'SPLITTER':
+      availablePaths.push({
+        id: 'splitter_to_super_splitter',
+        targetType: 'SUPER_SPLITTER',
+        cost: 2,
+        description: 'Evolve to Super Splitter - Enhanced splitting abilities'
+      });
+      break;
+    // Add more evolution paths as needed
+  }
+  
+  return availablePaths;
+}
+
+function bankEvolutionPoints(playerId, pieceId, reason) {
+  const piece = gameState.pieces[pieceId];
+  if (!piece) return;
+  
+  // Award evolution points based on reason
+  let pointsAwarded = 0;
+  switch (reason) {
+    case 'jump_capture':
+    case 'multi_jump_capture':
+      pointsAwarded = 1;
+      break;
+    case 'battle_victory':
+      pointsAwarded = 2;
+      break;
+    default:
+      pointsAwarded = 1;
+  }
+  
+  const bank = evolutionManager.addEvolutionPoints(playerId, pointsAwarded, `banked_${reason}`);
+  
+  console.log(`${piece.symbol} banked ${pointsAwarded} evolution points from ${reason} (${bank.points} total)`);
+  
+  // Broadcast banking event
+  io.emit('evolution-points-banked', {
+    pieceId: pieceId,
+    playerId: playerId,
+    points: pointsAwarded,
+    totalPoints: bank.points,
+    reason: reason
+  });
+  
+  // Resume game timers
+  timingManager.resumeAllCooldowns();
+}
+
+function handleEvolutionChoiceResponse(playerId, pieceId, choice) {
+  const piece = gameState.pieces[pieceId];
+  if (!piece || piece.playerId !== playerId) return;
+  
+  if (choice === 'bank') {
+    // Player chose to bank the points
+    bankEvolutionPoints(playerId, pieceId, 'player_choice');
+  } else if (choice.evolutionPath) {
+    // Player chose to evolve
+    const evolutionPath = choice.evolutionPath;
+    const bankInfo = evolutionManager.getPlayerBankInfo(playerId);
+    
+    // Check if player has enough points
+    if (bankInfo.points >= evolutionPath.cost) {
+      // Deduct evolution points
+      evolutionManager.addEvolutionPoints(playerId, -evolutionPath.cost, `evolution_${evolutionPath.id}`);
+      
+      // Perform evolution
+      const oldType = piece.type;
+      const newType = evolutionPath.targetType;
+      
+      // Update piece type and properties
+      const newPieceData = PIECE_TYPES[newType];
+      if (newPieceData) {
+        piece.type = newType;
+        piece.symbol = newPieceData.symbol;
+        piece.value = newPieceData.points;
+        
+        // Update game state
+        gameState.pieces[pieceId] = piece;
+        
+        // Record evolution statistics
+        const player = gameState.players[playerId];
+        if (player) {
+          player.stats.piecesEvolved = (player.stats.piecesEvolved || 0) + 1;
+          statisticsManager.recordEvolution(playerId, oldType, newType, evolutionPath.cost);
+        }
+        
+        console.log(`Player Evolution: ${oldType} evolved to ${newType} for ${evolutionPath.cost} points`);
+        
+        // Broadcast evolution event
+        io.emit('piece-evolution', {
+          pieceId: pieceId,
+          oldType: oldType,
+          newType: newType,
+          position: { row: piece.row, col: piece.col }
+        });
+        
+        // Update game state
+        broadcastGameState();
+      }
+    } else {
+      // Not enough points, bank instead
+      bankEvolutionPoints(playerId, pieceId, 'insufficient_points');
+    }
+    
+    // Resume game timers
+    timingManager.resumeAllCooldowns();
+  }
 }
 
 function eliminatePlayer(playerId) {
@@ -2625,7 +2793,27 @@ function getValidMoves(pieceId) {
         const occupyingPieceId = gameState.grid[posKey];
         
         if (!occupyingPieceId) {
-          validMoves.push({ row: targetRow, col: targetCol, type: 'move' });
+          // For SPLITTER pieces, don't add regular moves to positions that will have split moves
+          // This prevents conflicts between move types
+          if (piece.type === 'SPLITTER' && movementPattern.splitDirections) {
+            // Check if this position will have a split move
+            const hasSplitMove = movementPattern.splitDirections.some(splitDir => {
+              const splitTargetRow = piece.row + splitDir.row;
+              const splitTargetCol = GridUtils.normalizeCol(piece.col + splitDir.col);
+              const matches = splitTargetRow === targetRow && splitTargetCol === targetCol;
+              if (matches) {
+                console.log(`🚫 Skipping regular move to (${targetRow},${targetCol}) - will have split move`);
+              }
+              return matches;
+            });
+            
+            // Only add regular move if there's no split move to the same position
+            if (!hasSplitMove) {
+              validMoves.push({ row: targetRow, col: targetCol, type: 'move' });
+            }
+          } else {
+            validMoves.push({ row: targetRow, col: targetCol, type: 'move' });
+          }
         }
       }
     });

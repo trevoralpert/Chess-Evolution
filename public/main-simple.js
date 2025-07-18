@@ -63,6 +63,9 @@ function sphericalToCartesian(r, phi, theta) {
 const socket = io();
 console.log('Socket.io initialized');
 
+// Make socket globally accessible for evolution dialog functions
+window.globalSocket = socket;
+
 // Timer management variables
 let currentTimer = null;
 let timerStartTime = 0;
@@ -1262,6 +1265,42 @@ socket.on('battle-result', (data) => {
 socket.on('piece-evolution', (data) => {
   const { pieceId, oldType, newType, position } = data;
   console.log(`Evolution! ${oldType} → ${newType} at position (${position.row}, ${position.col})`);
+  
+  // 🔧 FIX: Update client-side piece data to match server evolution
+  if (gameState.pieces && gameState.pieces[pieceId]) {
+    console.log(`🔄 Updating client piece data: ${pieceId} from ${gameState.pieces[pieceId].type} to ${newType}`);
+    gameState.pieces[pieceId].type = newType;
+    
+    // Update the mesh userData for click detection
+    const mesh = pieceMeshes[pieceId];
+    if (mesh) {
+      mesh.userData.piece.type = newType;
+      console.log(`🔄 Updated mesh userData for ${pieceId}: type = ${newType}`);
+      
+      // Recreate the piece mesh with the new type
+      console.log(`🔄 Recreating mesh for evolved piece ${pieceId}`);
+      const piece = gameState.pieces[pieceId];
+      
+      // Remove old mesh
+      scene.remove(mesh);
+      if (mesh.geometry) mesh.geometry.dispose();
+      if (mesh.material) {
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach(mat => mat.dispose());
+        } else {
+          mesh.material.dispose();
+        }
+      }
+      delete pieceMeshes[pieceId];
+      
+      // Create new mesh with evolved type
+      createPieceMeshOptimized(piece).then(() => {
+        console.log(`✅ Successfully recreated mesh for evolved ${newType}`);
+      }).catch(error => {
+        console.error(`❌ Failed to recreate mesh for evolved piece:`, error);
+      });
+    }
+  }
   
   // Update UI with evolution information
   gameInfoEl.textContent = `Evolution: ${oldType} → ${newType}!`;
@@ -3677,6 +3716,7 @@ function onMouseClick(event) {
       
       // Find the currently selected piece by checking which piece has valid moves displayed
       const currentSelectedPieceId = getCurrentlySelectedPieceId();
+      console.log('🔍 MOVE TYPE DEBUG:', move.type, 'for piece:', currentSelectedPieceId);
       console.log('🎯 Current selected piece ID:', currentSelectedPieceId);
       
       if (currentSelectedPieceId) {
@@ -3714,6 +3754,7 @@ function onMouseClick(event) {
           }
 
           // Send split command to server
+          console.log(`🔄 SPLIT MOVE DETECTED - Sending split-piece event for ${currentSelectedPieceId} to (${move.row}, ${move.col})`);
           socket.emit('split-piece', {
             pieceId: currentSelectedPieceId,
             targetRow: move.row,
@@ -4983,6 +5024,24 @@ socket.on('evolution-point-award', (data) => {
   }
 });
 
+// Handle evolution choice dialog
+socket.on('evolution-choice-dialog', (data) => {
+  console.log('🎯 Evolution choice dialog event received:', data);
+  const { pieceId, piece, reason, availablePaths, bankInfo, timeLimit } = data;
+  showEvolutionChoiceDialog(pieceId, piece, reason, availablePaths, bankInfo, timeLimit);
+});
+
+socket.on('evolution-points-banked', (data) => {
+  const { pieceId, playerId, points, totalPoints, reason } = data;
+  
+  if (playerId === socket.id) {
+    gameInfoEl.textContent = `Banked ${points} evolution points! Total: ${totalPoints}`;
+    showNotification('Evolution Points', 
+      `Banked ${points} points. Total: ${totalPoints}`, 
+      'success');
+  }
+});
+
 // Chat system variables
 let chatVisible = true;
 let chatMessages = [];
@@ -6046,4 +6105,203 @@ setTimeout(() => {
 
 // ... existing code ...
 
-} // End of startGameInitialization function 
+} // End of startGameInitialization function
+
+function showEvolutionChoiceDialog(pieceId, piece, reason, availablePaths, bankInfo, timeLimit) {
+  console.log('🎯 showEvolutionChoiceDialog called with:', { pieceId, piece, reason, availablePaths, bankInfo, timeLimit });
+  
+  // Create dialog HTML with inline styles
+  const dialogHtml = `
+    <div id="evolution-choice-dialog" class="modal-overlay" style="
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+    ">
+      <div class="modal-content" style="
+        background-color: #2a2a2a;
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        max-width: 600px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+      ">
+        <h2 style="margin-top: 0; color: #4CAF50;">Evolution Choice</h2>
+        <p>Your ${piece.type} can evolve! Choose your path:</p>
+        
+        <div class="evolution-info" style="
+          background-color: #3a3a3a;
+          padding: 10px;
+          border-radius: 5px;
+          margin: 10px 0;
+        ">
+          <p><strong>Reason:</strong> ${reason.replace('_', ' ')}</p>
+          <p><strong>Current Points:</strong> ${bankInfo.points}</p>
+          <p><strong>Time Limit:</strong> <span id="evolution-timer">${timeLimit}</span> seconds</p>
+        </div>
+        
+        <div class="evolution-options" style="display: flex; gap: 20px; flex-wrap: wrap;">
+          <div class="evolution-paths" style="flex: 2; min-width: 300px;">
+            ${availablePaths.map(path => `
+              <div class="evolution-path ${bankInfo.points >= path.cost ? 'affordable' : 'expensive'}" style="
+                background-color: ${bankInfo.points >= path.cost ? '#4a4a4a' : '#3a3a3a'};
+                padding: 15px;
+                border-radius: 5px;
+                margin-bottom: 10px;
+                border: 2px solid ${bankInfo.points >= path.cost ? '#4CAF50' : '#ff4444'};
+              ">
+                <h3 style="margin-top: 0; color: ${bankInfo.points >= path.cost ? '#4CAF50' : '#ff4444'};">
+                  ${path.targetType}
+                </h3>
+                <p>${path.description}</p>
+                <p><strong>Cost:</strong> ${path.cost} points</p>
+                <button class="evolution-btn" 
+                        data-piece-id="${pieceId}"
+                        data-path='${JSON.stringify(path)}'
+                        ${bankInfo.points >= path.cost ? '' : 'disabled'}
+                        style="
+                          background-color: ${bankInfo.points >= path.cost ? '#4CAF50' : '#666'};
+                          color: white;
+                          border: none;
+                          padding: 10px 20px;
+                          border-radius: 5px;
+                          cursor: ${bankInfo.points >= path.cost ? 'pointer' : 'not-allowed'};
+                          font-size: 14px;
+                          pointer-events: ${bankInfo.points >= path.cost ? 'auto' : 'none'};
+                          position: relative;
+                          z-index: 1001;
+                        ">
+                  Evolve (${path.cost} points)
+                </button>
+              </div>
+            `).join('')}
+          </div>
+          
+          <div class="bank-option" style="
+            flex: 1;
+            min-width: 200px;
+            background-color: #4a4a4a;
+            padding: 15px;
+            border-radius: 5px;
+            border: 2px solid #FFA500;
+          ">
+            <h3 style="margin-top: 0; color: #FFA500;">Bank Points</h3>
+            <p>Save your evolution points for later use</p>
+            <button class="bank-btn" data-piece-id="${pieceId}" style="
+              background-color: #FFA500;
+              color: white;
+              border: none;
+              padding: 10px 20px;
+              border-radius: 5px;
+              cursor: pointer;
+              font-size: 14px;
+              pointer-events: auto;
+              position: relative;
+              z-index: 1001;
+            ">
+              Bank Points
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // Add to document
+  document.body.insertAdjacentHTML('beforeend', dialogHtml);
+  
+  // Add event listeners to buttons
+  const evolutionBtns = document.querySelectorAll('.evolution-btn');
+  const bankBtns = document.querySelectorAll('.bank-btn');
+  
+  console.log('🎯 Found evolution buttons:', evolutionBtns.length);
+  console.log('🎯 Found bank buttons:', bankBtns.length);
+  
+  evolutionBtns.forEach((button, index) => {
+    console.log(`🎯 Adding click listener to evolution button ${index}`);
+    button.addEventListener('click', function(e) {
+      console.log('🎯 Evolution button clicked!', e);
+      e.preventDefault();
+      e.stopPropagation();
+      const pieceId = this.getAttribute('data-piece-id');
+      const path = JSON.parse(this.getAttribute('data-path'));
+      chooseEvolution(pieceId, path);
+    });
+  });
+  
+  bankBtns.forEach((button, index) => {
+    console.log(`🎯 Adding click listener to bank button ${index}`);
+    button.addEventListener('click', function(e) {
+      console.log('🎯 Bank button clicked!', e);
+      e.preventDefault();
+      e.stopPropagation();
+      const pieceId = this.getAttribute('data-piece-id');
+      bankEvolutionPoints(pieceId);
+    });
+  });
+  
+  // Start countdown timer
+  let timeLeft = timeLimit;
+  const timerElement = document.getElementById('evolution-timer');
+  
+  const countdown = setInterval(() => {
+    timeLeft--;
+    timerElement.textContent = timeLeft;
+    
+    if (timeLeft <= 0) {
+      clearInterval(countdown);
+      // Auto-bank if no choice made
+      bankEvolutionPoints(pieceId);
+    }
+  }, 1000);
+  
+  // Store countdown reference for cleanup
+  window.evolutionCountdown = countdown;
+}
+
+function chooseEvolution(pieceId, evolutionPath) {
+  // Send evolution choice to server
+  window.globalSocket.emit('evolution-choice-response', {
+    pieceId: pieceId,
+    choice: { evolutionPath: evolutionPath }
+  });
+  
+  // Close dialog
+  closeEvolutionDialog();
+}
+
+function bankEvolutionPoints(pieceId) {
+  // Send bank choice to server
+  window.globalSocket.emit('evolution-choice-response', {
+    pieceId: pieceId,
+    choice: 'bank'
+  });
+  
+  // Close dialog
+  closeEvolutionDialog();
+}
+
+// Make these functions globally accessible for onclick handlers
+window.chooseEvolution = chooseEvolution;
+window.bankEvolutionPoints = bankEvolutionPoints;
+
+function closeEvolutionDialog() {
+  const dialog = document.getElementById('evolution-choice-dialog');
+  if (dialog) {
+    dialog.remove();
+  }
+  
+  // Clear countdown timer
+  if (window.evolutionCountdown) {
+    clearInterval(window.evolutionCountdown);
+    window.evolutionCountdown = null;
+  }
+} 
