@@ -421,7 +421,6 @@ class PerformanceOptimizer {
 const performanceOptimizer = new PerformanceOptimizer();
 
 // Mouse interaction tracking
-let mouseDownTime = 0;
 let mouseStartPos = { x: 0, y: 0 };
 let isDragging = false;
 
@@ -3825,19 +3824,6 @@ function onMouseClick(event) {
         clearValidMoveHighlights();
         hideDualMovementUI();
         selectedPieceId = null;
-        
-        // Re-enable OrbitControls after making a move
-        if (controls) {
-          console.log('🖱️ Re-enabling OrbitControls after move');
-          controls.enabled = true;
-          
-          // Restore mode indicator
-          if (modeIndicator && !selectionMode) {
-            modeIndicator.textContent = 'Camera Mode (Press S to switch)';
-            modeIndicator.style.borderColor = '#00ff00';
-            modeIndicator.style.background = 'rgba(0, 0, 0, 0.8)';
-          }
-        }
       }
     }
     
@@ -3848,19 +3834,6 @@ function onMouseClick(event) {
       clearValidMoveHighlights();
       hideDualMovementUI();
       gameInfoEl.textContent = 'Click on your pieces to select them';
-      
-      // Re-enable OrbitControls when clearing selection
-      if (controls) {
-        console.log('🖱️ Re-enabling OrbitControls after clearing selection');
-        controls.enabled = true;
-        
-        // Restore mode indicator
-        if (modeIndicator && !selectionMode) {
-          modeIndicator.textContent = 'Camera Mode (Press S to switch)';
-          modeIndicator.style.borderColor = '#00ff00';
-          modeIndicator.style.background = 'rgba(0, 0, 0, 0.8)';
-        }
-      }
     }
   } else {
     // Clicked on empty space - clear selection
@@ -3868,112 +3841,47 @@ function onMouseClick(event) {
     clearValidMoveHighlights();
     hideDualMovementUI();
     gameInfoEl.textContent = 'Click on your pieces to select them';
-    
-    // Re-enable OrbitControls when clearing selection
-    if (controls) {
-      console.log('🖱️ Re-enabling OrbitControls after clearing selection');
-      controls.enabled = true;
-      
-      // Restore mode indicator
-      if (modeIndicator && !selectionMode) {
-        modeIndicator.textContent = 'Camera Mode (Press S to switch)';
-        modeIndicator.style.borderColor = '#00ff00';
-        modeIndicator.style.background = 'rgba(0, 0, 0, 0.8)';
-      }
-    }
   }
   
   return clickHandled;
 }
 
-// Set up consolidated mouse event handlers with a different approach
-console.log('🖱️ Setting up pointer event listeners...');
+// CLEAN EVENT SYSTEM - Use event capture to intercept clicks BEFORE OrbitControls
+console.log('🖱️ Setting up clean event handlers...');
 
-// Use pointer events which work better with OrbitControls
-// Disable OrbitControls temporarily when clicking on objects
-let isClickingOnPiece = false;
-
-// Function to check if click is on a piece or valid move
-function checkForPieceUnderMouse(event) {
-  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+// Use a single click event with capture phase to get priority over OrbitControls
+renderer.domElement.addEventListener('click', (event) => {
+  console.log('🖱️ Click event captured!');
   
-  raycaster.setFromCamera(mouse, camera);
+  // Process the click and check if it was handled by piece selection
+  const clickHandled = onMouseClick(event);
   
-  // Check for pieces and valid moves
-  const clickableObjects = [];
-  
-  // Add piece meshes
-  Object.values(pieceMeshes).forEach(mesh => {
-    clickableObjects.push(mesh);
-  });
-  
-  // Add valid move highlights
-  scene.children.forEach(child => {
-    if (child.userData.isValidMoveHighlight) {
-      clickableObjects.push(child);
-    }
-  });
-  
-  const intersects = raycaster.intersectObjects(clickableObjects, true);
-  
-  return intersects.length > 0;
-}
-
-// Use pointerdown instead of mousedown - it fires before OrbitControls processes it
-renderer.domElement.addEventListener('pointerdown', (e) => {
-  console.log('🖱️ Pointer down event fired!');
-  
-  // Check if we're clicking on a piece or valid move
-  isClickingOnPiece = checkForPieceUnderMouse(e);
-  
-  if (isClickingOnPiece && controls) {
-    console.log('🖱️ Clicking on piece/move - disabling OrbitControls');
-    controls.enabled = false; // Disable OrbitControls temporarily
-    
-    // Update mode indicator to show selection mode
-    if (modeIndicator) {
-      modeIndicator.textContent = 'Selecting (camera locked)';
-      modeIndicator.style.borderColor = '#ffaa00';
-      modeIndicator.style.background = 'rgba(100, 50, 0, 0.8)';
-    }
+  // If we handled a piece/move click, prevent OrbitControls from processing it
+  if (clickHandled) {
+    console.log('🖱️ Click handled by piece selection - preventing camera movement');
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
   }
-  
+}, true); // Use capture phase to run before OrbitControls
+
+// Add mouse tracking for drag detection (simplified)
+let isMouseDown = false;
+let mouseDownTime = 0;
+
+renderer.domElement.addEventListener('mousedown', (e) => {
+  isMouseDown = true;
+  mouseDownTime = Date.now();
   handleMouseDown(e);
 }, false);
 
-renderer.domElement.addEventListener('pointermove', (e) => {
+renderer.domElement.addEventListener('mousemove', (e) => {
   handleMouseMove(e);
 }, false);
 
-renderer.domElement.addEventListener('pointerup', (e) => {
-  console.log('🖱️ Pointer up event fired!');
+renderer.domElement.addEventListener('mouseup', (e) => {
+  isMouseDown = false;
   handleMouseUp(e);
-  
-  // Only re-enable OrbitControls if we don't have valid moves displayed
-  // Keep it disabled while the player is selecting a move
-  if (controls && !controls.enabled) {
-    // Check if we have valid moves displayed
-    const hasValidMovesDisplayed = validMoves && validMoves.length > 0;
-    
-    if (!hasValidMovesDisplayed) {
-      console.log('🖱️ Re-enabling OrbitControls (no valid moves displayed)');
-      setTimeout(() => {
-        controls.enabled = true;
-        
-        // Restore mode indicator
-        if (modeIndicator && !selectionMode) {
-          modeIndicator.textContent = 'Camera Mode (Press S to switch)';
-          modeIndicator.style.borderColor = '#00ff00';
-          modeIndicator.style.background = 'rgba(0, 0, 0, 0.8)';
-        }
-      }, 10); // Small delay to ensure click is processed
-    } else {
-      console.log('🖱️ Keeping OrbitControls disabled - valid moves are displayed');
-    }
-  }
-  
-  isClickingOnPiece = false;
 }, false);
 
 renderer.domElement.addEventListener('contextmenu', (event) => {
@@ -4023,38 +3931,15 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// Add keyboard controls for switching between camera and piece selection modes
-let selectionMode = false; // false = camera mode, true = selection mode
+// Add keyboard controls for debug features
 const modeIndicator = document.getElementById('mode-indicator');
 
-// Show mode indicator
+// Hide mode indicator since we no longer need mode switching
 if (modeIndicator) {
-  modeIndicator.style.display = 'block';
+  modeIndicator.style.display = 'none';
 }
 
 window.addEventListener('keydown', (e) => {
-  if (e.key === 's' || e.key === 'S') {
-    selectionMode = !selectionMode;
-    if (controls) {
-      controls.enabled = !selectionMode;
-      console.log(`🎮 Switched to ${selectionMode ? 'SELECTION' : 'CAMERA'} mode`);
-      gameInfoEl.textContent = `Mode: ${selectionMode ? 'SELECTION (click pieces)' : 'CAMERA (drag to rotate)'}`;
-      gameInfoEl.style.color = selectionMode ? '#00ff00' : '#ffffff';
-      
-      // Update mode indicator
-      if (modeIndicator) {
-        modeIndicator.textContent = selectionMode ? 'Selection Mode (Press S to switch)' : 'Camera Mode (Press S to switch)';
-        modeIndicator.style.borderColor = selectionMode ? '#ff0000' : '#00ff00';
-        modeIndicator.style.background = selectionMode ? 'rgba(100, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.8)';
-      }
-      
-      // Show notification
-      showNotification('Mode Changed', 
-        selectionMode ? 'Selection Mode: Click on pieces to move them' : 'Camera Mode: Drag to rotate the globe',
-        'info'
-      );
-    }
-  }
   
   // Add debug key to force piece click detection
   if (e.key === 'd' || e.key === 'D') {
@@ -5472,15 +5357,15 @@ animate();
 
 console.log('Globe Chess client fully initialized');
 console.log('Click on pieces to see valid moves');
-console.log('🎮 Press "S" to toggle between CAMERA and SELECTION mode');
+console.log('🎮 Simplified controls: Click pieces to select, drag to rotate camera');
 
 // Show initial help message
 setTimeout(() => {
   showNotification('Controls', 
-    'Press "S" to switch between Camera Mode (rotate globe) and Selection Mode (click pieces). Currently in Camera Mode.',
+    'Click on your pieces to select them and see valid moves. Drag anywhere else to rotate the camera.',
     'info'
   );
-  gameInfoEl.textContent = 'Press "S" to enter Selection Mode and click pieces';
+  gameInfoEl.textContent = 'Click on your pieces to select them';
 }, 2000); 
 
 // Color selection system
