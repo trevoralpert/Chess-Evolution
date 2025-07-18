@@ -130,19 +130,25 @@ function initMenuSystem() {
   });
   
   document.getElementById('create-game-btn').addEventListener('click', () => {
-    alert('Create Game feature coming soon!');
+    console.log('Starting multiplayer game...');
+    playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
+    gameMode = 'multiplayer';
+    startGame();
   });
   
   document.getElementById('join-game-btn').addEventListener('click', () => {
-    alert('Join Game feature coming soon!');
+    console.log('Joining multiplayer game...');
+    playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
+    gameMode = 'multiplayer';
+    startGame();
   });
   
   document.getElementById('tournament-btn').addEventListener('click', () => {
-    alert('Tournament mode coming soon!');
+    alert('Tournament mode coming soon!\n\nTournament functionality is implemented on the server but needs UI integration.');
   });
   
   document.getElementById('spectate-btn').addEventListener('click', () => {
-    alert('Spectator mode coming soon!');
+    alert('Spectator mode coming soon!\n\nSpectator functionality is implemented on the server but needs UI integration.');
   });
   
   document.getElementById('evolution-guide-btn').addEventListener('click', () => {
@@ -175,6 +181,12 @@ function initMenuSystem() {
 function startGame() {
   console.log('🎮 Starting game with:', { playerName, color: menuSelectedColor, gameMode });
   
+  // Prevent multiple connections
+  if (socket && socket.connected) {
+    console.log('⚠️ Already connected to server');
+    return;
+  }
+  
   // Hide menu, show game UI
   menuScreen.style.display = 'none';
   gameUI.style.display = 'block';
@@ -196,31 +208,6 @@ function startGame() {
   setupSocketListeners();
   
   // Continue with normal game initialization after socket is ready
-  socket.on('connect', () => {
-    console.log('Connected to server, initializing game components...');
-    initializeGameComponents();
-    
-    // Send player info to server
-    socket.emit('player-joined', {
-      name: playerName,
-      color: menuSelectedColor
-    });
-    
-    // Add AI player if vs AI mode
-    if (gameMode === 'vsai') {
-      setTimeout(() => {
-        socket.emit('add-ai-player', {
-          difficulty: 'MEDIUM',
-          personality: {
-            preferredPieces: ['QUEEN', 'ROOK', 'BISHOP'],
-            playStyle: 'balanced',
-            riskTolerance: 0.5,
-            aggressiveness: 0.5
-          }
-        });
-      }, 1000);
-    }
-  });
 }
 
 // Return to menu
@@ -279,18 +266,271 @@ initMenuSystem();
 
 // Continue with game initialization
 function initializeGameComponents() {
-  // This function continues with the rest of the game initialization
   console.log('🎮 Initializing game components...');
   
-  // The rest of the initialization code continues below
+  // Initialize the 3D scene if not already done
+  if (!scene) {
+    console.error('❌ Scene not initialized!');
+    return;
+  }
+  
+  // Start the animation loop if not already running
+  if (!window.animationStarted) {
+    console.log('🎬 Starting animation loop...');
+    animate();
+    window.animationStarted = true;
+  }
+  
+  // Initialize visual effects if not already done
+  if (!visualEffects && scene && renderer) {
+    visualEffects = new VisualEffectsManager(scene, renderer);
+    console.log('✨ Visual effects initialized');
+  } else if (visualEffects) {
+    console.log('✨ Visual effects already initialized');
+  }
+  
+  // Set up mouse interaction for piece selection and movement
+  setupMouseInteraction();
+  
+  console.log('✅ Game components initialized successfully');
 }
 
 // Setup socket event listeners
 function setupSocketListeners() {
   console.log('📡 Setting up socket event listeners...');
   
-  // All socket event handlers will be moved here
-  // This ensures they're only set up when the game starts
+  // Connection handlers
+  socket.on('connect', () => {
+    statusEl.textContent = 'Connected';
+    statusEl.style.color = '#00ff00';
+    console.log('Socket connected successfully');
+    console.log('My socket ID:', socket.id);
+    
+    // Initialize game components
+    initializeGameComponents();
+    
+    // Send player info to server
+    socket.emit('player-joined', {
+      name: playerName,
+      color: menuSelectedColor
+    });
+    
+    // Request AI difficulties for the dropdown
+    socket.emit('get-ai-difficulties');
+    
+    // Add AI player if vs AI mode
+    if (gameMode === 'vsai') {
+      setTimeout(() => {
+        socket.emit('add-ai-player', {
+          difficulty: 'MEDIUM',
+          personality: {
+            preferredPieces: ['QUEEN', 'ROOK', 'BISHOP'],
+            playStyle: 'balanced',
+            riskTolerance: 0.5,
+            aggressiveness: 0.5
+          }
+        });
+      }, 1000);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    statusEl.textContent = 'Disconnected';
+    statusEl.style.color = '#ff0000';
+  });
+
+  socket.on('game-full', () => {
+    statusEl.textContent = 'Game Full';
+    statusEl.style.color = '#ff8800';
+    gameInfoEl.textContent = 'Game is full. Please try again later.';
+  });
+
+  socket.on('game-state-update', async (newGameState) => {
+    console.log('🔄 Received game state update:', newGameState);
+    console.log('🔄 Players in received state:', Object.keys(newGameState.players || {}));
+    console.log('🔄 Pieces in received state:', Object.keys(newGameState.pieces || {}));
+    console.log('🔄 Number of pieces received:', Object.keys(newGameState.pieces || {}).length);
+    
+    // Process delta updates for performance
+    const delta = performanceOptimizer.processDeltaUpdate(newGameState);
+    
+    if (delta.fullUpdate) {
+      // Full update on first load
+      console.log('🔄 Processing full update');
+      gameState = newGameState;
+      
+      // Evolution points are now included in the game state from the server
+      Object.keys(gameState.players).forEach(playerId => {
+        const evolutionPoints = gameState.players[playerId].evolutionPoints;
+        console.log(`🎯 Player ${playerId} has ${evolutionPoints} evolution points from server`);
+      });
+      
+      await updateVisuals();
+      updateUI();
+      console.log('🔄 Full update completed');
+    } else {
+      // Delta update - only update changed elements
+      console.log('🔄 Processing delta update');
+      gameState = newGameState;
+      await updateVisualsDelta(delta);
+      
+      // Always call updateUI immediately for player count changes
+      updateUI();
+      
+      // Update evolution point labels when game state changes
+      updateAllEvolutionPointLabels();
+      
+      // Throttled UI updates for other elements
+      performanceOptimizer.createThrottledFunction('ui-update', () => {
+        updateUI();
+      }, 200);
+    }
+    
+    console.log('Game state updated:', gameState);
+    console.log('Players in game state:', Object.keys(gameState.players || {}));
+    console.log('Pieces in game state:', Object.keys(gameState.pieces || {}));
+    console.log('My socket ID:', socket.id);
+    console.log('Players object:', gameState.players);
+  });
+
+  // Essential game handlers
+  socket.on('valid-moves', (data) => {
+    // Only show moves if this is for the currently selected piece
+    if (data.pieceId === selectedPieceId) {
+      validMoves = data.moves;
+      
+      // Check if this is a Hybrid Queen with dual movement
+      const selectedPiece = gameState.pieces[selectedPieceId];
+      if (selectedPiece && selectedPiece.type === 'HYBRID_QUEEN' && data.moves.length > 0) {
+        showDualMovementUI();
+      }
+      
+      highlightValidMoves();
+    }
+  });
+
+  socket.on('move-result', (data) => {
+    if (data.success) {
+      console.log('Move successful:', data.message);
+      selectedPieceId = null;
+      validMoves = [];
+      clearValidMoveHighlights();
+      clearSelectionHighlight();
+      hideDualMovementUI();
+    } else {
+      console.error('Move failed:', data.error);
+      showNotification(data.error, '#ff0000', 3000);
+    }
+  });
+
+  socket.on('battle-result', (data) => {
+    const { winner, loser, battleType } = data;
+    console.log(`Battle result: ${winner} defeated ${loser} (${battleType})`);
+  });
+
+  socket.on('piece-evolution', (data) => {
+    const { pieceId, fromType, toType, playerId } = data;
+    console.log(`Piece evolution: ${fromType} → ${toType} for player ${playerId}`);
+    
+    // Get the piece position for effects
+    const piece = gameState.pieces[pieceId];
+    if (piece) {
+      const position = getWorldPosition(piece.row, piece.col);
+      
+      // Create evolution effect
+      visualEffects.createEvolutionEffect(position, fromType, toType);
+      
+      // Show notification
+      const player = gameState.players[playerId];
+      const playerName = player ? player.name : 'Unknown Player';
+      showNotification(`${playerName}'s ${fromType} evolved to ${toType}!`, '#00ff00', 3000);
+    }
+  });
+
+  socket.on('evolution-point-award', (data) => {
+    const { playerId, amount, reason } = data;
+    console.log(`Evolution points awarded: ${amount} to ${playerId} for ${reason}`);
+    
+    // Update player's evolution points in game state
+    if (gameState.players[playerId]) {
+      gameState.players[playerId].evolutionPoints = (gameState.players[playerId].evolutionPoints || 0) + amount;
+      console.log(`🎯 Updated player ${playerId} evolution points to:`, gameState.players[playerId].evolutionPoints);
+    }
+    
+    // Update all floating evolution point labels
+    updateAllEvolutionPointLabels();
+    
+    // Update evolution bank display if this is our player
+    if (socket.id === playerId) {
+      refreshEvolutionBank();
+    }
+  });
+
+  socket.on('player-eliminated', (data) => {
+    const { playerId, playerName, reason } = data;
+    console.log(`Player eliminated: ${playerName} (${reason})`);
+    
+    // Show elimination notification
+    if (socket.id === playerId) {
+      showNotification(`You have been eliminated! ${reason}`, '#ff0000', 5000);
+    } else {
+      showNotification(`${playerName} has been eliminated! ${reason}`, '#ff8800', 3000);
+    }
+    
+    // Update UI
+    updateUI();
+  });
+
+  // AI system handlers
+  socket.on('ai-player-added', (data) => {
+    const { aiPlayer } = data;
+    console.log('AI player added:', aiPlayer.name);
+    
+    // Update AI players list
+    currentAIPlayers = Object.values(gameState.players).filter(p => p.isAI);
+    updateAIPlayersList();
+    
+    showNotification(`AI player added: ${aiPlayer.name}`, '#00ff00', 2000);
+  });
+
+  socket.on('ai-difficulties', (data) => {
+    const { difficulties } = data;
+    console.log('AI difficulties received:', difficulties);
+    
+    // Update AI difficulty dropdown
+    const dropdown = document.getElementById('ai-difficulty-select');
+    if (dropdown) {
+      dropdown.innerHTML = '';
+      Object.entries(difficulties).forEach(([key, diff]) => {
+        const option = document.createElement('option');
+        option.value = key;
+        option.textContent = diff.name;
+        dropdown.appendChild(option);
+      });
+    }
+  });
+
+  // Chat system handlers
+  socket.on('chat-message', (data) => {
+    addChatMessage(data);
+  });
+
+  socket.on('chat-status', (data) => {
+    updateChatStatus(data.status);
+  });
+
+  // Color selection handlers
+  socket.on('color-selected', (data) => {
+    const { playerId, color } = data;
+    console.log(`Player ${playerId} selected color: ${color}`);
+    updateColorSelector();
+  });
+
+  socket.on('available-colors', (data) => {
+    const { colors } = data;
+    console.log('Available colors:', colors);
+    updateColorSelector();
+  });
 }
 
 // Grid utility functions (copied from gridToSphere.js)
@@ -335,6 +575,20 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x0a0a0a);
 document.body.appendChild(renderer.domElement);
+
+// Mouse interaction setup
+const mouse = new THREE.Vector2();
+const raycaster = new THREE.Raycaster();
+
+// UI elements that need to be available globally
+const modeIndicator = document.getElementById('mode-indicator');
+
+// Mouse state tracking
+let mouseDownTime = 0;
+let isDragging = false;
+
+// Movement mode tracking - MOVED HERE TO FIX INITIALIZATION ORDER
+let selectedMovementMode = null;
 
 console.log('Three.js scene initialized successfully');
 
@@ -676,7 +930,7 @@ const performanceOptimizer = new PerformanceOptimizer();
 
 // Mouse interaction tracking
 let mouseStartPos = { x: 0, y: 0 };
-let isDragging = false;
+// isDragging moved to global scope
 
 function handleMouseDown(e) {
   mouseDownTime = Date.now();
@@ -1410,322 +1664,575 @@ let gameState = {
   gridConfig: { rows: 20, cols: 8 }
 };
 
+// Color mapping from server color IDs to hex values - MOVED HERE TO FIX INITIALIZATION ORDER
+const COLOR_MAP = {
+  'red': 0xFF0000,
+  'blue': 0x0080FF,
+  'light_blue': 0x40C0FF,
+  'green': 0x00FF00,
+  'yellow': 0xFFD700,
+  'purple': 0x8000FF,
+  'magenta': 0xFF00FF,
+  'cyan': 0x00FFFF,
+  'orange': 0xFF8000,
+  'pink': 0xFF69B4,
+  'lime': 0x00FF80,
+  'teal': 0x008080
+};
+
 // Visual elements
 const pieceMeshes = {};
 let validMoves = [];
 let selectedPieceId = null;
 
-// UI elements - moved to top of file
+// Visual effects manager - MOVED HERE TO FIX INITIALIZATION ORDER (will be initialized after scene is ready)
+let visualEffects = null;
 
-// Socket event handlers
-socket.on('connect', () => {
-  statusEl.textContent = 'Connected';
-  statusEl.style.color = '#00ff00';
-  console.log('Socket connected successfully');
-  console.log('My socket ID:', socket.id);
-  
-  // Request AI difficulties for the dropdown
-  socket.emit('get-ai-difficulties');
-});
+// Text label cache - MOVED HERE TO FIX INITIALIZATION ORDER
+const textLabelCache = new Map();
 
-socket.on('disconnect', () => {
-  statusEl.textContent = 'Disconnected';
-  statusEl.style.color = '#ff0000';
-});
-
-socket.on('game-full', () => {
-  statusEl.textContent = 'Game Full';
-  statusEl.style.color = '#ff8800';
-  gameInfoEl.textContent = 'Game is full. Please try again later.';
-});
-
-socket.on('game-state-update', async (newGameState) => {
-  // Process delta updates for performance
-  const delta = performanceOptimizer.processDeltaUpdate(newGameState);
-  
-  if (delta.fullUpdate) {
-    // Full update on first load
-    gameState = newGameState;
-    await updateVisuals();
-    updateUI();
-  } else {
-    // Delta update - only update changed elements
-    gameState = newGameState;
-    await updateVisualsDelta(delta);
-    
-    // Throttled UI updates
-    performanceOptimizer.createThrottledFunction('ui-update', () => {
-      updateUI();
-    }, 200);
+// CLASS DEFINITIONS - MOVED HERE TO FIX INITIALIZATION ORDER
+// Transition manager for smooth UI transitions
+class TransitionManager {
+  constructor() {
+    this.activeTransitions = new Map();
   }
   
-  console.log('Game state updated:', gameState);
-  console.log('Players in game state:', Object.keys(gameState.players));
-  console.log('My socket ID:', socket.id);
-  console.log('Players object:', gameState.players);
-});
-
-socket.on('valid-moves', (data) => {
-  // Only show moves if this is for the currently selected piece
-  if (data.pieceId === selectedPieceId) {
-    validMoves = data.moves;
+  fadeIn(element, duration = 500) {
+    element.style.opacity = '0';
+    element.style.display = 'block';
     
-    // Check if this is a Hybrid Queen with dual movement
-    const selectedPiece = gameState.pieces[selectedPieceId];
-    const isDualMovement = selectedPiece && selectedPiece.type === 'HYBRID_QUEEN';
-    
-    if (isDualMovement) {
-      showDualMovementUI();
-      // Don't highlight moves yet - wait for mode selection
-      console.log(`Hybrid Queen selected - showing dual movement UI`);
-    } else {
-      hideDualMovementUI();
-      highlightValidMoves();
-      console.log(`Showing ${validMoves.length} valid moves for piece ${data.pieceId}`);
-    }
-  }
-});
-
-socket.on('move-result', (data) => {
-  if (data.success) {
-    console.log('Move successful:', data.message);
-    gameInfoEl.textContent = `Move successful`;
-  } else {
-    console.log('Move failed:', data.message);
-    gameInfoEl.textContent = `Move failed: ${data.message}`;
-    gameInfoEl.style.color = '#ff6b6b';
-    
-    // Reset color after 3 seconds
-    setTimeout(() => {
-      gameInfoEl.style.color = '#ffffff';
-    }, 3000);
-  }
-});
-
-socket.on('battle-result', (data) => {
-  const { winner, loser, position, winnerKills } = data;
-  console.log(`Battle completed! Winner: ${winner}, Loser: ${loser}, Kills: ${winnerKills}`);
-  
-  // Update UI with battle information
-  gameInfoEl.textContent = `Battle won! ${winnerKills} kills`;
-  
-  // Flash the battle position
-  const worldPos = getWorldPosition(position.row, position.col);
-  const flashGeometry = new THREE.SphereGeometry(0.2, 8, 8);
-  const flashMaterial = new THREE.MeshBasicMaterial({
-    color: 0xff0000,
-    transparent: true,
-    opacity: 0.8
-  });
-  const flash = new THREE.Mesh(flashGeometry, flashMaterial);
-  flash.position.set(worldPos.x, worldPos.y, worldPos.z);
-  scene.add(flash);
-  
-  // Remove flash after animation
-  setTimeout(() => {
-    scene.remove(flash);
-  }, 1000);
-});
-
-socket.on('piece-evolution', (data) => {
-  const { pieceId, oldType, newType, position } = data;
-  console.log(`Evolution! ${oldType} → ${newType} at position (${position.row}, ${position.col})`);
-  
-  // 🔧 FIX: Update client-side piece data to match server evolution
-  if (gameState.pieces && gameState.pieces[pieceId]) {
-    console.log(`🔄 Updating client piece data: ${pieceId} from ${gameState.pieces[pieceId].type} to ${newType}`);
-    gameState.pieces[pieceId].type = newType;
-    
-    // Update the mesh userData for click detection
-    const mesh = pieceMeshes[pieceId];
-    if (mesh) {
-      mesh.userData.piece.type = newType;
-      console.log(`🔄 Updated mesh userData for ${pieceId}: type = ${newType}`);
+    const startTime = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
       
-      // Recreate the piece mesh with the new type
-      console.log(`🔄 Recreating mesh for evolved piece ${pieceId}`);
-      const piece = gameState.pieces[pieceId];
+      element.style.opacity = progress.toString();
       
-      // Remove old mesh
-      scene.remove(mesh);
-      if (mesh.geometry) mesh.geometry.dispose();
-      if (mesh.material) {
-        if (Array.isArray(mesh.material)) {
-          mesh.material.forEach(mat => mat.dispose());
-        } else {
-          mesh.material.dispose();
-        }
-      }
-      delete pieceMeshes[pieceId];
-      
-      // Create new mesh with evolved type
-      createPieceMeshOptimized(piece).then(() => {
-        console.log(`✅ Successfully recreated mesh for evolved ${newType}`);
-      }).catch(error => {
-        console.error(`❌ Failed to recreate mesh for evolved piece:`, error);
-      });
-    }
-  }
-  
-  // Update UI with evolution information
-  gameInfoEl.textContent = `Evolution: ${oldType} → ${newType}!`;
-  
-  // Create evolution effect
-  const worldPos = getWorldPosition(position.row, position.col);
-  const evolutionGeometry = new THREE.SphereGeometry(0.3, 16, 16);
-  const evolutionMaterial = new THREE.MeshBasicMaterial({
-    color: 0x00ff00,
-    transparent: true,
-    opacity: 0.6,
-    wireframe: true
-  });
-  const evolutionEffect = new THREE.Mesh(evolutionGeometry, evolutionMaterial);
-  evolutionEffect.position.set(worldPos.x, worldPos.y, worldPos.z);
-  scene.add(evolutionEffect);
-  
-  // Animate evolution effect
-  let scale = 0.5;
-  const animateEvolution = () => {
-    scale += 0.1;
-    evolutionEffect.scale.set(scale, scale, scale);
-    evolutionEffect.material.opacity = 0.8 - (scale * 0.2);
-    
-    if (scale < 2) {
-      requestAnimationFrame(animateEvolution);
-    } else {
-      scene.remove(evolutionEffect);
-    }
-  };
-  animateEvolution();
-});
-
-socket.on('evolution-point-award', (data) => {
-  const { pieceId, pieceType, points, reason, position } = data;
-  console.log(`Evolution points awarded: ${pieceType} gained ${points} points for ${reason}`);
-  
-  // Create special effect for circumnavigation
-  if (reason === 'circumnavigation') {
-    const worldPos = getWorldPosition(position.row, position.col);
-    
-    // Create golden ring effect for circumnavigation
-    const ringGeometry = new THREE.RingGeometry(0.2, 0.4, 16);
-    const ringMaterial = new THREE.MeshBasicMaterial({
-      color: 0xFFD700, // Gold color
-      transparent: true,
-      opacity: 0.8,
-      side: THREE.DoubleSide
-    });
-    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    ring.position.set(worldPos.x, worldPos.y, worldPos.z);
-    ring.lookAt(0, 0, 0); // Face toward center of globe
-    scene.add(ring);
-    
-    // Show circumnavigation notification
-    const player = gameState.players[gameState.pieces[pieceId]?.playerId];
-    if (player) {
-      const playerIndex = Object.keys(gameState.players).indexOf(player.id) + 1;
-      showNotification(`🌍 Player ${playerIndex} Circumnavigation! +8 Evolution Points! 🌍`, '#FFD700', 3000);
-    }
-    
-    // Animate ring effect
-    let scale = 0.5;
-    let rotation = 0;
-    const animateRing = () => {
-      scale += 0.05;
-      rotation += 0.1;
-      ring.scale.set(scale, scale, scale);
-      ring.rotation.z = rotation;
-      ring.material.opacity = 0.8 - (scale * 0.3);
-      
-      if (scale < 3) {
-        requestAnimationFrame(animateRing);
-      } else {
-        scene.remove(ring);
-        ringGeometry.dispose();
-        ringMaterial.dispose();
+      if (progress < 1) {
+        requestAnimationFrame(animate);
       }
     };
-    animateRing();
-  }
-});
-
-socket.on('equator-bonus', (data) => {
-  const { pieceId, pieceType, points, position } = data;
-  console.log(`Equator bonus: ${pieceType} piece ${pieceId} reached the equator (+1 evolution point, ${points} total)`);
-  
-  // Visual feedback for equator bonus
-  const worldPosition = getWorldPosition(position.row, position.col);
-  
-  // Create golden ring effect around the piece
-  const ringGeometry = new THREE.RingGeometry(0.2, 0.3, 16);
-  const ringMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffd700,
-    transparent: true,
-    opacity: 0.9,
-    side: THREE.DoubleSide
-  });
-  
-  const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-  ring.position.set(worldPosition.x, worldPosition.y, worldPosition.z);
-  ring.lookAt(0, 0, 0);
-  scene.add(ring);
-  
-  // Animate ring expansion
-  let scale = 1;
-  const ringAnimation = () => {
-    scale += 0.08;
-    ring.scale.set(scale, scale, scale);
-    ring.material.opacity -= 0.03;
     
-    if (ring.material.opacity > 0) {
-      requestAnimationFrame(ringAnimation);
-    } else {
-      scene.remove(ring);
+    animate();
+  }
+  
+  fadeOut(element, duration = 500) {
+    const startTime = Date.now();
+    const startOpacity = parseFloat(element.style.opacity) || 1;
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      element.style.opacity = (startOpacity * (1 - progress)).toString();
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        element.style.display = 'none';
+      }
+    };
+    
+    animate();
+  }
+  
+  slideIn(element, direction = 'left', duration = 500) {
+    const startTime = Date.now();
+    const startPos = direction === 'left' ? -element.offsetWidth : element.offsetWidth;
+    
+    element.style.transform = `translateX(${startPos}px)`;
+    element.style.display = 'block';
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      const currentPos = startPos * (1 - this.easeOutCubic(progress));
+      element.style.transform = `translateX(${currentPos}px)`;
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    animate();
+  }
+  
+  easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+}
+
+// Enhanced Visual Effects System
+class VisualEffectsManager {
+  constructor(scene, renderer) {
+    this.scene = scene;
+    this.renderer = renderer;
+    this.activeEffects = new Map();
+    this.animationQueue = [];
+    this.particleSystem = null;
+    this.transitionManager = new TransitionManager();
+    
+    // Initialize particle system
+    this.initParticleSystem();
+  }
+  
+  initParticleSystem() {
+    // Create particle system for various effects
+    this.particleSystem = {
+      pool: [],
+      active: [],
+      maxParticles: 1000
+    };
+    
+    // Pre-create particle pool
+    for (let i = 0; i < this.particleSystem.maxParticles; i++) {
+      const particle = this.createParticle();
+      this.particleSystem.pool.push(particle);
     }
-  };
+  }
   
-  ringAnimation();
+  createParticle() {
+    const geometry = new THREE.SphereGeometry(0.02, 4, 4);
+    const material = new THREE.MeshBasicMaterial({ 
+      color: 0xffffff,
+      transparent: true,
+      opacity: 1
+    });
+    
+    const particle = new THREE.Mesh(geometry, material);
+    particle.visible = false;
+    
+    // Add particle properties
+    particle.userData = {
+      velocity: new THREE.Vector3(),
+      life: 1.0,
+      maxLife: 1.0,
+      size: 0.02,
+      color: new THREE.Color(0xffffff)
+    };
+    
+    this.scene.add(particle);
+    return particle;
+  }
   
-  // Update UI
-  gameInfoEl.textContent = `Pawn reached equator! +1 evolution point`;
-  gameInfoEl.style.color = '#ffd700';
-  setTimeout(() => {
-    gameInfoEl.style.color = '#ffffff';
-  }, 2000);
-});
-
-socket.on('split-cost-applied', (data) => {
-  const { pieceId, evolutionPoints, cooldownTurns, weakenedTurns } = data;
-  console.log(`Split cost applied to piece ${pieceId}: -2 evolution points, ${cooldownTurns} turn cooldown, ${weakenedTurns} turn weakness`);
+  getParticle() {
+    if (this.particleSystem.pool.length > 0) {
+      const particle = this.particleSystem.pool.pop();
+      this.particleSystem.active.push(particle);
+      return particle;
+    }
+    return null;
+  }
   
-  // Update UI
-  gameInfoEl.textContent = `Splitter split! -2 evolution points, ${cooldownTurns} turn cooldown`;
-  gameInfoEl.style.color = '#ff9900';
-  setTimeout(() => {
-    gameInfoEl.style.color = '#ffffff';
-  }, 3000);
-});
+  returnParticle(particle) {
+    particle.visible = false;
+    particle.userData.life = 1.0;
+    particle.userData.velocity.set(0, 0, 0);
+    
+    const index = this.particleSystem.active.indexOf(particle);
+    if (index > -1) {
+      this.particleSystem.active.splice(index, 1);
+      this.particleSystem.pool.push(particle);
+    }
+  }
+  
+  // Enhanced piece movement with smooth transitions
+  animatePieceMovement(piece, fromPos, toPos, duration = 1000) {
+    const mesh = pieceMeshes[piece.id];
+    if (!mesh) return;
+    
+    // Create smooth curve for movement
+    const curve = new THREE.QuadraticBezierCurve3(
+      fromPos,
+      new THREE.Vector3(
+        (fromPos.x + toPos.x) / 2,
+        Math.max(fromPos.y, toPos.y) + 0.5, // Arc above surface
+        (fromPos.z + toPos.z) / 2
+      ),
+      toPos
+    );
+    
+    const startTime = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Smooth easing
+      const easeProgress = this.easeInOutCubic(progress);
+      
+      // Update position along curve
+      const position = curve.getPoint(easeProgress);
+      mesh.position.copy(position);
+      
+      // Add rotation animation
+      mesh.rotation.y += 0.1;
+      
+      // Add scale animation
+      const scale = 1 + Math.sin(progress * Math.PI) * 0.1;
+      mesh.scale.set(scale, scale, scale);
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        // Reset scale
+        mesh.scale.set(1, 1, 1);
+      }
+    };
+    
+    animate();
+  }
+  
+  // Enhanced battle effects with particles
+  createBattleEffect(pos1, pos2, winner, intensity = 1.0) {
+    // Create lightning effect
+    this.createLightningEffect(pos1, pos2, intensity);
+    
+    // Create particle explosion
+    this.createParticleExplosion(pos1, 0xff4444, 20 * intensity);
+    this.createParticleExplosion(pos2, 0x4444ff, 20 * intensity);
+    
+    // Create shockwave
+    this.createShockwave(winner === 'pos1' ? pos1 : pos2, intensity);
+    
+    // Screen shake effect
+    this.createScreenShake(intensity * 0.5);
+  }
+  
+  createLightningEffect(pos1, pos2, intensity) {
+    const segments = 20;
+    const points = [];
+    
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      const x = pos1.x + (pos2.x - pos1.x) * t + (Math.random() - 0.5) * 0.2 * intensity;
+      const y = pos1.y + (pos2.y - pos1.y) * t + (Math.random() - 0.5) * 0.2 * intensity;
+      const z = pos1.z + (pos2.z - pos1.z) * t + (Math.random() - 0.5) * 0.2 * intensity;
+      
+      points.push(new THREE.Vector3(x, y, z));
+    }
+    
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      opacity: 0.8,
+      transparent: true,
+      linewidth: 3
+    });
+    
+    const lightning = new THREE.Line(geometry, material);
+    this.scene.add(lightning);
+    
+    // Animate lightning
+    const startTime = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = elapsed / 300; // 300ms duration
+      
+      if (progress < 1) {
+        // Flickering effect
+        material.opacity = 0.8 * (1 - progress) * (Math.random() * 0.5 + 0.5);
+        requestAnimationFrame(animate);
+      } else {
+        this.scene.remove(lightning);
+        geometry.dispose();
+        material.dispose();
+      }
+    };
+    
+    animate();
+  }
+  
+  createParticleExplosion(center, color, count) {
+    for (let i = 0; i < count; i++) {
+      const particle = this.getParticle();
+      if (!particle) continue;
+      
+      particle.position.copy(center);
+      particle.visible = true;
+      
+      // Random velocity
+      const speed = 0.02 + Math.random() * 0.08;
+      particle.userData.velocity.set(
+        (Math.random() - 0.5) * speed,
+        Math.random() * speed,
+        (Math.random() - 0.5) * speed
+      );
+      
+      // Set color and life
+      particle.material.color.setHex(color);
+      particle.userData.life = 1.0;
+      particle.userData.maxLife = 1.0 + Math.random() * 2.0;
+    }
+  }
+  
+  createShockwave(center, intensity) {
+    const geometry = new THREE.RingGeometry(0, 0.1, 16);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.6,
+      side: THREE.DoubleSide
+    });
+    
+    const shockwave = new THREE.Mesh(geometry, material);
+    shockwave.position.copy(center);
+    shockwave.lookAt(center.clone().add(new THREE.Vector3(0, 1, 0)));
+    
+    this.scene.add(shockwave);
+    
+    // Animate shockwave
+    const startTime = Date.now();
+    const maxRadius = 2.0 * intensity;
+    const duration = 800;
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = elapsed / duration;
+      
+      if (progress < 1) {
+        const radius = maxRadius * progress;
+        shockwave.scale.set(radius, radius, 1);
+        material.opacity = 0.6 * (1 - progress);
+        
+        requestAnimationFrame(animate);
+      } else {
+        this.scene.remove(shockwave);
+        geometry.dispose();
+        material.dispose();
+      }
+    };
+    
+    animate();
+  }
+  
+  createScreenShake(intensity) {
+    const originalPosition = camera.position.clone();
+    const shakeIntensity = 0.02 * intensity;
+    const duration = 300;
+    const startTime = Date.now();
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = elapsed / duration;
+      
+      if (progress < 1) {
+        const shakeAmount = shakeIntensity * (1 - progress);
+        camera.position.x = originalPosition.x + (Math.random() - 0.5) * shakeAmount;
+        camera.position.y = originalPosition.y + (Math.random() - 0.5) * shakeAmount;
+        camera.position.z = originalPosition.z + (Math.random() - 0.5) * shakeAmount;
+        
+        requestAnimationFrame(animate);
+      } else {
+        camera.position.copy(originalPosition);
+      }
+    };
+    
+    animate();
+  }
+  
+  // Enhanced evolution effects
+  createEvolutionEffect(position, fromType, toType) {
+    // Create spiral particle effect
+    this.createSpiralEffect(position, 0x00ff00, 1500);
+    
+    // Create type transition effect
+    this.createTypeTransitionEffect(position, fromType, toType);
+    
+    // Create radial burst
+    this.createRadialBurst(position, 0x00ff00, 30);
+  }
+  
+  createSpiralEffect(center, color, duration) {
+    const particleCount = 50;
+    const spiralParticles = [];
+    
+    for (let i = 0; i < particleCount; i++) {
+      const particle = this.getParticle();
+      if (!particle) continue;
+      
+      particle.position.copy(center);
+      particle.visible = true;
+      particle.material.color.setHex(color);
+      
+      // Spiral parameters
+      particle.userData.spiralAngle = (i / particleCount) * Math.PI * 4;
+      particle.userData.spiralRadius = 0;
+      particle.userData.spiralSpeed = 0.1 + Math.random() * 0.1;
+      particle.userData.spiralHeight = 0;
+      
+      spiralParticles.push(particle);
+    }
+    
+    const startTime = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = elapsed / duration;
+      
+      if (progress < 1) {
+        spiralParticles.forEach(particle => {
+          if (!particle.visible) return;
+          
+          // Update spiral motion
+          particle.userData.spiralAngle += particle.userData.spiralSpeed;
+          particle.userData.spiralRadius = progress * 0.8;
+          particle.userData.spiralHeight = progress * 1.5;
+          
+          // Calculate position
+          const x = center.x + Math.cos(particle.userData.spiralAngle) * particle.userData.spiralRadius;
+          const y = center.y + particle.userData.spiralHeight;
+          const z = center.z + Math.sin(particle.userData.spiralAngle) * particle.userData.spiralRadius;
+          
+          particle.position.set(x, y, z);
+          particle.material.opacity = 1 - progress;
+        });
+        
+        requestAnimationFrame(animate);
+      } else {
+        // Clean up particles
+        spiralParticles.forEach(particle => {
+          this.returnParticle(particle);
+        });
+      }
+    };
+    
+    animate();
+  }
+  
+  createTypeTransitionEffect(position, fromType, toType) {
+    // Create floating text effect showing evolution
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.width = 256;
+    canvas.height = 64;
+    
+    context.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    context.fillStyle = 'white';
+    context.font = '24px Arial';
+    context.textAlign = 'center';
+    context.fillText(`${fromType} → ${toType}`, canvas.width / 2, canvas.height / 2 + 8);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ 
+      map: texture,
+      transparent: true,
+      opacity: 1
+    });
+    
+    const sprite = new THREE.Sprite(material);
+    sprite.position.copy(position);
+    sprite.position.y += 0.8;
+    sprite.scale.set(0.5, 0.2, 1);
+    
+    this.scene.add(sprite);
+    
+    // Animate text
+    const startTime = Date.now();
+    const duration = 2000;
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = elapsed / duration;
+      
+      if (progress < 1) {
+        // Float upward
+        sprite.position.y = position.y + 0.8 + progress * 0.5;
+        
+        // Fade out
+        material.opacity = 1 - progress;
+        
+        requestAnimationFrame(animate);
+      } else {
+        this.scene.remove(sprite);
+        texture.dispose();
+        material.dispose();
+      }
+    };
+    
+    animate();
+  }
+  
+  createRadialBurst(center, color, count) {
+    for (let i = 0; i < count; i++) {
+      const particle = this.getParticle();
+      if (!particle) continue;
+      
+      particle.position.copy(center);
+      particle.visible = true;
+      particle.material.color.setHex(color);
+      
+      // Radial velocity
+      const angle = (i / count) * Math.PI * 2;
+      const speed = 0.05 + Math.random() * 0.03;
+      
+      particle.userData.velocity.set(
+        Math.cos(angle) * speed,
+        Math.random() * 0.02,
+        Math.sin(angle) * speed
+      );
+      
+      particle.userData.life = 1.0;
+      particle.userData.maxLife = 1.0 + Math.random() * 1.0;
+    }
+  }
+  
+  // Update particle system
+  updateParticles(deltaTime) {
+    this.particleSystem.active.forEach(particle => {
+      if (!particle.visible) return;
+      
+      // Update position
+      particle.position.add(particle.userData.velocity);
+      
+      // Update life
+      particle.userData.life -= deltaTime / 1000;
+      
+      // Update opacity based on life
+      particle.material.opacity = particle.userData.life / particle.userData.maxLife;
+      
+      // Apply gravity
+      particle.userData.velocity.y -= 0.001;
+      
+      // Check if particle should be returned to pool
+      if (particle.userData.life <= 0) {
+        this.returnParticle(particle);
+      }
+    });
+  }
+  
+  // Utility functions
+  easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
+  }
+  
+  // Cleanup
+  cleanup() {
+    this.activeEffects.clear();
+    this.animationQueue.length = 0;
+    
+    // Clean up particles
+    [...this.particleSystem.pool, ...this.particleSystem.active].forEach(particle => {
+      this.scene.remove(particle);
+      if (particle.geometry) particle.geometry.dispose();
+      if (particle.material) particle.material.dispose();
+    });
+  }
+}
 
-// Tournament socket handlers
-socket.on('tournament-created', (data) => {
-  const { tournament } = data;
-  console.log(`Tournament created: ${tournament.name}`);
-  gameInfoEl.textContent = `Tournament created: ${tournament.name}`;
-  gameInfoEl.style.color = '#4444ff';
-  setTimeout(() => {
-    gameInfoEl.style.color = '#ffffff';
-  }, 3000);
-});
+// UI elements - moved to top of file
 
-socket.on('tournament-list', (data) => {
-  tournaments = data.tournaments;
-  updateTournamentList();
-});
+// Socket event handlers are now set up in setupSocketListeners() function
 
-socket.on('tournament-list-updated', (data) => {
-  tournaments = data.tournaments;
-  updateTournamentList();
-});
+// Duplicate socket handlers removed - all handlers now properly set up in setupSocketListeners() function
+
+// More duplicate socket handlers removed
+
+// Removed all duplicate socket handlers - they are now properly handled in setupSocketListeners() function
+
+// All remaining duplicate socket handlers below this point should also be removed
 
 socket.on('tournament-joined', (data) => {
   const { tournament, player } = data;
@@ -2270,9 +2777,15 @@ function showDiceBattleAnimation(battleLog, winner, loser, duration) {
 }
 
 async function updateVisuals() {
+  console.log('🔧 updateVisuals called');
+  console.log('🔧 gameState.pieces:', gameState.pieces);
+  console.log('🔧 Number of pieces in gameState:', Object.keys(gameState.pieces || {}).length);
+  console.log('🔧 Current pieceMeshes:', Object.keys(pieceMeshes));
+  
   // Remove pieces that no longer exist
   Object.keys(pieceMeshes).forEach(pieceId => {
     if (!gameState.pieces[pieceId]) {
+      console.log(`🔧 Removing piece ${pieceId} (no longer exists)`);
       performanceOptimizer.removePieceEfficient(pieceId);
     }
   });
@@ -2280,18 +2793,22 @@ async function updateVisuals() {
   // Add or update pieces
   const piecePromises = Object.values(gameState.pieces).map(async piece => {
     if (!pieceMeshes[piece.id]) {
+      console.log(`🔧 Creating new mesh for piece ${piece.id} (${piece.type})`);
       try {
         await createPieceMeshOptimized(piece);
+        console.log(`🔧 Successfully created mesh for piece ${piece.id}`);
       } catch (error) {
-        console.error(`Failed to create mesh for piece ${piece.id}:`, error);
+        console.error(`❌ Failed to create mesh for piece ${piece.id}:`, error);
       }
     } else {
+      console.log(`🔧 Updating existing mesh for piece ${piece.id}`);
       updatePieceMeshOptimized(piece);
     }
   });
   
   // Wait for all piece creation to complete
   await Promise.all(piecePromises);
+  console.log('🔧 updateVisuals completed');
 }
 
 // Delta update function for better performance
@@ -2440,8 +2957,30 @@ async function createPieceMeshOptimized(piece) {
   const label = new THREE.Sprite(labelMaterial);
   label.scale.set(0.5, 0.5, 1);
   label.position.set(0, 0.3, 0);
+  label.raycast = function() {}; // Disable raycasting for piece symbol labels
   
   mesh.add(label);
+  
+  // Add floating evolution points label (skip for King pieces)
+  if (piece.type !== 'KING') {
+    console.log('🎯 Creating evolution points label for piece:', piece.id);
+    const evolutionPoints = getEvolutionPointsForPiece(piece);
+    console.log('🎯 Evolution points retrieved:', evolutionPoints);
+    const evolutionLabelTexture = createEvolutionPointsLabel(evolutionPoints, piece.playerId);
+    console.log('🎯 Evolution label texture created:', evolutionLabelTexture);
+    const evolutionLabelMaterial = new THREE.SpriteMaterial({ map: evolutionLabelTexture });
+    const evolutionLabel = new THREE.Sprite(evolutionLabelMaterial);
+    evolutionLabel.scale.set(1.0, 0.5, 1); // Much larger scale
+    evolutionLabel.position.set(0, 1.2, 0); // Higher above the piece
+    console.log('🎯 Evolution label positioned at:', evolutionLabel.position, 'with scale:', evolutionLabel.scale);
+    evolutionLabel.userData = { isEvolutionLabel: true };
+    evolutionLabel.raycast = function() {}; // Disable raycasting for evolution labels
+    
+    mesh.add(evolutionLabel);
+    console.log('🎯 Evolution label added to mesh, total children:', mesh.children.length);
+  } else {
+    console.log('🎯 Skipping evolution label for King piece (Kings do not have evolution points)');
+  }
   
   // Set userData for click detection
   mesh.userData.piece = piece;
@@ -2473,11 +3012,44 @@ function updatePieceMeshOptimized(piece) {
     const up = new THREE.Vector3(0, 1, 0); // Piece's original "up" direction
     const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal);
     mesh.setRotationFromQuaternion(quaternion);
+    
+    // Update evolution points label
+    updateEvolutionPointsLabel(mesh, piece);
   }
 }
 
-// Cached text label creation
-const textLabelCache = new Map();
+// Update evolution points label for a specific piece
+function updateEvolutionPointsLabel(mesh, piece) {
+  // Find the evolution label in the mesh children
+  const evolutionLabel = mesh.children.find(child => 
+    child.userData && child.userData.isEvolutionLabel
+  );
+  
+  if (evolutionLabel) {
+    const evolutionPoints = getEvolutionPointsForPiece(piece);
+    const newTexture = createEvolutionPointsLabel(evolutionPoints, piece.playerId);
+    
+    // Dispose of old texture to prevent memory leaks
+    if (evolutionLabel.material.map) {
+      evolutionLabel.material.map.dispose();
+    }
+    
+    // Apply new texture
+    evolutionLabel.material.map = newTexture;
+    evolutionLabel.material.needsUpdate = true;
+  }
+}
+
+// Update all evolution point labels (call this when player evolution points change)
+function updateAllEvolutionPointLabels() {
+    Object.values(pieceMeshes).forEach(mesh => {
+    if (mesh.userData && mesh.userData.piece && mesh.userData.piece.type !== 'KING') {
+      updateEvolutionPointsLabel(mesh, mesh.userData.piece);
+    }
+  });
+}
+
+// Cached text label creation - textLabelCache moved to top of file to fix initialization order
 
 function createCachedTextLabel(symbol) {
   if (textLabelCache.has(symbol)) {
@@ -2498,6 +3070,99 @@ function createCachedTextLabel(symbol) {
   textLabelCache.set(symbol, texture);
   
   return texture;
+}
+
+// Get evolution points for a piece from the server's player data
+function getEvolutionPointsForPiece(piece) {
+  // Debug logging to see what data we have
+  console.log('🔍 Getting evolution points for piece:', piece.id, 'type:', piece.type);
+  console.log('🔍 Piece player ID:', piece.playerId);
+  console.log('🔍 GameState players:', gameState.players);
+  
+  const player = gameState.players[piece.playerId];
+  console.log('🔍 Found player:', player);
+  
+  // For player evolution points (shared across all pieces), check player object
+  if (player && player.evolutionPoints !== undefined) {
+    console.log('🔍 Player evolution points found:', player.evolutionPoints);
+    return player.evolutionPoints;
+  }
+  
+  // For individual piece evolution points, check piece object
+  if (piece.evolutionPoints !== undefined) {
+    console.log('🔍 Piece evolution points found:', piece.evolutionPoints);
+    return piece.evolutionPoints;
+  }
+  
+  // King pieces don't have evolution points - hide their labels
+  if (piece.type === 'KING') {
+    console.log('🔍 King pieces do not have evolution points');
+    return 0;
+  }
+  
+  // Default piece values based on piece type (when no player-wide evolution points are available)
+  const defaultValues = {
+    'PAWN': 1,
+    'ROOK': 5,
+    'KNIGHT': 3,
+    'BISHOP': 3,
+    'QUEEN': 9,
+    'JUMPER': 3,
+    'SUPER_JUMPER': 5,
+    'HYPER_JUMPER': 7,
+    'SPLITTER': 4,
+    'HYBRID_QUEEN': 12,
+    'MISTRESS_JUMPER': 8
+  };
+  
+  const defaultValue = defaultValues[piece.type] || 1;
+  console.log('🔍 No evolution points found, using default for', piece.type, ':', defaultValue);
+  return defaultValue;
+}
+
+// Create evolution points label with team color styling
+function createEvolutionPointsLabel(evolutionPoints, playerId) {
+  console.log('🎨 Creating evolution points label with points:', evolutionPoints, 'for player:', playerId);
+  
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  canvas.width = 128; // Double the width for better quality
+  canvas.height = 64; // Double the height for better quality
+  
+  // Get player color for styling
+  const player = gameState.players[playerId];
+  const playerIndex = player?.index !== undefined ? player.index : 
+                     Object.keys(gameState.players).indexOf(playerId);
+  
+  console.log('🎨 Player index:', playerIndex, 'Player object:', player);
+  
+  // Determine text color based on player
+  let textColor = '#FFD700'; // Gold default
+  if (playerIndex === 0) {
+    textColor = '#FF6B6B'; // Red team
+  } else if (playerIndex === 1) {
+    textColor = '#4ECDC4'; // Blue team
+  }
+  
+  console.log('🎨 Using text color:', textColor);
+  
+  // Create background with subtle glow
+  context.fillStyle = 'rgba(0, 0, 0, 0.6)';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Add text
+  context.fillStyle = textColor;
+  context.font = 'bold 20px Arial';
+  context.textAlign = 'center';
+  context.fillText(`${evolutionPoints}`, 32, 22);
+  
+  // Add small "pts" text
+  context.fillStyle = 'rgba(255, 255, 255, 0.7)';
+  context.font = '12px Arial';
+  context.fillText('pts', 32, 30);
+  
+  console.log('🎨 Canvas texture created successfully');
+  return new THREE.CanvasTexture(canvas);
 }
 
 // Helper function to get appropriate scale for GLB models
@@ -2682,6 +3347,30 @@ function updateUI() {
     gameInfoEl.style.color = '#ffffff';
   }
   
+  // Update player name display
+  const activePlayerNameEl = document.getElementById('active-player-name');
+  if (activePlayerNameEl) {
+    const myPlayer = gameState.players[socket.id];
+    if (myPlayer) {
+      activePlayerNameEl.textContent = myPlayer.name || playerName || 'Unknown Player';
+    } else {
+      activePlayerNameEl.textContent = playerName || 'Connecting...';
+    }
+  }
+  
+  // Update selected color display
+  const selectedColorEl = document.getElementById('selected-color');
+  if (selectedColorEl) {
+    const myPlayer = gameState.players[socket.id];
+    if (myPlayer && myPlayer.selectedColor) {
+      selectedColorEl.textContent = `Selected: ${myPlayer.selectedColor}`;
+      selectedColorEl.style.color = myPlayer.selectedColor;
+    } else {
+      selectedColorEl.textContent = menuSelectedColor ? `Selected: ${menuSelectedColor}` : 'None selected';
+      selectedColorEl.style.color = menuSelectedColor || '#aaa';
+    }
+  }
+  
   // Add player color indicators
   updatePlayerColorIndicators();
 }
@@ -2741,7 +3430,7 @@ function updatePlayerColorIndicators() {
   });
 }
 
-let selectedMovementMode = null;
+// selectedMovementMode moved to global scope
 
 function showDualMovementUI() {
   const dualMovementUI = document.getElementById('dual-movement-ui');
@@ -3711,21 +4400,7 @@ function getColorFromString(colorString) {
   return colorMap[colorString] || 0xffffff;
 }
 
-// Color mapping from server color IDs to hex values
-const COLOR_MAP = {
-  'red': 0xFF0000,
-  'blue': 0x0080FF,
-  'light_blue': 0x40C0FF,
-  'green': 0x00FF00,
-  'yellow': 0xFFD700,
-  'purple': 0x8000FF,
-  'magenta': 0xFF00FF,
-  'cyan': 0x00FFFF,
-  'orange': 0xFF8000,
-  'pink': 0xFF69B4,
-  'lime': 0x00FF80,
-  'teal': 0x008080
-};
+// COLOR_MAP moved to top of file to fix initialization order
 
 // Get distinct player color using server-assigned color
 function getPlayerColor(playerId, playerIndex) {
@@ -3766,9 +4441,71 @@ function getPieceColorForPlayer(piece, player, playerIndex) {
   return finalColor;
 }
 
-// Mouse interaction
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
+// Handle right-click for evolution menu
+function onRightClick(event) {
+  console.log('🖱️ Right-click event triggered - onRightClick called');
+  
+  // Calculate mouse position
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  
+  // Update raycaster
+  raycaster.setFromCamera(mouse, camera);
+  
+  // Test all clickable objects (pieces)
+  const clickableObjects = [];
+  Object.values(pieceMeshes).forEach(mesh => {
+    clickableObjects.push(mesh);
+    if (mesh.children && mesh.children.length > 0) {
+      mesh.children.forEach(child => {
+        if (child.type === 'Mesh' || child.type === 'Group') {
+          clickableObjects.push(child);
+          if (child.children && child.children.length > 0) {
+            child.children.forEach(grandchild => {
+              if (grandchild.type === 'Mesh') {
+                clickableObjects.push(grandchild);
+              }
+            });
+          }
+        }
+      });
+    }
+  });
+
+  const intersects = raycaster.intersectObjects(clickableObjects, true);
+  
+  if (intersects.length > 0) {
+    let clickedObject = intersects[0].object;
+    
+    // Find the piece mesh by traversing up the hierarchy
+    while (clickedObject && !clickedObject.userData.piece) {
+      clickedObject = clickedObject.parent;
+    }
+    
+    if (clickedObject && clickedObject.userData.piece) {
+      const piece = clickedObject.userData.piece;
+      console.log(`🖱️ Right-clicked piece: ${piece.type} ${piece.symbol}`);
+      
+      // Check if this is our piece
+      if (piece.playerId === socket.id) {
+        console.log('🖱️ Requesting evolution choice for our piece');
+        
+        // Request evolution choice from server
+        socket.emit('request-evolution-choice', {
+          pieceId: piece.id
+        });
+        
+        return true; // Click handled
+      } else {
+        console.log('🖱️ Cannot evolve opponent piece');
+        showNotification('Evolution', 'Cannot evolve opponent pieces', 'error');
+      }
+    }
+  }
+  
+  return false; // Click not handled
+}
 
 function onMouseClick(event) {
   console.log('🖱️ Click event triggered - onMouseClick called');
@@ -3787,9 +4524,25 @@ function onMouseClick(event) {
   // Get all potential clickable objects (pieces and valid move highlights)
   const clickableObjects = [];
   
-  // Add piece meshes
+  // Add piece meshes and their children (GLB models have geometry in children)
   Object.values(pieceMeshes).forEach(mesh => {
     clickableObjects.push(mesh);
+    // Also add child meshes that contain the actual geometry
+    if (mesh.children && mesh.children.length > 0) {
+      mesh.children.forEach(child => {
+        if (child.type === 'Mesh' || child.type === 'Group') {
+          clickableObjects.push(child);
+          // Add nested children if they exist (GLB can have nested structure)
+          if (child.children && child.children.length > 0) {
+            child.children.forEach(grandchild => {
+              if (grandchild.type === 'Mesh') {
+                clickableObjects.push(grandchild);
+              }
+            });
+          }
+        }
+      });
+    }
   });
   
   // Add valid move highlights
@@ -4090,49 +4843,64 @@ function onMouseClick(event) {
   return clickHandled;
 }
 
-// CLEAN EVENT SYSTEM - Use event capture to intercept clicks BEFORE OrbitControls
-console.log('🖱️ Setting up clean event handlers...');
-
-// Use a single click event with capture phase to get priority over OrbitControls
-renderer.domElement.addEventListener('click', (event) => {
-  console.log('🖱️ Click event captured!');
+// Event listener setup function - called during game initialization
+function setupMouseInteraction() {
+  console.log('🖱️ Setting up clean event handlers...');
   
-  // Process the click and check if it was handled by piece selection
-  const clickHandled = onMouseClick(event);
+  // Use a single click event with capture phase to get priority over OrbitControls
+  renderer.domElement.addEventListener('click', (event) => {
+    console.log('🖱️ Click event captured!');
+    
+    // Process the click and check if it was handled by piece selection
+    const clickHandled = onMouseClick(event);
+    
+    // If we handled a piece/move click, prevent OrbitControls from processing it
+    if (clickHandled) {
+      console.log('🖱️ Click handled by piece selection - preventing camera movement');
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    }
+  }, true); // Use capture phase to run before OrbitControls
   
-  // If we handled a piece/move click, prevent OrbitControls from processing it
-  if (clickHandled) {
-    console.log('🖱️ Click handled by piece selection - preventing camera movement');
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-  }
-}, true); // Use capture phase to run before OrbitControls
-
-// Add mouse tracking for drag detection (simplified)
-let isMouseDown = false;
-let mouseDownTime = 0;
-
-renderer.domElement.addEventListener('mousedown', (e) => {
-  isMouseDown = true;
-  mouseDownTime = Date.now();
-  handleMouseDown(e);
-}, false);
-
-renderer.domElement.addEventListener('mousemove', (e) => {
-  handleMouseMove(e);
-}, false);
-
-renderer.domElement.addEventListener('mouseup', (e) => {
-  isMouseDown = false;
-  handleMouseUp(e);
-}, false);
-
-renderer.domElement.addEventListener('contextmenu', (event) => {
-  event.preventDefault(); // Prevent context menu on right-click
-}, false);
-
-console.log('🖱️ Pointer event listeners attached to canvas');
+  // Add right-click for evolution menu
+  renderer.domElement.addEventListener('contextmenu', (event) => {
+    console.log('🖱️ Right-click event captured!');
+    event.preventDefault(); // Prevent context menu
+    
+    const clickHandled = onRightClick(event);
+    if (clickHandled) {
+      console.log('🖱️ Right-click handled by evolution menu');
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    }
+  }, true);
+  
+  // Add mouse tracking for drag detection (simplified)
+  let isMouseDown = false;
+  // mouseDownTime moved to global scope
+  
+  renderer.domElement.addEventListener('mousedown', (e) => {
+    isMouseDown = true;
+    mouseDownTime = Date.now();
+    handleMouseDown(e);
+  }, false);
+  
+  renderer.domElement.addEventListener('mousemove', (e) => {
+    handleMouseMove(e);
+  }, false);
+  
+  renderer.domElement.addEventListener('mouseup', (e) => {
+    isMouseDown = false;
+    handleMouseUp(e);
+  }, false);
+  
+  renderer.domElement.addEventListener('contextmenu', (event) => {
+    event.preventDefault(); // Prevent context menu on right-click
+  }, false);
+  
+  console.log('🖱️ Pointer event listeners attached to canvas');
+}
 
 // Touch event handling for mobile
 let touchStartTime = 0;
@@ -4176,7 +4944,7 @@ window.addEventListener('resize', () => {
 });
 
 // Add keyboard controls for debug features
-const modeIndicator = document.getElementById('mode-indicator');
+// modeIndicator moved to global scope
 
 // Hide mode indicator since we no longer need mode switching
 if (modeIndicator) {
@@ -5179,6 +5947,17 @@ socket.on('evolution-completed', (data) => {
 });
 
 socket.on('evolution-point-gained', (data) => {
+  console.log(`🎯 Evolution point gained event:`, data);
+  
+  // Update player's evolution points in game state
+  if (gameState.players[data.playerId]) {
+    gameState.players[data.playerId].evolutionPoints = data.totalPoints || (gameState.players[data.playerId].evolutionPoints || 0) + data.points;
+    console.log(`🎯 Updated player ${data.playerId} evolution points to:`, gameState.players[data.playerId].evolutionPoints);
+  }
+  
+  // Update all floating evolution point labels
+  updateAllEvolutionPointLabels();
+  
   if (data.playerId === socket.id) {
     showNotification('Evolution Points', 
       `+${data.points} points (${data.reason.replace('_', ' ')})`, 
@@ -5191,18 +5970,7 @@ socket.on('evolution-point-gained', (data) => {
   }
 });
 
-socket.on('evolution-point-award', (data) => {
-  if (data.playerId === socket.id) {
-    showNotification('Evolution Points', 
-      `+${data.points} points (${data.reason.replace('_', ' ')})`, 
-      'success');
-    
-    // Update evolution bank display if UI is open
-    if (document.getElementById('evolution-ui').style.display === 'block') {
-      refreshEvolutionBank();
-    }
-  }
-});
+// Duplicate evolution-point-award handler removed - already handled above
 
 // Handle evolution choice dialog
 socket.on('evolution-choice-dialog', (data) => {
@@ -5744,538 +6512,12 @@ initializeColorSelection();
 
 // Performance Optimization System (duplicate removed)
 
-// Enhanced Visual Effects System
-class VisualEffectsManager {
-  constructor(scene, renderer) {
-    this.scene = scene;
-    this.renderer = renderer;
-    this.activeEffects = new Map();
-    this.animationQueue = [];
-    this.particleSystem = null;
-    this.transitionManager = new TransitionManager();
-    
-    // Initialize particle system
-    this.initParticleSystem();
-  }
-  
-  initParticleSystem() {
-    // Create particle system for various effects
-    this.particleSystem = {
-      pool: [],
-      active: [],
-      maxParticles: 1000
-    };
-    
-    // Pre-create particle pool
-    for (let i = 0; i < this.particleSystem.maxParticles; i++) {
-      const particle = this.createParticle();
-      this.particleSystem.pool.push(particle);
-    }
-  }
-  
-  createParticle() {
-    const geometry = new THREE.SphereGeometry(0.02, 4, 4);
-    const material = new THREE.MeshBasicMaterial({ 
-      color: 0xffffff,
-      transparent: true,
-      opacity: 1
-    });
-    
-    const particle = new THREE.Mesh(geometry, material);
-    particle.visible = false;
-    
-    // Add particle properties
-    particle.userData = {
-      velocity: new THREE.Vector3(),
-      life: 1.0,
-      maxLife: 1.0,
-      size: 0.02,
-      color: new THREE.Color(0xffffff)
-    };
-    
-    this.scene.add(particle);
-    return particle;
-  }
-  
-  getParticle() {
-    if (this.particleSystem.pool.length > 0) {
-      const particle = this.particleSystem.pool.pop();
-      this.particleSystem.active.push(particle);
-      return particle;
-    }
-    return null;
-  }
-  
-  returnParticle(particle) {
-    particle.visible = false;
-    particle.userData.life = 1.0;
-    particle.userData.velocity.set(0, 0, 0);
-    
-    const index = this.particleSystem.active.indexOf(particle);
-    if (index > -1) {
-      this.particleSystem.active.splice(index, 1);
-      this.particleSystem.pool.push(particle);
-    }
-  }
-  
-  // Enhanced piece movement with smooth transitions
-  animatePieceMovement(piece, fromPos, toPos, duration = 1000) {
-    const mesh = pieceMeshes[piece.id];
-    if (!mesh) return;
-    
-    // Create smooth curve for movement
-    const curve = new THREE.QuadraticBezierCurve3(
-      fromPos,
-      new THREE.Vector3(
-        (fromPos.x + toPos.x) / 2,
-        Math.max(fromPos.y, toPos.y) + 0.5, // Arc above surface
-        (fromPos.z + toPos.z) / 2
-      ),
-      toPos
-    );
-    
-    const startTime = Date.now();
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      // Smooth easing
-      const easeProgress = this.easeInOutCubic(progress);
-      
-      // Update position along curve
-      const position = curve.getPoint(easeProgress);
-      mesh.position.copy(position);
-      
-      // Add rotation animation
-      mesh.rotation.y += 0.1;
-      
-      // Add scale animation
-      const scale = 1 + Math.sin(progress * Math.PI) * 0.1;
-      mesh.scale.set(scale, scale, scale);
-      
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      } else {
-        // Reset scale
-        mesh.scale.set(1, 1, 1);
-      }
-    };
-    
-    animate();
-  }
-  
-  // Enhanced battle effects with particles
-  createBattleEffect(pos1, pos2, winner, intensity = 1.0) {
-    // Create lightning effect
-    this.createLightningEffect(pos1, pos2, intensity);
-    
-    // Create particle explosion
-    this.createParticleExplosion(pos1, 0xff4444, 20 * intensity);
-    this.createParticleExplosion(pos2, 0x4444ff, 20 * intensity);
-    
-    // Create shockwave
-    this.createShockwave(winner === 'pos1' ? pos1 : pos2, intensity);
-    
-    // Screen shake effect
-    this.createScreenShake(intensity * 0.5);
-  }
-  
-  createLightningEffect(pos1, pos2, intensity) {
-    const segments = 20;
-    const points = [];
-    
-    for (let i = 0; i <= segments; i++) {
-      const t = i / segments;
-      const x = pos1.x + (pos2.x - pos1.x) * t + (Math.random() - 0.5) * 0.2 * intensity;
-      const y = pos1.y + (pos2.y - pos1.y) * t + (Math.random() - 0.5) * 0.2 * intensity;
-      const z = pos1.z + (pos2.z - pos1.z) * t + (Math.random() - 0.5) * 0.2 * intensity;
-      
-      points.push(new THREE.Vector3(x, y, z));
-    }
-    
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({
-      color: 0xffffff,
-      opacity: 0.8,
-      transparent: true,
-      linewidth: 3
-    });
-    
-    const lightning = new THREE.Line(geometry, material);
-    this.scene.add(lightning);
-    
-    // Animate lightning
-    const startTime = Date.now();
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = elapsed / 300; // 300ms duration
-      
-      if (progress < 1) {
-        // Flickering effect
-        material.opacity = 0.8 * (1 - progress) * (Math.random() * 0.5 + 0.5);
-        requestAnimationFrame(animate);
-      } else {
-        this.scene.remove(lightning);
-        geometry.dispose();
-        material.dispose();
-      }
-    };
-    
-    animate();
-  }
-  
-  createParticleExplosion(center, color, count) {
-    for (let i = 0; i < count; i++) {
-      const particle = this.getParticle();
-      if (!particle) continue;
-      
-      particle.position.copy(center);
-      particle.visible = true;
-      
-      // Random velocity
-      const speed = 0.02 + Math.random() * 0.08;
-      particle.userData.velocity.set(
-        (Math.random() - 0.5) * speed,
-        Math.random() * speed,
-        (Math.random() - 0.5) * speed
-      );
-      
-      // Set color and life
-      particle.material.color.setHex(color);
-      particle.userData.life = 1.0;
-      particle.userData.maxLife = 1.0 + Math.random() * 2.0;
-    }
-  }
-  
-  createShockwave(center, intensity) {
-    const geometry = new THREE.RingGeometry(0, 0.1, 16);
-    const material = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.6,
-      side: THREE.DoubleSide
-    });
-    
-    const shockwave = new THREE.Mesh(geometry, material);
-    shockwave.position.copy(center);
-    shockwave.lookAt(center.clone().add(new THREE.Vector3(0, 1, 0)));
-    
-    this.scene.add(shockwave);
-    
-    // Animate shockwave
-    const startTime = Date.now();
-    const maxRadius = 2.0 * intensity;
-    const duration = 800;
-    
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = elapsed / duration;
-      
-      if (progress < 1) {
-        const radius = maxRadius * progress;
-        shockwave.scale.set(radius, radius, 1);
-        material.opacity = 0.6 * (1 - progress);
-        
-        requestAnimationFrame(animate);
-      } else {
-        this.scene.remove(shockwave);
-        geometry.dispose();
-        material.dispose();
-      }
-    };
-    
-    animate();
-  }
-  
-  createScreenShake(intensity) {
-    const originalPosition = camera.position.clone();
-    const shakeIntensity = 0.02 * intensity;
-    const duration = 300;
-    const startTime = Date.now();
-    
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = elapsed / duration;
-      
-      if (progress < 1) {
-        const shakeAmount = shakeIntensity * (1 - progress);
-        camera.position.x = originalPosition.x + (Math.random() - 0.5) * shakeAmount;
-        camera.position.y = originalPosition.y + (Math.random() - 0.5) * shakeAmount;
-        camera.position.z = originalPosition.z + (Math.random() - 0.5) * shakeAmount;
-        
-        requestAnimationFrame(animate);
-      } else {
-        camera.position.copy(originalPosition);
-      }
-    };
-    
-    animate();
-  }
-  
-  // Enhanced evolution effects
-  createEvolutionEffect(position, fromType, toType) {
-    // Create spiral particle effect
-    this.createSpiralEffect(position, 0x00ff00, 1500);
-    
-    // Create type transition effect
-    this.createTypeTransitionEffect(position, fromType, toType);
-    
-    // Create radial burst
-    this.createRadialBurst(position, 0x00ff00, 30);
-  }
-  
-  createSpiralEffect(center, color, duration) {
-    const particleCount = 50;
-    const spiralParticles = [];
-    
-    for (let i = 0; i < particleCount; i++) {
-      const particle = this.getParticle();
-      if (!particle) continue;
-      
-      particle.position.copy(center);
-      particle.visible = true;
-      particle.material.color.setHex(color);
-      
-      // Spiral parameters
-      particle.userData.spiralAngle = (i / particleCount) * Math.PI * 4;
-      particle.userData.spiralRadius = 0;
-      particle.userData.spiralSpeed = 0.1 + Math.random() * 0.1;
-      particle.userData.spiralHeight = 0;
-      
-      spiralParticles.push(particle);
-    }
-    
-    const startTime = Date.now();
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = elapsed / duration;
-      
-      if (progress < 1) {
-        spiralParticles.forEach(particle => {
-          if (!particle.visible) return;
-          
-          // Update spiral motion
-          particle.userData.spiralAngle += particle.userData.spiralSpeed;
-          particle.userData.spiralRadius = progress * 0.8;
-          particle.userData.spiralHeight = progress * 1.5;
-          
-          // Calculate position
-          const x = center.x + Math.cos(particle.userData.spiralAngle) * particle.userData.spiralRadius;
-          const y = center.y + particle.userData.spiralHeight;
-          const z = center.z + Math.sin(particle.userData.spiralAngle) * particle.userData.spiralRadius;
-          
-          particle.position.set(x, y, z);
-          particle.material.opacity = 1 - progress;
-        });
-        
-        requestAnimationFrame(animate);
-      } else {
-        // Clean up particles
-        spiralParticles.forEach(particle => {
-          this.returnParticle(particle);
-        });
-      }
-    };
-    
-    animate();
-  }
-  
-  createTypeTransitionEffect(position, fromType, toType) {
-    // Create floating text effect showing evolution
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    canvas.width = 256;
-    canvas.height = 64;
-    
-    context.fillStyle = 'rgba(0, 0, 0, 0.8)';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    
-    context.fillStyle = 'white';
-    context.font = '24px Arial';
-    context.textAlign = 'center';
-    context.fillText(`${fromType} → ${toType}`, canvas.width / 2, canvas.height / 2 + 8);
-    
-    const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({ 
-      map: texture,
-      transparent: true,
-      opacity: 1
-    });
-    
-    const sprite = new THREE.Sprite(material);
-    sprite.position.copy(position);
-    sprite.position.y += 0.8;
-    sprite.scale.set(0.5, 0.2, 1);
-    
-    this.scene.add(sprite);
-    
-    // Animate text
-    const startTime = Date.now();
-    const duration = 2000;
-    
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = elapsed / duration;
-      
-      if (progress < 1) {
-        // Float upward
-        sprite.position.y = position.y + 0.8 + progress * 0.5;
-        
-        // Fade out
-        material.opacity = 1 - progress;
-        
-        requestAnimationFrame(animate);
-      } else {
-        this.scene.remove(sprite);
-        texture.dispose();
-        material.dispose();
-      }
-    };
-    
-    animate();
-  }
-  
-  createRadialBurst(center, color, count) {
-    for (let i = 0; i < count; i++) {
-      const particle = this.getParticle();
-      if (!particle) continue;
-      
-      particle.position.copy(center);
-      particle.visible = true;
-      particle.material.color.setHex(color);
-      
-      // Radial velocity
-      const angle = (i / count) * Math.PI * 2;
-      const speed = 0.05 + Math.random() * 0.03;
-      
-      particle.userData.velocity.set(
-        Math.cos(angle) * speed,
-        Math.random() * 0.02,
-        Math.sin(angle) * speed
-      );
-      
-      particle.userData.life = 1.0;
-      particle.userData.maxLife = 1.0 + Math.random() * 1.0;
-    }
-  }
-  
-  // Update particle system
-  updateParticles(deltaTime) {
-    this.particleSystem.active.forEach(particle => {
-      if (!particle.visible) return;
-      
-      // Update position
-      particle.position.add(particle.userData.velocity);
-      
-      // Update life
-      particle.userData.life -= deltaTime / 1000;
-      
-      // Update opacity based on life
-      particle.material.opacity = particle.userData.life / particle.userData.maxLife;
-      
-      // Apply gravity
-      particle.userData.velocity.y -= 0.001;
-      
-      // Check if particle should be returned to pool
-      if (particle.userData.life <= 0) {
-        this.returnParticle(particle);
-      }
-    });
-  }
-  
-  // Utility functions
-  easeInOutCubic(t) {
-    return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
-  }
-  
-  // Cleanup
-  cleanup() {
-    this.activeEffects.clear();
-    this.animationQueue.length = 0;
-    
-    // Clean up particles
-    [...this.particleSystem.pool, ...this.particleSystem.active].forEach(particle => {
-      this.scene.remove(particle);
-      if (particle.geometry) particle.geometry.dispose();
-      if (particle.material) particle.material.dispose();
-    });
-  }
-}
+// DUPLICATE CLASS DEFINITIONS REMOVED - MOVED TO TOP OF FILE
 
-// Transition manager for smooth UI transitions
-class TransitionManager {
-  constructor() {
-    this.activeTransitions = new Map();
-  }
-  
-  fadeIn(element, duration = 500) {
-    element.style.opacity = '0';
-    element.style.display = 'block';
-    
-    const startTime = Date.now();
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      element.style.opacity = progress.toString();
-      
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-    
-    animate();
-  }
-  
-  fadeOut(element, duration = 500) {
-    const startTime = Date.now();
-    const startOpacity = parseFloat(element.style.opacity) || 1;
-    
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      element.style.opacity = (startOpacity * (1 - progress)).toString();
-      
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      } else {
-        element.style.display = 'none';
-      }
-    };
-    
-    animate();
-  }
-  
-  slideIn(element, direction = 'left', duration = 500) {
-    const startTime = Date.now();
-    const startPos = direction === 'left' ? -element.offsetWidth : element.offsetWidth;
-    
-    element.style.transform = `translateX(${startPos}px)`;
-    element.style.display = 'block';
-    
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      const currentPos = startPos * (1 - this.easeOutCubic(progress));
-      element.style.transform = `translateX(${currentPos}px)`;
-      
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-    
-    animate();
-  }
-  
-  easeOutCubic(t) {
-    return 1 - Math.pow(1 - t, 3);
-  }
+// Initialize visual effects manager after scene is ready
+if (!visualEffects) {
+  visualEffects = new VisualEffectsManager(scene, renderer);
 }
-
-// Initialize visual effects manager
-const visualEffects = new VisualEffectsManager(scene, renderer);
 
 // Update particle system in animation loop
 const originalAnimate = window.animate;
@@ -6316,8 +6558,6 @@ setTimeout(() => {
 }, 2000); // Wait 2 seconds after page load
 
 // ... existing code ...
-
-} // End of startGameInitialization function
 
 function showEvolutionChoiceDialog(pieceId, piece, reason, availablePaths, bankInfo, timeLimit) {
   console.log('🎯 showEvolutionChoiceDialog called with:', { pieceId, piece, reason, availablePaths, bankInfo, timeLimit });

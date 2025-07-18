@@ -220,6 +220,32 @@ io.on('connection', (socket) => {
   // Broadcast updated game state
   broadcastGameState();
   
+  // Handle player information updates
+  socket.on('player-joined', (data) => {
+    const { name, color } = data;
+    const player = gameState.players[socket.id];
+    
+    if (player) {
+      // Update player name if provided
+      if (name) {
+        player.name = name;
+        console.log(`Player ${socket.id} updated name to: ${name}`);
+      }
+      
+      // Update player color if provided
+      if (color) {
+        player.selectedColor = color;
+        console.log(`Player ${socket.id} updated color to: ${color}`);
+      }
+      
+      // Initialize statistics with proper name
+      statisticsManager.initPlayerStats(socket.id, player.name);
+      
+      // Broadcast updated game state
+      broadcastGameState();
+    }
+  });
+  
   socket.on('move-piece', (data) => {
     // Check timing system for turn validation and collision detection
     const timingResult = timingManager.registerMove(socket.id, data);
@@ -1871,8 +1897,15 @@ function checkEquatorBonus(piece) {
     
     // Offer evolution choice dialog to human players
     const player = gameState.players[piece.playerId];
+    console.log(`🎯 EVOLUTION DEBUG - Player:`, player);
+    console.log(`🎯 EVOLUTION DEBUG - isAI:`, player?.isAI);
+    console.log(`🎯 EVOLUTION DEBUG - bank points:`, bank.points);
+    
     if (player && !player.isAI && bank.points > 0) {
+      console.log(`🎯 EVOLUTION DEBUG - Offering evolution choice to ${piece.playerId} for piece ${piece.id}`);
       offerEvolutionChoice(piece.playerId, piece.id, 'equator_bonus');
+    } else {
+      console.log(`🎯 EVOLUTION DEBUG - Not offering evolution choice. Reason: player=${!!player}, isAI=${player?.isAI}, bankPoints=${bank.points}`);
     }
   }
 }
@@ -2513,22 +2546,34 @@ function calculateBattleAnimationDuration(battleLog) {
 }
 
 function offerEvolutionChoice(playerId, pieceId, reason) {
+  console.log(`🎯 OFFER EVOLUTION - Called for player ${playerId}, piece ${pieceId}, reason: ${reason}`);
+  
   const piece = gameState.pieces[pieceId];
-  if (!piece) return;
+  if (!piece) {
+    console.log(`🎯 OFFER EVOLUTION - No piece found for ${pieceId}`);
+    return;
+  }
   
   // Get available evolution paths
   const availablePaths = getAvailableEvolutionPaths(piece);
-  if (availablePaths.length === 0) return;
+  console.log(`🎯 OFFER EVOLUTION - Available paths:`, availablePaths);
+  if (availablePaths.length === 0) {
+    console.log(`🎯 OFFER EVOLUTION - No available paths for ${piece.type}`);
+    return;
+  }
   
   // Get player's current evolution points
   const bankInfo = evolutionManager.getPlayerBankInfo(playerId);
+  console.log(`🎯 OFFER EVOLUTION - Bank info:`, bankInfo);
   
   // Pause all game timers while player makes choice
   timingManager.pauseAllCooldowns();
   
   // Send evolution choice dialog to player
   const playerSocket = io.sockets.sockets.get(playerId);
+  console.log(`🎯 OFFER EVOLUTION - Player socket found:`, !!playerSocket);
   if (playerSocket) {
+    console.log(`🎯 OFFER EVOLUTION - Emitting evolution-choice-dialog to ${playerId}`);
     playerSocket.emit('evolution-choice-dialog', {
       pieceId: pieceId,
       piece: piece,
@@ -3144,8 +3189,18 @@ function getValidMoves(pieceId) {
 let lastBroadcastState = null;
 
 function broadcastGameState() {
+  // Include evolution points from evolutionManager in the game state
+  const playersWithEvolutionPoints = {};
+  Object.keys(gameState.players).forEach(playerId => {
+    const bankInfo = evolutionManager.getPlayerBankInfo(playerId);
+    playersWithEvolutionPoints[playerId] = {
+      ...gameState.players[playerId],
+      evolutionPoints: bankInfo ? bankInfo.points : 0
+    };
+  });
+  
   const clientGameState = {
-    players: gameState.players,
+    players: playersWithEvolutionPoints,
     pieces: gameState.pieces,
     gridConfig: {
       rows: GAME_CONFIG.GRID_ROWS,
