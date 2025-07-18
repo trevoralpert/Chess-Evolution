@@ -2749,7 +2749,57 @@
         "achievements": [],
         "recentGames": []
       }
+    ],
+    [
+      "9feQQ_ijuvtsH2VgAAAH",
+      {
+        "playerId": "9feQQ_ijuvtsH2VgAAAH",
+        "playerName": "Player 9feQQ_",
+        "created": "2025-07-18T19:05:31.905Z",
+        "lastPlayed": "2025-07-18T19:05:31.905Z",
+        "gamesPlayed": 0,
+        "gamesWon": 0,
+        "gamesLost": 0,
+        "winRate": 0,
+        "averageGameDuration": 0,
+        "battlesInitiated": 0,
+        "battlesWon": 0,
+        "battlesLost": 0,
+        "battleWinRate": 0,
+        "averageBattleTime": 0,
+        "piecesLost": 0,
+        "piecesKilled": 0,
+        "killDeathRatio": 0,
+        "piecesEvolved": 1,
+        "evolutionPoints": -1,
+        "totalEvolutionPoints": 0,
+        "movesMade": 0,
+        "averageMovesPerGame": 0,
+        "capturesMade": 0,
+        "capturesReceived": 0,
+        "splitterUses": 5,
+        "jumperMultiCaptures": 0,
+        "hybridQueenModeChanges": 0,
+        "equatorBonuses": 0,
+        "circumnavigations": 0,
+        "tournamentsJoined": 0,
+        "tournamentWins": 0,
+        "tournamentFinals": 0,
+        "tournamentSemifinals": 0,
+        "currentWinStreak": 0,
+        "bestWinStreak": 0,
+        "currentLossStreak": 0,
+        "worstLossStreak": 0,
+        "totalPlayTime": 0,
+        "averageSessionTime": 0,
+        "longestSession": 0,
+        "currentRank": 1000,
+        "bestRank": 1000,
+        "rankHistory": [],
+        "achievements": [],
+        "recentGames": []
+      }
     ]
   ],
-  "lastUpdated": "2025-07-18T18:17:58.384Z"
+  "lastUpdated": "2025-07-18T19:06:03.080Z"
 }
