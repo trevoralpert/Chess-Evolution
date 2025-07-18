@@ -1,4 +1,4 @@
-// Globe Chess Tournament Management System
+// EvoChess Tournament Management System
 // Handles tournament creation, bracket management, and match progression
 
 const TOURNAMENT_STATUS = {
@@ -25,7 +25,7 @@ class TournamentManager {
     const tournamentId = `tournament_${Date.now()}`;
     const tournament = {
       id: tournamentId,
-      name: settings.name || `Globe Chess Tournament ${new Date().toLocaleString()}`,
+      name: settings.name || `EvoChess Tournament ${new Date().toLocaleString()}`,
       maxPlayers: settings.maxPlayers || 8,
       minPlayers: settings.minPlayers || 2,
       type: settings.type || 'single_elimination',
@@ -395,7 +395,7 @@ class TournamentManager {
     const prizes = {
       champion: {
         player: tournament.winner,
-        prize: 'Globe Chess Tournament Champion',
+        prize: 'EvoChess Tournament Champion',
         evolutionPoints: 50,
         title: '🏆 Champion'
       },

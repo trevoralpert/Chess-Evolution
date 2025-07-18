@@ -3174,7 +3174,7 @@ function hideTournamentCreation() {
 }
 
 function createTournament() {
-  const name = document.getElementById('tournament-name').value || 'Globe Chess Tournament';
+  const name = document.getElementById('tournament-name').value || 'EvoChess Tournament';
   const maxPlayers = parseInt(document.getElementById('tournament-max-players').value);
   
   const settings = {
@@ -5367,7 +5367,7 @@ window.addEventListener('load', () => {
 // Start animation
 animate();
 
-console.log('Globe Chess client fully initialized');
+console.log('EvoChess client fully initialized');
 console.log('Click on pieces to see valid moves');
 console.log('🎮 Simplified controls: Click pieces to select, drag to rotate camera');
 

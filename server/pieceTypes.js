@@ -1,4 +1,4 @@
-// Globe Chess Piece Type Definitions
+// EvoChess Piece Type Definitions
 // Based on the evolution chart: 1-12 point values with evolution paths
 
 const PIECE_TYPES = {

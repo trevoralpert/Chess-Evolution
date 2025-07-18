@@ -383,5 +383,5 @@ function animate() {
 // Start animation
 animate();
 
-console.log('Globe Chess client fully initialized');
+console.log('EvoChess client fully initialized');
 console.log('Click on pieces to see valid moves'); 

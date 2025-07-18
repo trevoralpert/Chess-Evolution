@@ -1,19 +1,23 @@
 {
-  "name": "multiplayer-globe-chess",
+  "name": "evochess",
   "version": "1.0.0",
-  "description": "A multiplayer chess game played on a spherical board with evolution mechanics",
+  "description": "EvoChess - A multiplayer evolution chess game played on a 3D spherical globe with evolutionary mechanics, piece splitting, and strategic gameplay",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
     "dev": "nodemon server/index.js"
   },
   "keywords": [
+    "evochess",
     "chess",
     "multiplayer",
+    "evolution",
     "threejs",
     "socket.io",
     "globe",
-    "evolution"
+    "3d",
+    "strategy",
+    "splitting"
   ],
   "author": "Trevor Alpert",
   "license": "MIT",
