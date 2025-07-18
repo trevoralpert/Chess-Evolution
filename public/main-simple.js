@@ -695,7 +695,19 @@ function updateQueueDisplay(queuedMove) {
 let controls;
 let manualCameraControls = null;
 
-if (typeof THREE !== 'undefined' && THREE.OrbitControls) {
+if (typeof THREE !== 'undefined' && THREE.TrackballControls) {
+  controls = new THREE.TrackballControls(camera, renderer.domElement);
+  controls.noPan = true;
+  controls.minDistance = 8;
+  controls.maxDistance = 15;
+  controls.rotateSpeed = 1.8;  // Increased from 1.0 for more responsive rotation
+  controls.zoomSpeed = 1.2;
+  controls.staticMoving = true;
+  controls.dynamicDampingFactor = 0.3;
+  
+  console.log('TrackballControls initialized successfully with unlimited 3D rotation');
+} else if (typeof THREE !== 'undefined' && THREE.OrbitControls) {
+  // Fallback to OrbitControls if TrackballControls not available
   controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enablePan = false;
   controls.minDistance = 8;
@@ -726,7 +738,7 @@ if (typeof THREE !== 'undefined' && THREE.OrbitControls) {
     return result;
   };
   
-  console.log('OrbitControls initialized successfully with unrestricted 3D rotation');
+  console.log('OrbitControls initialized as fallback (with attempted unrestricted rotation)');
 } else {
   console.log('Using manual camera controls instead of OrbitControls');
   // Manual camera control system

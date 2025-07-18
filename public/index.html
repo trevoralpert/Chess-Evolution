@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Multiplayer Globe Chess</title>
+  <title>EvoChess - Multiplayer Evolution Chess on a Globe</title>
   <style>
     body { 
       margin: 0; 
@@ -653,9 +653,10 @@
     </div>
   </div>
 
-  <!-- Load Three.js, OrbitControls, and GLTFLoader via script tags -->
+  <!-- Load Three.js, Controls, and GLTFLoader via script tags -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TrackballControls.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   
@@ -665,6 +666,7 @@
       console.log('Window loaded - checking Three.js components...');
       console.log('THREE available:', typeof THREE !== 'undefined');
       console.log('OrbitControls available:', typeof THREE.OrbitControls !== 'undefined');
+      console.log('TrackballControls available:', typeof THREE.TrackballControls !== 'undefined');
       console.log('GLTFLoader available:', typeof THREE.GLTFLoader !== 'undefined');
       
       if (typeof THREE.GLTFLoader === 'undefined') {
