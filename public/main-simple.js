@@ -38,6 +38,260 @@ async function loadGLTFLoader() {
 })();
 
 function startGameInitialization() {
+  // Wait for DOM to be ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeAfterDOM);
+  } else {
+    initializeAfterDOM();
+  }
+}
+
+// Menu System Variables (declare at module level)
+let menuScreen, gameUI, gameOverScreen;
+let playerName = '';
+let menuSelectedColor = '#00ff00';
+let gameMode = 'quickplay';
+let isInGame = false;
+
+function initializeAfterDOM() {
+  console.log('DOM ready, initializing game elements...');
+  
+  // Get DOM elements after page is ready
+  menuScreen = document.getElementById('menu-screen');
+  gameUI = document.getElementById('ui');
+  gameOverScreen = document.getElementById('game-over-screen');
+  
+  if (!menuScreen || !gameUI) {
+    console.error('Critical UI elements not found!', {
+      menuScreen: !!menuScreen,
+      gameUI: !!gameUI,
+      gameOverScreen: !!gameOverScreen
+    });
+    return;
+  }
+  
+  console.log('UI elements found successfully');
+  
+  // Initialize menu system
+  initMenuSystem();
+}
+
+// Initialize menu system
+function initMenuSystem() {
+  console.log('🎮 Initializing menu system...');
+  
+  // Color picker setup for menu
+  const menuColorOptions = document.getElementById('menu-color-options');
+  const colors = [
+    '#00ff00', '#ff0000', '#0088ff', '#ffff00', '#ff00ff', 
+    '#00ffff', '#ff8800', '#ffffff', '#8800ff', '#00ff88'
+  ];
+  
+  colors.forEach(color => {
+    const colorDiv = document.createElement('div');
+    colorDiv.style.width = '30px';
+    colorDiv.style.height = '30px';
+    colorDiv.style.backgroundColor = color;
+    colorDiv.style.border = '2px solid transparent';
+    colorDiv.style.cursor = 'pointer';
+    colorDiv.style.borderRadius = '5px';
+    
+    colorDiv.addEventListener('click', () => {
+      // Remove previous selection
+      menuColorOptions.querySelectorAll('div').forEach(d => {
+        d.style.border = '2px solid transparent';
+      });
+      // Select this color
+      colorDiv.style.border = '2px solid white';
+      menuSelectedColor = color;
+    });
+    
+    // Select first color by default
+    if (color === colors[0]) {
+      colorDiv.style.border = '2px solid white';
+    }
+    
+    menuColorOptions.appendChild(colorDiv);
+  });
+  
+  // Menu button handlers
+  document.getElementById('quick-play-btn').addEventListener('click', () => {
+    console.log('Starting quick play...');
+    playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
+    gameMode = 'quickplay';
+    startGame();
+  });
+  
+  document.getElementById('vs-ai-btn').addEventListener('click', () => {
+    console.log('Starting vs AI...');
+    playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
+    gameMode = 'vsai';
+    startGame();
+  });
+  
+  document.getElementById('create-game-btn').addEventListener('click', () => {
+    alert('Create Game feature coming soon!');
+  });
+  
+  document.getElementById('join-game-btn').addEventListener('click', () => {
+    alert('Join Game feature coming soon!');
+  });
+  
+  document.getElementById('tournament-btn').addEventListener('click', () => {
+    alert('Tournament mode coming soon!');
+  });
+  
+  document.getElementById('spectate-btn').addEventListener('click', () => {
+    alert('Spectator mode coming soon!');
+  });
+  
+  document.getElementById('evolution-guide-btn').addEventListener('click', () => {
+    alert('Evolution Guide coming soon!\n\nBasic rules:\n- Pawns gain 1 point for crossing equator\n- Capture pieces to gain their value\n- Evolve pieces with points:\n  • Pawn → Splitter (2 pts)\n  • Splitter → Bishop/Knight (3 pts)\n  • And many more!');
+  });
+  
+  // Game over screen button
+  document.getElementById('return-to-menu-btn').addEventListener('click', () => {
+    returnToMenu();
+  });
+  
+  // In-game menu button
+  document.getElementById('quit-to-menu-btn').addEventListener('click', () => {
+    if (confirm('Are you sure you want to quit to menu?')) {
+      // Disconnect from server
+      if (socket) {
+        socket.disconnect();
+      }
+      returnToMenu();
+    }
+  });
+  
+  // Pause button
+  document.getElementById('pause-game-btn').addEventListener('click', () => {
+    alert('Pause feature coming soon!');
+  });
+}
+
+// Start the game
+function startGame() {
+  console.log('🎮 Starting game with:', { playerName, color: menuSelectedColor, gameMode });
+  
+  // Hide menu, show game UI
+  menuScreen.style.display = 'none';
+  gameUI.style.display = 'block';
+  isInGame = true;
+  
+  // Initialize the game with player settings
+  window.playerSettings = {
+    name: playerName,
+    color: menuSelectedColor,
+    mode: gameMode
+  };
+  
+  // Initialize socket connection
+  socket = io();
+  window.globalSocket = socket;
+  console.log('Socket.io initialized for game');
+  
+  // Set up all socket event listeners
+  setupSocketListeners();
+  
+  // Continue with normal game initialization after socket is ready
+  socket.on('connect', () => {
+    console.log('Connected to server, initializing game components...');
+    initializeGameComponents();
+    
+    // Send player info to server
+    socket.emit('player-joined', {
+      name: playerName,
+      color: menuSelectedColor
+    });
+    
+    // Add AI player if vs AI mode
+    if (gameMode === 'vsai') {
+      setTimeout(() => {
+        socket.emit('add-ai-player', {
+          difficulty: 'MEDIUM',
+          personality: {
+            preferredPieces: ['QUEEN', 'ROOK', 'BISHOP'],
+            playStyle: 'balanced',
+            riskTolerance: 0.5,
+            aggressiveness: 0.5
+          }
+        });
+      }, 1000);
+    }
+  });
+}
+
+// Return to menu
+function returnToMenu() {
+  console.log('🏠 Returning to menu...');
+  
+  // Hide game screens
+  gameUI.style.display = 'none';
+  gameOverScreen.style.display = 'none';
+  
+  // Show menu
+  menuScreen.style.display = 'flex';
+  isInGame = false;
+  
+  // Reset game state
+  if (window.location.reload) {
+    // Reload page to fully reset (temporary solution)
+    window.location.reload();
+  }
+}
+
+// Show game over screen
+function showGameOver(winner, stats) {
+  console.log('🏁 Game Over!', winner, stats);
+  
+  // Hide game UI
+  gameUI.style.display = 'none';
+  
+  // Update game over screen
+  const titleEl = document.getElementById('game-over-title');
+  const statsEl = document.getElementById('game-over-stats');
+  
+  if (winner === playerName) {
+    titleEl.textContent = 'VICTORY!';
+    titleEl.style.color = '#27ae60';
+  } else {
+    titleEl.textContent = 'DEFEAT';
+    titleEl.style.color = '#e74c3c';
+  }
+  
+  // Show stats
+  statsEl.innerHTML = `
+    <div>Winner: ${winner}</div>
+    <div>Game Duration: ${stats?.duration || 'Unknown'}</div>
+    <div>Your Pieces Captured: ${stats?.piecesKilled || 0}</div>
+    <div>Your Pieces Lost: ${stats?.piecesLost || 0}</div>
+    <div>Evolution Points Earned: ${stats?.evolutionPoints || 0}</div>
+  `;
+  
+  // Show game over screen
+  gameOverScreen.style.display = 'flex';
+}
+
+// Initialize menu on load
+initMenuSystem();
+
+// Continue with game initialization
+function initializeGameComponents() {
+  // This function continues with the rest of the game initialization
+  console.log('🎮 Initializing game components...');
+  
+  // The rest of the initialization code continues below
+}
+
+// Setup socket event listeners
+function setupSocketListeners() {
+  console.log('📡 Setting up socket event listeners...');
+  
+  // All socket event handlers will be moved here
+  // This ensures they're only set up when the game starts
+}
 
 // Grid utility functions (copied from gridToSphere.js)
 function gridToSpherical(rows, cols, row, col) {
@@ -59,12 +313,12 @@ function sphericalToCartesian(r, phi, theta) {
   };
 }
 
-// Socket.io connection
-const socket = io();
-console.log('Socket.io initialized');
+// Socket.io connection - will be initialized when game starts
+let socket = null;
+console.log('Socket.io will be initialized when game starts');
 
 // Make socket globally accessible for evolution dialog functions
-window.globalSocket = socket;
+window.globalSocket = null;
 
 // Timer management variables
 let currentTimer = null;
@@ -1598,29 +1852,7 @@ socket.on('player-eliminated', (data) => {
   }, 500);
 });
 
-socket.on('game-victory', (data) => {
-  const { winnerId, playerIndex, winnerColor, totalPlayers } = data;
-  console.log(`GAME VICTORY: Player ${playerIndex + 1} (${winnerId}) wins!`);
-  
-  // Update UI with victory information
-  gameInfoEl.textContent = `🎉 Player ${playerIndex + 1} WINS! 🎉`;
-  gameInfoEl.style.color = winnerColor;
-  
-  // Show victory notification
-  showNotification(`🎉 Player ${playerIndex + 1} WINS! 🎉`, winnerColor, 5000);
-  
-  // Flash the globe with winner's color
-  const originalColor = globe.material.color.clone();
-  globe.material.color.setHex(parseInt(winnerColor.replace('#', '0x')));
-  setTimeout(() => {
-    globe.material.color.copy(originalColor);
-  }, 2000);
-  
-  // Disable further interactions
-  selectedPieceId = null;
-  clearValidMoveHighlights();
-  hideDualMovementUI();
-});
+// Victory handler moved to line ~5600 to integrate with game over screen
 
 socket.on('piece-split', (data) => {
   const { originalPieceId, newPieceId, originalPosition, newPosition, playerId } = data;
@@ -5341,9 +5573,41 @@ socket.on('victory-message', (data) => {
 
 socket.on('game-victory', (data) => {
   console.log('Game victory:', data);
-  showNotification('Game Over', 
-    `🎉 ${data.winnerName} wins by ${data.victoryType.replace('_', ' ')}! 🎉`, 
-    'success');
+  
+  // Calculate game duration
+  const gameDuration = data.gameDuration || 'Unknown';
+  
+  // Get player stats
+  const myPlayerId = socket.id;
+  const myStats = {
+    piecesKilled: 0,
+    piecesLost: 0,
+    evolutionPoints: 0
+  };
+  
+  // Calculate stats from game state
+  if (gameState && gameState.pieces) {
+    Object.values(gameState.pieces).forEach(piece => {
+      if (piece.playerId === myPlayerId) {
+        myStats.piecesKilled += piece.kills || 0;
+      }
+    });
+  }
+  
+  // Get player info
+  const myPlayer = gameState.players[myPlayerId];
+  if (myPlayer) {
+    myStats.evolutionPoints = myPlayer.evolutionBank?.totalEarned || 0;
+  }
+  
+  // Show game over screen
+  showGameOver(data.winnerName, {
+    duration: gameDuration,
+    piecesKilled: myStats.piecesKilled,
+    piecesLost: myStats.piecesLost,
+    evolutionPoints: myStats.evolutionPoints,
+    victoryType: data.victoryType
+  });
 });
 
 socket.on('territory-update', (data) => {

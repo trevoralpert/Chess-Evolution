@@ -1,656 +1,511 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="night">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>EvoChess - Multiplayer Evolution Chess on a Globe</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- DaisyUI -->
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.6.0/dist/full.min.css" rel="stylesheet" type="text/css" />
+  
+  <!-- Font Awesome for icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Custom Styles -->
   <style>
+    /* Canvas and basic styles */
     body { 
       margin: 0; 
       overflow: hidden; 
-      background-color: #1a1a1a;
       font-family: Arial, sans-serif;
     }
     canvas { 
       display: block; 
     }
+    
+    /* Menu background animation */
+    @keyframes float {
+      0% { transform: translateY(0px) rotate(0deg); }
+      50% { transform: translateY(-20px) rotate(180deg); }
+      100% { transform: translateY(0px) rotate(360deg); }
+    }
+    
+    .floating-piece {
+      position: absolute;
+      opacity: 0.1;
+      animation: float 6s ease-in-out infinite;
+    }
+    
+    .floating-piece:nth-child(2) { animation-delay: 1s; }
+    .floating-piece:nth-child(3) { animation-delay: 2s; }
+    .floating-piece:nth-child(4) { animation-delay: 3s; }
+    .floating-piece:nth-child(5) { animation-delay: 4s; }
+    .floating-piece:nth-child(6) { animation-delay: 5s; }
+    
+    /* Splash image styling */
+    .splash-image {
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.8) 80%, rgba(0,0,0,0) 100%);
+      -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.8) 80%, rgba(0,0,0,0) 100%);
+    }
+    
+    /* Game UI animations */
     @keyframes pulse {
       0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
       50% { transform: translate(-50%, -50%) scale(1.05); opacity: 0.8; }
       100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
     }
-    #ui {
-      position: absolute;
-      top: 5px;
-      left: 5px;
-      color: white;
-      z-index: 100;
-      background: rgba(0, 0, 0, 0.5);
-      padding: 5px;
-      border-radius: 3px;
-      font-size: 11px;
-    }
-    #connection-status {
-      position: absolute;
-      top: 5px;
-      right: 5px;
-      color: white;
-      z-index: 100;
-      background: rgba(0, 0, 0, 0.5);
-      padding: 4px;
-      border-radius: 3px;
-      font-size: 9px;
-    }
-    #performance-info {
-      position: absolute;
-      top: 5px;
-      right: 80px;
-      color: white;
-      z-index: 100;
-      background: rgba(0, 0, 0, 0.5);
-      padding: 4px;
-      border-radius: 3px;
-      font-size: 8px;
-    }
     
     /* Loading animations */
-    .loading-spinner {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      border: 2px solid #f3f3f3;
-      border-top: 2px solid #3498db;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-    
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
     
-    /* Smooth transitions */
-    * {
-      transition: all 0.3s ease;
-    }
-    
-    /* Enhanced tooltips */
-    .tooltip {
-      position: relative;
-      display: inline-block;
-    }
-    
-    .tooltip .tooltiptext {
-      visibility: hidden;
-      width: 200px;
-      background-color: rgba(0, 0, 0, 0.9);
-      color: #fff;
-      text-align: center;
-      border-radius: 6px;
-      padding: 8px;
-      position: absolute;
-      z-index: 1000;
-      bottom: 125%;
-      left: 50%;
-      margin-left: -100px;
-      opacity: 0;
-      transition: opacity 0.3s;
-      font-size: 12px;
-      border: 1px solid #444;
-    }
-    
-    .tooltip .tooltiptext::after {
-      content: "";
-      position: absolute;
-      top: 100%;
-      left: 50%;
-      margin-left: -5px;
-      border-width: 5px;
-      border-style: solid;
-      border-color: #000 transparent transparent transparent;
-    }
-    
-    .tooltip:hover .tooltiptext {
-      visibility: visible;
-      opacity: 1;
-    }
-    
-    /* Button hover effects */
-    button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    }
-    
-    button:active {
-      transform: translateY(0);
-    }
-    
-    /* Smooth scrolling */
-    html {
-      scroll-behavior: smooth;
-    }
-    
-    /* Enhanced focus states */
-    button:focus, input:focus, select:focus {
-      outline: 2px solid #3498db;
-      outline-offset: 2px;
-    }
-    
-    /* Color selector styles */
+    /* Color option buttons */
     .color-option {
-      width: 20px;
-      height: 20px;
-      border: 2px solid #444;
-      border-radius: 3px;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 0.375rem;
+      border: 2px solid transparent;
       cursor: pointer;
       transition: all 0.2s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      color: #fff;
-      text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
+      position: relative;
+      overflow: hidden;
     }
     
     .color-option:hover {
-      border-color: #fff;
       transform: scale(1.1);
+      border-color: rgba(255, 255, 255, 0.5);
     }
     
     .color-option.selected {
-      border-color: #fff;
-      box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
+      border-color: white;
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
     }
     
     .color-option.unavailable {
-      opacity: 0.4;
+      opacity: 0.5;
       cursor: not-allowed;
-      position: relative;
     }
     
     .color-option.unavailable::after {
       content: "✖";
       position: absolute;
-      font-size: 12px;
-      color: #fff;
-      text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.8);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 1rem;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
     }
     
-    /* Mobile responsiveness */
+    /* Connection status colors */
+    #status-badge.badge-success {
+      background-color: hsl(var(--su));
+      color: hsl(var(--suc));
+    }
+    
+    #status-badge.badge-warning {
+      background-color: hsl(var(--wa));
+      color: hsl(var(--wac));
+    }
+    
+    #status-badge.badge-error {
+      background-color: hsl(var(--er));
+      color: hsl(var(--erc));
+    }
+    
+    /* Chat UI customization */
+    #chat-messages {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    }
+    
+    #chat-messages::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    #chat-messages::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    
+    #chat-messages::-webkit-scrollbar-thumb {
+      background-color: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+    }
+    
+    /* Timer bar gradient */
+    #timer-bar {
+      background: linear-gradient(90deg, 
+        hsl(var(--su)) 0%, 
+        hsl(var(--wa)) 50%, 
+        hsl(var(--er)) 100%);
+    }
+    
+    /* Hide elements with proper Tailwind classes on small screens */
     @media (max-width: 768px) {
-      #ui {
-        font-size: 12px;
-        padding: 8px;
-        max-width: 250px;
-      }
-      
-      #connection-status {
-        font-size: 12px;
-        padding: 8px;
-        top: 5px;
-        right: 5px;
-      }
-      
-      #performance-info {
-        font-size: 10px;
-        padding: 5px;
-        top: 5px;
-        right: 120px;
-      }
-      
-      #timing-ui {
-        font-size: 12px;
-        padding: 8px;
-        top: 5px;
-        right: 5px;
-        min-width: 150px;
-      }
-      
-      #chat-ui {
-        bottom: 5px;
-        left: 5px;
-        width: calc(100% - 10px);
-        max-width: 350px;
-      }
-      
-      button {
-        padding: 8px 12px;
-        font-size: 12px;
+      .hide-mobile {
+        display: none !important;
       }
     }
     
-    @media (max-width: 480px) {
-      #ui {
-        font-size: 11px;
-        padding: 5px;
-        max-width: 200px;
+    /* Responsive adjustments for game UI */
+    @media (max-width: 640px) {
+      #ui .card {
+        transform: scale(0.9);
+        transform-origin: top left;
       }
       
-      #performance-info {
-        display: none; /* Hide on very small screens */
-      }
-      
-      #timing-ui {
-        font-size: 11px;
-        padding: 5px;
-        min-width: 120px;
+      #timing-ui .card {
+        transform: scale(0.85);
+        transform-origin: top right;
       }
       
       #chat-ui {
-        max-width: 280px;
-        font-size: 11px;
+        width: 16rem;
       }
       
-      button {
-        padding: 6px 10px;
-        font-size: 11px;
+      #chat-ui .card {
+        transform: scale(0.9);
+        transform-origin: bottom left;
       }
     }
   </style>
 </head>
 <body>
-  <div id="ui">
-            <h3 style="font-size: 14px; margin: 0 0 5px 0;">EvoChess</h3>
-          <div id="player-count">Players: 0</div>
-      <div id="game-info">Waiting for players...</div>
-      <button id="add-ai-btn" style="
-        margin-top: 10px;
-        padding: 5px 10px;
-        background: #4CAF50;
-        color: white;
-        border: none;
-        border-radius: 3px;
-        cursor: pointer;
-        font-size: 12px;
-      ">Add AI Player</button>
-<div id="mode-indicator" style="
-  position: absolute;
-  top: 60px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 5px 15px;
-  border-radius: 20px;
-  font-size: 14px;
-  z-index: 1000;
-  display: none;
-  border: 2px solid #00ff00;
-">Camera Mode (Press S to switch)</div>
-    <div id="color-selector" style="margin-top: 10px; padding: 5px; background: rgba(0, 0, 0, 0.3); border-radius: 3px;">
-      <div style="font-size: 10px; color: #ccc; margin-bottom: 5px;">Your Color:</div>
-      <div id="color-options" style="display: flex; flex-wrap: wrap; gap: 3px;">
-        <!-- Color options will be populated by JavaScript -->
-      </div>
-      <div id="selected-color" style="margin-top: 5px; font-size: 9px; color: #aaa;">None selected</div>
-    </div>
-    <div style="margin-top: 5px;">
-      <button id="lobby-toggle" style="padding: 2px 6px; background: #00aaff; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px;">🏠 Lobby System</button>
-      <button id="evolution-toggle" style="padding: 2px 6px; background: #6600cc; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px; margin-left: 3px;">🧬 Evolution</button>
-      <button id="stats-toggle" style="padding: 2px 6px; background: #cc00cc; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px; margin-left: 3px;">📊 Statistics</button>
-      <button id="tournament-toggle" style="padding: 2px 6px; background: #4444ff; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px; margin-left: 3px;">🏆 Tournament Mode</button>
-      <button id="spectator-toggle" style="padding: 2px 6px; background: #ff6600; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px; margin-left: 3px;">👁️ Spectator Mode</button>
-      <button id="replay-toggle" style="padding: 2px 6px; background: #9900cc; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px; margin-left: 3px;">📺 Replays</button>
-      <button id="ai-toggle" style="padding: 2px 6px; background: #00cc66; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px; margin-left: 3px;">🤖 AI Opponents</button>
-      <button id="quit-game" style="padding: 2px 6px; background: #ff4444; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 9px; margin-left: 3px;">🚪 Quit Game</button>
-    </div>
-    <div id="dual-movement-ui" style="display: none; margin-top: 10px; padding: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px;">
-      <div style="font-size: 14px; margin-bottom: 5px; color: #ffd700;">Hybrid Queen Movement:</div>
-      <div style="display: flex; gap: 10px;">
-        <button id="queen-mode-btn" style="padding: 5px 10px; background: #ffd700; color: #000; border: none; border-radius: 3px; cursor: pointer;">Queen Mode</button>
-        <button id="jumper-mode-btn" style="padding: 5px 10px; background: #ff6600; color: #fff; border: none; border-radius: 3px; cursor: pointer;">Jumper Mode</button>
-      </div>
-      <div style="font-size: 12px; margin-top: 5px; color: #ccc;">
-        <span id="mode-description">Click a mode to see movement options</span>
-      </div>
-    </div>
+  <!-- Menu Screen with DaisyUI -->
+  <div id="menu-screen" class="hero min-h-screen bg-base-300 relative overflow-hidden">
+    <!-- Animated background pieces -->
+    <div class="floating-piece text-9xl" style="top: 10%; left: 10%;">♟</div>
+    <div class="floating-piece text-9xl" style="top: 20%; right: 15%;">♞</div>
+    <div class="floating-piece text-9xl" style="bottom: 30%; left: 5%;">♜</div>
+    <div class="floating-piece text-9xl" style="bottom: 10%; right: 10%;">♛</div>
+    <div class="floating-piece text-9xl" style="top: 50%; left: 50%;">♚</div>
+    <div class="floating-piece text-9xl" style="top: 70%; right: 30%;">♝</div>
     
-    <div id="tournament-ui" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0, 0, 100, 0.3); border-radius: 5px; border: 1px solid #4444ff;">
-      <div style="font-size: 14px; margin-bottom: 10px; color: #4444ff;">🏆 Tournament Mode</div>
-      <div id="tournament-lobby" style="display: block;">
-        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-          <button id="create-tournament-btn" style="padding: 5px 10px; background: #4444ff; color: #fff; border: none; border-radius: 3px; cursor: pointer;">Create Tournament</button>
-          <button id="join-tournament-btn" style="padding: 5px 10px; background: #44ff44; color: #000; border: none; border-radius: 3px; cursor: pointer;">Join Tournament</button>
+    <div class="hero-content text-center z-10">
+      <div class="max-w-4xl">
+        <!-- Logo and splash image -->
+        <div class="mb-8">
+          <img src="./images/evochess-splash.png" alt="EvoChess" class="mx-auto w-64 h-64 object-contain splash-image mb-4">
+          <h1 class="text-6xl font-bold text-primary mb-2 tracking-wider">EVOCHESS</h1>
+          <p class="text-xl text-base-content/70">Evolution Chess on a 3D Globe</p>
         </div>
-        <div id="tournament-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #333; padding: 5px; border-radius: 3px; background: rgba(0, 0, 0, 0.3);">
-          <div style="color: #888; font-size: 12px;">No tournaments available</div>
-        </div>
-      </div>
-      
-      <div id="tournament-creation" style="display: none;">
-        <div style="margin-bottom: 10px;">
-          <label style="display: block; margin-bottom: 5px; color: #ccc;">Tournament Name:</label>
-          <input id="tournament-name" type="text" placeholder="Enter tournament name" style="width: 100%; padding: 5px; background: #333; color: #fff; border: 1px solid #555; border-radius: 3px;">
-        </div>
-        <div style="margin-bottom: 10px;">
-          <label style="display: block; margin-bottom: 5px; color: #ccc;">Max Players:</label>
-          <select id="tournament-max-players" style="width: 100%; padding: 5px; background: #333; color: #fff; border: 1px solid #555; border-radius: 3px;">
-            <option value="2">2 Players</option>
-            <option value="4">4 Players</option>
-            <option value="8" selected>8 Players</option>
-          </select>
-        </div>
-        <div style="display: flex; gap: 10px;">
-          <button id="create-tournament-confirm" style="padding: 5px 10px; background: #4444ff; color: #fff; border: none; border-radius: 3px; cursor: pointer;">Create</button>
-          <button id="create-tournament-cancel" style="padding: 5px 10px; background: #666; color: #fff; border: none; border-radius: 3px; cursor: pointer;">Cancel</button>
-        </div>
-      </div>
-      
-      <div id="tournament-status" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 3px;">
-        <div id="tournament-info" style="color: #ccc; font-size: 12px;">Tournament Status</div>
-        <div id="tournament-brackets" style="margin-top: 10px; color: #ccc; font-size: 11px;">Brackets will appear here</div>
-      </div>
-    </div>
-    
-    <div id="lobby-ui" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0, 100, 150, 0.3); border-radius: 5px; border: 1px solid #00aaff;">
-      <div style="font-size: 14px; margin-bottom: 10px; color: #00aaff;">🏠 Lobby System</div>
-      <div id="lobby-browser" style="display: block;">
-        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-          <button id="create-lobby-btn" style="padding: 5px 10px; background: #00aaff; color: #fff; border: none; border-radius: 3px; cursor: pointer;">Create Lobby</button>
-          <button id="refresh-lobbies-btn" style="padding: 5px 10px; background: #0088cc; color: #fff; border: none; border-radius: 3px; cursor: pointer;">Refresh</button>
-        </div>
-        <div id="lobby-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #333; padding: 5px; border-radius: 3px; background: rgba(0, 0, 0, 0.3);">
-          <div style="color: #888; font-size: 12px;">No lobbies available</div>
-        </div>
-      </div>
-      
-      <div id="lobby-creation" style="display: none;">
-        <div style="margin-bottom: 10px;">
-          <label style="display: block; margin-bottom: 5px; color: #ccc;">Lobby Name:</label>
-          <input id="lobby-name" type="text" placeholder="Enter lobby name" style="width: 100%; padding: 5px; background: #333; color: #fff; border: 1px solid #555; border-radius: 3px;">
-        </div>
-        <div style="margin-bottom: 10px;">
-          <label style="display: block; margin-bottom: 5px; color: #ccc;">Max Players:</label>
-          <select id="lobby-max-players" style="width: 100%; padding: 5px; background: #333; color: #fff; border: 1px solid #555; border-radius: 3px;">
-            <option value="2">2 Players</option>
-            <option value="3">3 Players</option>
-            <option value="4">4 Players</option>
-            <option value="6">6 Players</option>
-            <option value="8" selected>8 Players</option>
-          </select>
-        </div>
-        <div style="margin-bottom: 10px;">
-          <label style="display: block; margin-bottom: 5px; color: #ccc;">Game Mode:</label>
-          <select id="lobby-game-mode" style="width: 100%; padding: 5px; background: #333; color: #fff; border: 1px solid #555; border-radius: 3px;">
-            <option value="standard" selected>Standard</option>
-            <option value="blitz">Blitz</option>
-            <option value="custom">Custom</option>
-          </select>
-        </div>
-        <div style="margin-bottom: 10px;">
-          <label style="display: block; margin-bottom: 5px; color: #ccc;">Time Limit (seconds):</label>
-          <input id="lobby-time-limit" type="number" min="1" max="30" value="7" style="width: 100%; padding: 5px; background: #333; color: #fff; border: 1px solid #555; border-radius: 3px;">
-        </div>
-        <div style="display: flex; gap: 10px;">
-          <button id="create-lobby-confirm" style="padding: 5px 10px; background: #00aaff; color: #fff; border: none; border-radius: 3px; cursor: pointer;">Create</button>
-          <button id="create-lobby-cancel" style="padding: 5px 10px; background: #666; color: #fff; border: none; border-radius: 3px; cursor: pointer;">Cancel</button>
-        </div>
-      </div>
-      
-      <div id="lobby-room" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 3px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-          <div id="lobby-room-name" style="color: #00aaff; font-size: 14px; font-weight: bold;">Lobby Name</div>
-          <button id="leave-lobby-btn" style="padding: 3px 8px; background: #cc0000; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">Leave</button>
-        </div>
-        <div id="lobby-players" style="margin-bottom: 10px;">
-          <div style="color: #ccc; font-size: 12px; margin-bottom: 5px;">Players:</div>
-          <div id="lobby-players-list" style="color: #fff; font-size: 11px;"></div>
-        </div>
-        <div id="lobby-settings" style="margin-bottom: 10px; padding: 5px; background: rgba(0, 0, 0, 0.2); border-radius: 3px;">
-          <div style="color: #ccc; font-size: 12px; margin-bottom: 5px;">Settings:</div>
-          <div id="lobby-settings-display" style="color: #fff; font-size: 11px;"></div>
-        </div>
-        <div style="display: flex; gap: 10px; align-items: center;">
-          <button id="ready-toggle-btn" style="padding: 5px 15px; background: #ff6600; color: #fff; border: none; border-radius: 3px; cursor: pointer;">Ready</button>
-          <div id="ready-status" style="color: #ccc; font-size: 12px;">Not Ready</div>
-        </div>
-        <div id="game-starting-countdown" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0, 150, 0, 0.3); border-radius: 3px; text-align: center;">
-          <div style="color: #00ff00; font-size: 14px; font-weight: bold;">Game Starting in: <span id="countdown-timer">3</span></div>
-        </div>
-             </div>
-     </div>
-     
-     <div id="stats-ui" style="display: none; margin-top: 10px; padding: 10px; background: rgba(150, 0, 150, 0.3); border-radius: 5px; border: 1px solid #cc00cc;">
-       <div style="font-size: 14px; margin-bottom: 10px; color: #cc00cc;">📊 Statistics & Leaderboards</div>
-       <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-         <button id="show-personal-stats" style="padding: 5px 10px; background: #cc00cc; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">My Stats</button>
-         <button id="show-leaderboard" style="padding: 5px 10px; background: #aa00aa; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">Leaderboard</button>
-         <button id="show-achievements" style="padding: 5px 10px; background: #8800aa; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">Achievements</button>
-         <button id="show-global-stats" style="padding: 5px 10px; background: #6600aa; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">Global</button>
-       </div>
-       
-       <div id="personal-stats" style="display: block;">
-         <div style="color: #cc00cc; font-size: 13px; margin-bottom: 8px;">Personal Statistics</div>
-         <div id="personal-stats-content" style="color: #fff; font-size: 11px; max-height: 250px; overflow-y: auto; padding: 5px; background: rgba(0, 0, 0, 0.3); border-radius: 3px;">
-           <div style="color: #888;">Loading personal statistics...</div>
-         </div>
-       </div>
-       
-       <div id="leaderboard" style="display: none;">
-         <div style="color: #cc00cc; font-size: 13px; margin-bottom: 8px;">Leaderboard</div>
-         <div style="display: flex; gap: 5px; margin-bottom: 8px;">
-           <select id="leaderboard-category" style="padding: 3px; background: #333; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 10px;">
-             <option value="rating">Rating</option>
-             <option value="wins">Wins</option>
-             <option value="winRate">Win Rate</option>
-             <option value="battles">Battles Won</option>
-             <option value="evolution">Evolutions</option>
-             <option value="tournaments">Tournaments</option>
-           </select>
-           <button id="refresh-leaderboard" style="padding: 3px 8px; background: #cc00cc; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">Refresh</button>
-         </div>
-         <div id="leaderboard-content" style="color: #fff; font-size: 11px; max-height: 250px; overflow-y: auto; padding: 5px; background: rgba(0, 0, 0, 0.3); border-radius: 3px;">
-           <div style="color: #888;">Loading leaderboard...</div>
-         </div>
-       </div>
-       
-       <div id="achievements" style="display: none;">
-         <div style="color: #cc00cc; font-size: 13px; margin-bottom: 8px;">Achievements</div>
-         <div id="achievements-content" style="color: #fff; font-size: 11px; max-height: 250px; overflow-y: auto; padding: 5px; background: rgba(0, 0, 0, 0.3); border-radius: 3px;">
-           <div style="color: #888;">Loading achievements...</div>
-         </div>
-       </div>
-       
-       <div id="global-stats" style="display: none;">
-         <div style="color: #cc00cc; font-size: 13px; margin-bottom: 8px;">Global Statistics</div>
-         <div id="global-stats-content" style="color: #fff; font-size: 11px; max-height: 250px; overflow-y: auto; padding: 5px; background: rgba(0, 0, 0, 0.3); border-radius: 3px;">
-           <div style="color: #888;">Loading global statistics...</div>
-         </div>
-             </div>
-    </div>
-    
-    <div id="evolution-ui" style="display: none; margin-top: 10px; padding: 10px; background: rgba(100, 0, 200, 0.3); border-radius: 5px; border: 1px solid #6600cc;">
-      <div style="font-size: 14px; margin-bottom: 10px; color: #6600cc;">🧬 Evolution System</div>
-      <div id="evolution-bank" style="margin-bottom: 10px; padding: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 3px;">
-        <div style="color: #6600cc; font-size: 12px; margin-bottom: 5px;">Evolution Bank</div>
-        <div style="display: flex; justify-content: space-between; color: #fff; font-size: 11px;">
-          <span>Available Points: <span id="evolution-points">0</span></span>
-          <span>Total Earned: <span id="evolution-total-earned">0</span></span>
-        </div>
-      </div>
-      
-      <div id="evolution-choice-panel" style="display: none; margin-bottom: 10px; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; border: 1px solid #6600cc;">
-        <div style="color: #6600cc; font-size: 13px; margin-bottom: 8px;">Choose Evolution Path</div>
-        <div id="evolution-piece-info" style="margin-bottom: 8px; color: #fff; font-size: 11px;">
-          <span id="evolution-piece-name">Piece</span> - <span id="evolution-piece-age">Age: 0s</span>
-        </div>
-        <div id="evolution-paths" style="margin-bottom: 8px;">
-          <!-- Evolution paths will be populated here -->
-        </div>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <div id="evolution-timer" style="color: #ff6600; font-size: 10px;">Time left: 30s</div>
-          <button id="cancel-evolution" style="padding: 3px 8px; background: #cc0000; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">Cancel</button>
-        </div>
-      </div>
-      
-      <div id="evolution-controls" style="display: flex; gap: 10px; margin-bottom: 10px;">
-        <button id="refresh-evolution-bank" style="padding: 5px 10px; background: #6600cc; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">Refresh Bank</button>
-        <button id="show-evolution-help" style="padding: 5px 10px; background: #4400aa; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;">Help</button>
-      </div>
-      
-      <div id="evolution-help" style="display: none; padding: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; color: #ccc; font-size: 10px;">
-        <div style="color: #6600cc; font-weight: bold; margin-bottom: 5px;">Evolution System Guide:</div>
-        <div>• Right-click pieces to see available evolution paths</div>
-        <div>• Different pieces have different evolution costs and time requirements</div>
-        <div>• Pieces must survive for a certain time to unlock advanced evolutions</div>
-        <div>• Some evolutions require battle experience or special achievements</div>
-        <div>• You have 30 seconds to choose when evolution options appear</div>
-      </div>
-    </div>
-    
-    <div id="spectator-ui" style="display: none; margin-top: 10px; padding: 10px; background: rgba(100, 50, 0, 0.3); border-radius: 5px; border: 1px solid #ff6600;">
-      <div style="font-size: 14px; margin-bottom: 10px; color: #ff6600;">👁️ Spectator Mode</div>
-      <div id="spectator-lobby" style="display: block;">
-        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-          <button id="join-spectator-btn" style="padding: 5px 10px; background: #ff6600; color: #fff; border: none; border-radius: 3px; cursor: pointer;">Join as Spectator</button>
-          <button id="leave-spectator-btn" style="padding: 5px 10px; background: #666; color: #fff; border: none; border-radius: 3px; cursor: pointer; display: none;">Leave Spectator</button>
-        </div>
-        <div id="spectator-info" style="color: #ccc; font-size: 12px; margin-bottom: 10px;">
-          <div>Spectator Count: <span id="spectator-count">0</span></div>
-          <div>Game Status: <span id="spectator-game-status">Waiting</span></div>
-        </div>
-        <div id="spectator-games-list" style="max-height: 150px; overflow-y: auto; border: 1px solid #333; padding: 5px; border-radius: 3px; background: rgba(0, 0, 0, 0.3);">
-          <div style="color: #888; font-size: 12px;">No games available to spectate</div>
-        </div>
-      </div>
-    </div>
-    
-    <div id="replay-ui" style="display: none; margin-top: 10px; padding: 10px; background: rgba(100, 0, 100, 0.3); border-radius: 5px; border: 1px solid #9900cc;">
-      <div style="font-size: 14px; margin-bottom: 10px; color: #9900cc;">📺 Replay System</div>
-      <div id="replay-lobby" style="display: block;">
-        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-          <button id="refresh-replays-btn" style="padding: 5px 10px; background: #9900cc; color: #fff; border: none; border-radius: 3px; cursor: pointer;">Refresh Replays</button>
-          <button id="stop-replay-btn" style="padding: 5px 10px; background: #666; color: #fff; border: none; border-radius: 3px; cursor: pointer; display: none;">Stop Replay</button>
-        </div>
-        <div id="replay-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #333; padding: 5px; border-radius: 3px; background: rgba(0, 0, 0, 0.3);">
-          <div style="color: #888; font-size: 12px;">No replays available</div>
-        </div>
-      </div>
-      
-      <div id="replay-controls" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 3px;">
-        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 10px;">
-          <button id="replay-play-pause" style="padding: 5px 10px; background: #9900cc; color: #fff; border: none; border-radius: 3px; cursor: pointer;">▶️</button>
-          <button id="replay-step-back" style="padding: 5px 10px; background: #666; color: #fff; border: none; border-radius: 3px; cursor: pointer;">⏮️</button>
-          <button id="replay-step-forward" style="padding: 5px 10px; background: #666; color: #fff; border: none; border-radius: 3px; cursor: pointer;">⏭️</button>
-          <span style="color: #ccc; font-size: 12px;">Speed:</span>
-          <select id="replay-speed" style="padding: 3px; background: #333; color: #fff; border: 1px solid #555; border-radius: 3px;">
-            <option value="0.5">0.5x</option>
-            <option value="1" selected>1x</option>
-            <option value="1.5">1.5x</option>
-            <option value="2">2x</option>
-            <option value="4">4x</option>
-          </select>
-        </div>
-        <div style="margin-bottom: 10px;">
-          <div style="display: flex; justify-content: space-between; color: #ccc; font-size: 11px;">
-            <span>Move: <span id="replay-current-move">0</span>/<span id="replay-total-moves">0</span></span>
-            <span>Time: <span id="replay-current-time">0:00</span>/<span id="replay-total-time">0:00</span></span>
+        
+        <!-- Player Setup Card -->
+        <div class="card bg-base-100 shadow-xl mb-6 max-w-md mx-auto">
+          <div class="card-body">
+            <h2 class="card-title justify-center text-secondary">
+              <i class="fas fa-user-circle mr-2"></i>Player Setup
+            </h2>
+            
+            <!-- Name Input -->
+            <div class="form-control w-full">
+              <label class="label">
+                <span class="label-text">Your Name</span>
+              </label>
+              <input type="text" id="player-name-input" placeholder="Enter your name" 
+                     class="input input-bordered input-primary w-full" maxlength="20" />
+            </div>
+            
+            <!-- Color Selection -->
+            <div class="form-control w-full mt-4">
+              <label class="label">
+                <span class="label-text">Choose Your Color</span>
+              </label>
+              <div id="menu-color-options" class="flex flex-wrap gap-2 justify-center p-2 bg-base-200 rounded-lg">
+                <!-- Color options will be populated by JavaScript -->
+              </div>
+            </div>
           </div>
-          <input type="range" id="replay-timeline" min="0" max="100" value="0" style="width: 100%; margin-top: 5px;">
         </div>
-        <div id="replay-info" style="color: #ccc; font-size: 11px;">
-          <div>Game: <span id="replay-game-id">-</span></div>
-          <div>Players: <span id="replay-players">-</span></div>
-          <div>Duration: <span id="replay-duration">-</span></div>
+        
+        <!-- Game Mode Buttons -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+          <!-- Quick Play - Primary Action -->
+          <button id="quick-play-btn" class="btn btn-primary btn-lg col-span-full gap-2 text-lg">
+            <i class="fas fa-play-circle text-2xl"></i>
+            QUICK PLAY
+          </button>
+          
+          <!-- Other Game Modes -->
+          <button id="vs-ai-btn" class="btn btn-secondary btn-outline gap-2">
+            <i class="fas fa-robot"></i>
+            VS AI
+          </button>
+          
+          <button id="create-game-btn" class="btn btn-accent btn-outline gap-2">
+            <i class="fas fa-plus-circle"></i>
+            CREATE GAME
+          </button>
+          
+          <button id="join-game-btn" class="btn btn-info btn-outline gap-2">
+            <i class="fas fa-link"></i>
+            JOIN GAME
+          </button>
+          
+          <button id="tournament-btn" class="btn btn-warning btn-outline gap-2">
+            <i class="fas fa-trophy"></i>
+            TOURNAMENT
+          </button>
+          
+          <button id="spectate-btn" class="btn btn-ghost gap-2">
+            <i class="fas fa-eye"></i>
+            SPECTATE
+          </button>
+          
+          <button id="evolution-guide-btn" class="btn btn-ghost gap-2">
+            <i class="fas fa-dna"></i>
+            GUIDE
+          </button>
+        </div>
+        
+        <!-- Stats Footer -->
+        <div class="stats shadow mt-8 bg-base-100">
+          <div class="stat">
+            <div class="stat-figure text-primary">
+              <i class="fas fa-users text-2xl"></i>
+            </div>
+            <div class="stat-title">Players Online</div>
+            <div class="stat-value text-primary" id="online-count">0</div>
+          </div>
+          
+          <div class="stat">
+            <div class="stat-figure text-secondary">
+              <i class="fas fa-gamepad text-2xl"></i>
+            </div>
+            <div class="stat-title">Active Games</div>
+            <div class="stat-value text-secondary">0</div>
+          </div>
+          
+          <div class="stat">
+            <div class="stat-figure text-accent">
+              <i class="fas fa-code-branch text-2xl"></i>
+            </div>
+            <div class="stat-title">Version</div>
+            <div class="stat-value text-accent">1.0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Game Over Screen with DaisyUI -->
+  <div id="game-over-screen" class="modal">
+    <div class="modal-box">
+      <h2 class="font-bold text-3xl text-center mb-4" id="game-over-title">
+        <i class="fas fa-chess-king mr-2"></i>GAME OVER
+      </h2>
+      
+      <div class="divider"></div>
+      
+      <div id="game-over-stats" class="space-y-2 text-lg">
+        <!-- Stats will be populated by JavaScript -->
+      </div>
+      
+      <div class="divider"></div>
+      
+      <div class="modal-action justify-center">
+        <button id="return-to-menu-btn" class="btn btn-primary btn-lg gap-2">
+          <i class="fas fa-home"></i>
+          RETURN TO MENU
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Game UI (hidden by default) -->
+  <div id="ui" style="display: none;" class="absolute top-4 left-4 z-50">
+    <div class="card bg-base-100 shadow-xl compact">
+      <div class="card-body">
+        <h3 class="card-title text-sm">EvoChess</h3>
+        <div id="player-count" class="text-sm">Players: 0</div>
+        <div id="game-info" class="text-sm text-base-content/70">Waiting for players...</div>
+        
+        <div class="flex gap-2 mt-2">
+          <button id="add-ai-btn" class="btn btn-success btn-xs">
+            <i class="fas fa-robot mr-1"></i>Add AI
+          </button>
+          <button id="pause-game-btn" class="btn btn-warning btn-xs">
+            <i class="fas fa-pause mr-1"></i>Pause
+          </button>
+          <button id="quit-to-menu-btn" class="btn btn-error btn-xs">
+            <i class="fas fa-home mr-1"></i>Menu
+          </button>
         </div>
       </div>
     </div>
     
-    <div id="ai-ui" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0, 100, 50, 0.3); border-radius: 5px; border: 1px solid #00cc66;">
-      <div style="font-size: 14px; margin-bottom: 10px; color: #00cc66;">🤖 AI Opponents</div>
-      <div id="ai-controls" style="display: block;">
-        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-          <button id="add-ai-btn" style="padding: 5px 10px; background: #00cc66; color: #fff; border: none; border-radius: 3px; cursor: pointer;">Add AI Player</button>
-          <button id="remove-all-ai-btn" style="padding: 5px 10px; background: #cc0000; color: #fff; border: none; border-radius: 3px; cursor: pointer;">Remove All AI</button>
-        </div>
-        <div style="margin-bottom: 10px;">
-          <label style="display: block; margin-bottom: 5px; color: #ccc;">AI Difficulty:</label>
-          <select id="ai-difficulty-select" style="width: 100%; padding: 5px; background: #333; color: #fff; border: 1px solid #555; border-radius: 3px;">
-            <option value="EASY">Easy - Simple moves with randomness</option>
-            <option value="MEDIUM" selected>Medium - Balanced strategy</option>
-            <option value="HARD">Hard - Strategic planning</option>
-            <option value="EXPERT">Expert - Advanced analysis</option>
-          </select>
-        </div>
-        <div style="margin-bottom: 10px;">
-          <label style="display: block; margin-bottom: 5px; color: #ccc;">AI Personality:</label>
-          <select id="ai-personality-select" style="width: 100%; padding: 5px; background: #333; color: #fff; border: 1px solid #555; border-radius: 3px;">
-            <option value="balanced">Balanced - Well-rounded strategy</option>
-            <option value="aggressive">Aggressive - Prefers attacks</option>
-            <option value="defensive">Defensive - Cautious play</option>
-            <option value="evolution">Evolution-focused - Prioritizes upgrades</option>
-          </select>
+    <!-- Camera Mode Indicator -->
+    <div id="mode-indicator" class="alert alert-info hidden absolute top-16 left-1/2 transform -translate-x-1/2">
+      <i class="fas fa-camera"></i>
+      <span>Camera Mode (Press S to switch)</span>
+    </div>
+    
+    <!-- Color selector and other UI elements remain but styled with DaisyUI classes -->
+    <div id="color-selector" style="margin-top: 10px;">
+      <div class="card bg-base-200">
+        <div class="card-body p-3">
+          <h4 class="text-xs text-base-content/70 mb-2">Your Color:</h4>
+          <div id="color-options" class="flex flex-wrap gap-1">
+            <!-- Color options will be populated by JavaScript -->
+          </div>
+          <div id="selected-color" class="text-xs text-base-content/50 mt-2">None selected</div>
         </div>
       </div>
-      
-      <div id="ai-players-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #333; padding: 5px; border-radius: 3px; background: rgba(0, 0, 0, 0.3);">
-        <div style="color: #888; font-size: 12px;">No AI players active</div>
+    </div>
+    
+    <!-- Dual Movement UI -->
+    <div id="dual-movement-ui" class="card bg-warning/20 mt-3 hidden">
+      <div class="card-body p-3">
+        <h4 class="text-sm font-bold text-warning mb-2">
+          <i class="fas fa-chess-queen mr-1"></i>Hybrid Queen Movement
+        </h4>
+        <div class="flex gap-2">
+          <button id="queen-mode-btn" class="btn btn-warning btn-sm">
+            <i class="fas fa-chess-queen mr-1"></i>Queen Mode
+          </button>
+          <button id="jumper-mode-btn" class="btn btn-info btn-sm">
+            <i class="fas fa-horse mr-1"></i>Jumper Mode
+          </button>
+        </div>
+        <p id="mode-description" class="text-xs text-base-content/70 mt-2">
+          Click a mode to see movement options
+        </p>
       </div>
-      
-      <div id="ai-stats" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 3px;">
-        <div style="font-size: 12px; color: #ccc; margin-bottom: 5px;">AI Statistics</div>
-        <div id="ai-stats-content" style="color: #ccc; font-size: 11px;">
-          <div>Moves Played: <span id="ai-moves-played">0</span></div>
-          <div>Battles Won: <span id="ai-battles-won">0</span></div>
-          <div>Battles Lost: <span id="ai-battles-lost">0</span></div>
-          <div>Pieces Evolved: <span id="ai-pieces-evolved">0</span></div>
-          <div>Avg Think Time: <span id="ai-avg-think-time">0ms</span></div>
+    </div>
+
+    <!-- Evolution Bank UI -->
+    <div id="evolution-bank-ui" class="card bg-primary/20 mt-3">
+      <div class="card-body p-3">
+        <h4 class="text-sm font-bold text-primary mb-2">
+          <i class="fas fa-dna mr-1"></i>Evolution Bank
+        </h4>
+        <div id="evolution-bank-content" class="text-xs space-y-1">
+          <!-- Bank content will be populated by JavaScript -->
+        </div>
+        <div class="flex gap-2 mt-2">
+          <button id="refresh-evolution-bank" class="btn btn-primary btn-xs">
+            <i class="fas fa-sync mr-1"></i>Refresh
+          </button>
+          <button id="show-evolution-help" class="btn btn-ghost btn-xs">
+            <i class="fas fa-question-circle mr-1"></i>Help
+          </button>
+        </div>
+        
+        <div id="evolution-help" class="alert alert-info mt-2 hidden">
+          <div class="text-xs">
+            <p class="font-bold mb-1">Evolution System Guide:</p>
+            <ul class="space-y-1">
+              <li>• Right-click pieces to see evolution paths</li>
+              <li>• Different pieces have different costs</li>
+              <li>• Pieces must survive to unlock evolutions</li>
+              <li>• Some evolutions require battle experience</li>
+              <li>• You have 30 seconds to choose</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
   </div>
   
-  <div id="connection-status">
-    <div id="status">Connecting...</div>
+  <!-- Connection Status -->
+  <div id="connection-status" class="absolute top-4 right-4 z-50">
+    <div class="badge badge-lg" id="status-badge">
+      <i class="fas fa-circle mr-1 text-xs" id="status-icon"></i>
+      <span id="status">Connecting...</span>
+    </div>
   </div>
   
-  <div id="performance-info">
-    <div>Performance Monitor</div>
-    <div>FPS: 0</div>
-    <div>Memory: 0MB</div>
-    <div>Objects: 0</div>
-    <div>Pieces: 0</div>
+  <!-- Performance Info -->
+  <div id="performance-info" class="absolute top-4 right-32 z-50 hidden lg:block">
+    <div class="stats stats-horizontal shadow scale-75 origin-top-right">
+      <div class="stat place-items-center p-2">
+        <div class="stat-title text-xs">FPS</div>
+        <div class="stat-value text-sm" id="fps-counter">0</div>
+      </div>
+      <div class="stat place-items-center p-2">
+        <div class="stat-title text-xs">Memory</div>
+        <div class="stat-value text-sm" id="memory-counter">0MB</div>
+      </div>
+    </div>
   </div>
 
   <!-- Timing UI -->
-  <div id="timing-ui" style="position: absolute; top: 5px; right: 120px; color: white; z-index: 100; background: rgba(0, 0, 0, 0.8); padding: 6px; border-radius: 3px; border: 1px solid #ff6600; min-width: 120px;">
-    <div style="font-size: 10px; margin-bottom: 4px; color: #ff6600; text-align: center;">🕒 Move Timer</div>
-    <div id="active-player-info" style="margin-bottom: 4px; text-align: center; color: #ccc; font-size: 9px;">
-      Turn: <span id="active-player-name" style="color: #fff; font-weight: bold;">-</span>
-    </div>
-    <div id="timer-display" style="margin-bottom: 4px;">
-      <div id="timer-bar-container" style="width: 100%; height: 12px; background: #333; border-radius: 6px; overflow: hidden; margin-bottom: 3px;">
-        <div id="timer-bar" style="height: 100%; background: linear-gradient(90deg, #00ff00, #ffff00, #ff6600, #ff0000); width: 100%; transition: width 0.1s linear; border-radius: 6px;"></div>
+  <div id="timing-ui" class="absolute top-20 right-4 z-50">
+    <div class="card bg-base-100 shadow-xl compact w-48">
+      <div class="card-body p-3">
+        <h4 class="card-title text-sm text-warning">
+          <i class="fas fa-clock mr-1"></i>Move Timer
+        </h4>
+        
+        <div class="text-center mb-2">
+          <p class="text-xs text-base-content/70">Current Turn</p>
+          <p class="font-bold" id="active-player-name">-</p>
+        </div>
+        
+        <div class="space-y-2">
+          <progress class="progress progress-warning w-full" id="timer-bar" value="100" max="100"></progress>
+          <p class="text-center text-lg font-bold">
+            <span id="time-remaining">7.0</span>s
+          </p>
+        </div>
+        
+        <div class="divider my-1"></div>
+        
+        <div class="text-xs">
+          <p class="text-base-content/70">Turn Queue:</p>
+          <p id="turn-queue-list" class="text-base-content/50">-</p>
+        </div>
       </div>
-      <div id="timer-text" style="text-align: center; font-size: 12px; font-weight: bold; color: #fff;">
-        <span id="time-remaining">7.0</span>s
-      </div>
-    </div>
-    <div id="timer-status" style="text-align: center; font-size: 8px; color: #ccc;">
-      Waiting for game to start...
-    </div>
-    <div id="turn-queue" style="margin-top: 4px; font-size: 8px; color: #888;">
-      <div style="color: #ccc;">Turn Queue:</div>
-      <div id="turn-queue-list" style="margin-top: 2px;">-</div>
     </div>
   </div>
 
   <!-- Chat UI -->
-  <div id="chat-ui" style="position: absolute; bottom: 5px; left: 5px; color: white; z-index: 100; background: rgba(0, 0, 0, 0.8); padding: 6px; border-radius: 3px; border: 1px solid #00cc88; width: 200px; height: 150px; display: flex; flex-direction: column;">
-    <div style="font-size: 9px; margin-bottom: 4px; color: #00cc88; text-align: center; display: flex; justify-content: space-between; align-items: center;">
-      <span>💬 Game Chat</span>
-      <button id="toggle-chat" style="background: #00cc88; color: #000; border: none; padding: 1px 3px; border-radius: 2px; cursor: pointer; font-size: 8px;">Hide</button>
+  <div id="chat-ui" class="absolute bottom-4 left-4 z-50 w-72">
+    <div class="card bg-base-100 shadow-xl">
+      <div class="card-body p-3">
+        <div class="flex justify-between items-center mb-2">
+          <h4 class="card-title text-sm text-accent">
+            <i class="fas fa-comments mr-1"></i>Game Chat
+          </h4>
+          <button id="toggle-chat" class="btn btn-ghost btn-xs">
+            <i class="fas fa-chevron-down"></i>
+          </button>
+        </div>
+        
+        <div id="chat-messages" class="bg-base-200 rounded-lg p-2 h-32 overflow-y-auto mb-2 text-xs">
+          <p class="text-center text-base-content/50 italic">
+            Chat messages will appear here...
+          </p>
+        </div>
+        
+        <div class="join w-full">
+          <input id="chat-input" type="text" placeholder="Type a message..." 
+                 class="input input-bordered input-sm join-item flex-1" maxlength="200">
+          <button id="send-chat" class="btn btn-accent btn-sm join-item">
+            <i class="fas fa-paper-plane"></i>
+          </button>
+        </div>
+        
+        <p class="text-xs text-center text-base-content/50 mt-1">
+          <i class="fas fa-circle text-success mr-1"></i>Connected to Game Chat
+        </p>
+      </div>
     </div>
-    <div id="chat-messages" style="flex: 1; overflow-y: auto; background: rgba(0, 0, 0, 0.5); padding: 4px; border-radius: 3px; margin-bottom: 4px; font-size: 8px; border: 1px solid #333;">
-      <div style="color: #888; text-align: center; font-style: italic;">Chat messages will appear here...</div>
-    </div>
-    <div id="chat-input-container" style="display: flex; gap: 3px;">
-      <input id="chat-input" type="text" placeholder="Type a message..." style="flex: 1; padding: 3px; background: #333; color: #fff; border: 1px solid #555; border-radius: 2px; font-size: 8px;" maxlength="200">
-      <button id="send-chat" style="background: #00cc88; color: #000; border: none; padding: 3px 6px; border-radius: 2px; cursor: pointer; font-size: 8px;">Send</button>
-    </div>
-    <div id="chat-status" style="font-size: 7px; color: #888; margin-top: 2px; text-align: center;">
-      Connected to Game Chat
-    </div>
+  </div>
+
+  <!-- Spectator UI -->
+  <div id="spectator-ui" class="hidden">
+    <!-- Will be populated when needed -->
+  </div>
+  
+  <!-- AI UI -->
+  <div id="ai-ui" class="hidden">
+    <!-- Will be populated when needed -->
   </div>
 
   <!-- Load Three.js, Controls, and GLTFLoader via script tags -->
@@ -674,6 +529,6 @@
       }
     });
   </script>
-      <script src="./main-simple.js?v=23&debug=true"></script>
+  <script src="./main-simple.js?v=23&debug=true"></script>
 </body>
 </html> 

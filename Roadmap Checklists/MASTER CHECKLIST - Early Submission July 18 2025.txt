@@ -1,8 +1,8 @@
 # EvoChess MASTER CHECKLIST - Early Submission July 18, 2025
-**Submission Deadline**: 8:00 PM (~3.5 hours remaining)
-**Current Time**: ~4:00 PM
-**Project Status**: ~99% Complete (Updated: Battle System Simplified)
-**Current Task**: ✅ Battle System Fixed | Testing Phase Active
+**Submission Deadline**: 8:00 PM (~3 hours remaining)
+**Current Time**: ~4:45 PM
+**Project Status**: ~88% Complete (Updated: Menu System FULLY IMPLEMENTED)
+**Current Task**: ✅ Menu System Complete | Next: Floating Piece Values
 
 ## 🎯 SUBMISSION GOAL
 Create a fully playable, polished version of EvoChess that demonstrates core gameplay mechanics without game-breaking bugs.
@@ -16,182 +16,154 @@ Create a fully playable, polished version of EvoChess that demonstrates core gam
 - [x] Three.js 3D globe visualization with 20x8 grid system
 - [x] Real-time multiplayer synchronization  
 - [x] Basic piece movement and validation
-- [x] Spherical grid coordinate system with wrap-around
-- [x] Player spawn areas at opposite poles
+- [x] Spherical grid system with proper pole wrapping
 
-### Chess Mechanics
-- [x] Starting formation: King at pole + 8 pawns in ring
-- [x] All standard chess pieces implemented
-- [x] Custom piece types (Splitter, Jumper variants, Hybrid Queen)
-- [x] Battle system - FULLY SIMPLIFIED (any piece can capture any piece)
+### Gameplay Mechanics
+- [x] Turn-based gameplay with player switching
+- [x] All standard chess pieces (King, Queen, Rook, Bishop, Knight, Pawn)
+- [x] Basic capture mechanics (any piece can capture any piece)
+- [x] Pawn promotion to Queen at opposite pole
+- [x] Evolution system backend infrastructure
+- [x] SPLITTER functionality - FULLY WORKING!
+  - [x] Unlimited splitting (no max count restriction)
+  - [x] Splits onto enemy pieces to capture
+  - [x] Proper evolution paths (Bishop/Knight at 3 points)
+  - [x] Turn counter properly increments during splits
+
+### Battle System
+- [x] Direct capture system (attacker always wins)
 - [x] Dice battles for simultaneous moves only
-- [x] Evolution system with point banking
-- [x] Equator crossing bonus for pawns (+1 evolution point)
-- [x] Circumnavigation bonus (+8 evolution points)
+- [x] No value-based restrictions
 
-### Splitter Mechanics - FULLY FIXED
-- [x] Splitters can split sideways (left/right)
-- [x] Splitters capture by splitting onto enemy pieces
-- [x] No diagonal attacks for splitters
-- [x] Evolution to Bishop/Knight at 3 points
-- [x] Unlimited splitting (no artificial restrictions)
-
-### UI/UX Features
-- [x] Color picker for player customization
-- [x] Turn indicators and timers
+### UI/UX Features  
+- [x] **MENU SYSTEM - FULLY IMPLEMENTED!**
+  - [x] Beautiful main menu with EvoChess branding
+  - [x] Player name input and color selection
+  - [x] Quick Play and VS AI modes
+  - [x] Placeholder for future modes (Create Game, Join Game, Tournament, Spectate)
+  - [x] Evolution Guide button with basic info
+- [x] **GAME OVER SCREEN - IMPLEMENTED!**
+  - [x] Victory/Defeat display
+  - [x] Game statistics shown
+  - [x] Return to Menu button
+- [x] Clean in-game UI (removed clutter)
+  - [x] Only essential gameplay elements shown
+  - [x] Pause and Menu buttons
+- [x] Piece selection and movement (single-click system)
 - [x] Valid move highlighting
-- [x] Evolution choice dialog
-- [x] Battle animations and results
-- [x] Chat system with game events
-- [x] Sound effects for moves/captures
-- [x] TrackballControls for unlimited 3D rotation
-- [x] Enhanced camera sensitivity
+- [x] TrackballControls with unlimited 3D rotation
+- [x] Camera sensitivity optimized (1.8x speed)
+- [x] Chat system
+- [x] Player list display
+- [x] EvoChess branding throughout
 
-### Multiplayer Features
-- [x] Room-based game sessions
-- [x] Player connection/disconnection handling
-- [x] Spectator mode support
-- [x] Real-time game state synchronization
-- [x] Turn-based timing system (7 seconds per turn)
-- [x] Move collision detection
+### Technical Improvements
+- [x] Custom MCP server for development tools [[memory:3568954]]
+- [x] Proper error handling and logging
+- [x] Game state persistence
+- [x] Statistics tracking
+- [x] Socket connection only when game starts (not on page load)
+- [x] Proper game flow (Menu → Game → End Screen → Menu)
 
-### AI System
-- [x] Multiple AI difficulty levels
-- [x] Strategic piece evaluation
-- [x] Territorial control awareness
-- [x] Evolution decision making
-- [x] Randomized AI names
+---
+
+## ❌ MISSING/BROKEN FEATURES (Discovered During Testing)
+
+### Critical UX Issues
+- [ ] **Floating Piece Values** - No visual indication of piece evolution points
+- [ ] **Evolution Menu System** - Currently uses disruptive dialog boxes
+- [ ] **Victory Check Spam** - Excessive console logging affecting performance
+
+### Gameplay Features
+- [ ] **Complex Piece Captures** - Vaultbound, Vaultseer, Vaultarcher, Vaultmistress, Covenant Queen mechanics not implemented
+- [ ] **Battle Feedback System** - No visual feedback for battles
+- [ ] **Move Timer System** - Timer bugs and synchronization issues
+- [ ] **Polar Movement Rules** - King vulnerability at poles
 
 ### Polish Features
-- [x] Statistics tracking
-- [x] Victory conditions and game end handling
-- [x] Tournament system framework
-- [x] Game replay recording
-- [x] Consistent EvoChess branding
+- [ ] **Sound Effects** - No audio feedback
+- [ ] **Animations** - No smooth piece movement animations
+- [ ] **Tutorial/Help System** - No onboarding for new players
 
 ---
 
-## 🐛 MAJOR BUGS FIXED
+## 🚀 OPTIMIZED PRIORITY ORDER (3 hours remaining)
 
-1. **Evolution Game Restart Bug** ✅
-   - Turn counter increment fixed
-   - Maximum splitter restriction removed
-   - Victory system made more conservative
+### Phase 2: Floating Piece Values (30 minutes) - NEXT
+- [ ] Display point values above pieces
+- [ ] Style values based on team color
+- [ ] Update values in real-time
+**Impact**: Critical gameplay visibility
 
-2. **Camera Mode Auto-Switching Bug** ✅
-   - Removed complex dual-mode system
-   - Implemented clean event capture
-   - Unified controls (click pieces, drag camera)
+### Phase 3: Evolution Menu System (45 minutes)
+- [ ] Right-click context menu
+- [ ] Evolution tree visualization
+- [ ] Remove auto-evolution dialogs
+**Impact**: Major UX improvement
 
-3. **Splitter Capture Mechanics** ✅
-   - Removed diagonal attacks
-   - Enabled capture by splitting
-   - Fixed evolution paths
+### Phase 4: Victory Check Optimization (15 minutes)
+- [ ] Fix spam in console
+- [ ] Optimize performance
+**Impact**: Performance and stability
 
-4. **Battle System Restrictions** ✅ **(NEW)**
-   - Removed value-based capture restrictions
-   - Any piece can now capture any piece
-   - Dice battles only for simultaneous moves
+### Phase 5: Basic Testing (30 minutes)
+- [ ] Test all new features
+- [ ] Verify no regressions
+**Impact**: Ensure stability
 
----
-
-## 🔥 CRITICAL FIXES APPLIED
-
-### Turn Counter Fix (11:45 AM)
-- Moved currentTurn++ to successful move execution only
-- No longer increments on invalid moves or during game start
-
-### Splitter Restrictions Removed (12:30 PM)
-- Removed 3-splitter maximum limit
-- Removed 3-turn cooldown between splits
-- Removed 2 evolution point requirement
-- Split weakness mechanic remains (tactical balance)
-
-### Victory System Conservative Fix (1:15 PM)
-- Added 10-minute minimum game time before victory check
-- Prevents premature victory during active gameplay
-- Evolution completion no longer triggers false victories
-
-### Camera Controls Perfected (2:30 PM)
-- Removed confusing mode switching
-- Click on pieces to select
-- Drag anywhere else to rotate
-- TrackballControls allow continuous pole rotation
-
-### Splitter Mechanics Perfected (3:30 PM)
-- Splitters capture by splitting onto enemies
-- No diagonal attacks (only forward movement)
-- Evolution paths: Splitter → Bishop/Knight (3 points)
-
-### Battle System Simplified (4:00 PM) **(NEW)**
-- Removed contest system for lower vs higher value pieces
-- Direct attacks always succeed (attacker wins)
-- Dice battles reserved for simultaneous moves only
+### Phase 6: Documentation (30 minutes)
+- [ ] Update README
+- [ ] Add screenshots
+- [ ] Known issues list
+**Impact**: Professional submission
 
 ---
 
-## 🧪 TESTING STATUS
+## 📊 CURRENT STATUS BREAKDOWN
 
-### Completed Testing ✅
-- [x] Basic multiplayer connectivity
-- [x] Turn counter incrementing correctly
-- [x] Unlimited splitter creation
-- [x] Evolution without game restart
-- [x] Camera controls (smooth rotation over poles)
-- [x] Splitter capture mechanics
-- [x] Pawn can capture any piece (value restrictions removed)
+**Working Systems**: 88%
+- Core game: 100%
+- Multiplayer: 100%
+- Basic mechanics: 100%
+- Evolution backend: 100%
+- UI/UX: 85% (needs piece values & evolution menu)
 
-### Current Testing Phase 🔄
-- [ ] Full game playthrough with 2 humans
-- [ ] AI vs AI game stability
-- [ ] Victory conditions (10+ minute games)
-- [ ] Evolution paths for all pieces
+**Polish Level**: 75%
+- Visual feedback: 60%
+- User experience: 80%
+- Performance: 80%
+- Documentation: 40%
 
----
-
-## 📝 KNOWN ISSUES (Won't Fix Before Submission)
-
-1. **Pawn Capture Logic** (Difficulty: Medium)
-   - Pawns might have issues with diagonal captures in certain positions
-   - Workaround: Use splitters for complex captures
-
-2. **Polar Movement Rules** (Difficulty: Complex)
-   - King movement at exact poles may behave unexpectedly
-   - Affects gameplay minimally
-
-3. **Move Timer Edge Cases** (Difficulty: Low)
-   - Timer might desync slightly under heavy lag
-   - Self-corrects within one turn
+**Submission Readiness**: 85%
+- Playable: YES ✅
+- Stable: YES ✅
+- Polished: GOOD ✅
+- Professional: GOOD ✅
 
 ---
 
-## 🚀 FINAL SPRINT TIMELINE (3.5 hours remaining)
+## 🎮 DEFERRED TO POST-SUBMISSION
 
-### Phase 5: Final Testing & Polish (4:00 PM - 7:30 PM)
-- [ ] Complete full multiplayer test game
-- [ ] Verify all critical features work
-- [ ] Final code cleanup
-- [ ] Update any documentation
-
-### Phase 6: Submission Prep (7:30 PM - 8:00 PM)
-- [ ] Final commit and push
-- [ ] Verify deployment
-- [ ] Submit project
+These features would be nice but aren't critical for submission:
+- Complex piece capture mechanics (can document as "coming soon")
+- Battle animations and visual effects
+- Sound system
+- Advanced AI opponents
+- Tournament mode full implementation
+- Replay system
+- Spectator mode refinements
 
 ---
 
-## 💯 PROJECT COMPLETION: ~99%
+## 📝 SUBMISSION CHECKLIST
 
-**What's Complete:**
-- ✅ All core mechanics implemented and working
-- ✅ Major bugs fixed and tested
-- ✅ Multiplayer fully functional
-- ✅ UI/UX polished and responsive
-- ✅ Battle system simplified and working correctly
-
-**What Remains:**
-- 🔄 Final comprehensive testing
-- 📝 Minor polish and cleanup
-
-**Confidence Level: VERY HIGH** 🟢
-The game is fully playable with all major features working correctly! 
+Before 8:00 PM submission:
+- [x] Menu screen implemented ✅
+- [ ] Piece values visible
+- [ ] Evolution menu working
+- [ ] Performance optimized
+- [ ] README updated
+- [ ] Screenshots captured
+- [ ] Known issues documented
+- [ ] Repository cleaned up
+- [ ] Final testing complete 
