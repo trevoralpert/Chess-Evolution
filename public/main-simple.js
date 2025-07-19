@@ -240,6 +240,18 @@ import {
   getTournaments,
   setTournaments
 } from './modules/StatisticsManager.js';
+import {
+  showBattleContestPrompt,
+  showDiceBattleAnimation,
+  handleBattleResult,
+  updateBattleUI,
+  clearBattleUI,
+  toggleBattleHistory,
+  setupBattleSocketHandlers,
+  initializeBattleSystem,
+  getBattleStats,
+  createBattleContestButton
+} from './modules/BattleManager.js';
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -697,150 +709,7 @@ testModelAccess().then((accessible) => {
 
 // showNotification function now imported from NotificationManager module
 
-function showBattleContestPrompt(battleId, attackingPiece, defendingPiece, timeLimit) {
-  // Remove any existing prompt
-  const existingPrompt = document.getElementById('battle-contest-prompt');
-  if (existingPrompt) {
-    existingPrompt.remove();
-  }
-  
-  // Create contest prompt UI
-  const promptDiv = document.createElement('div');
-  promptDiv.id = 'battle-contest-prompt';
-  promptDiv.style.cssText = `
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.9);
-    color: white;
-    padding: 20px;
-    border-radius: 10px;
-    text-align: center;
-    z-index: 1000;
-    border: 2px solid #ff6b6b;
-  `;
-  
-  const countdown = document.createElement('div');
-  countdown.id = 'contest-countdown';
-  countdown.style.cssText = `
-    font-size: 24px;
-    font-weight: bold;
-    color: #ff6b6b;
-    margin-bottom: 10px;
-  `;
-  
-  promptDiv.innerHTML = `
-    <h3>Battle Contest!</h3>
-    <p>${attackingPiece.symbol} ${attackingPiece.type} (${attackingPiece.value}pts) attacking your ${defendingPiece.symbol} ${defendingPiece.type} (${defendingPiece.value}pts)</p>
-    <p>Do you want to contest this battle with dice?</p>
-    <button id="contest-yes" style="margin: 10px; padding: 10px 20px; font-size: 16px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">Contest!</button>
-    <button id="contest-no" style="margin: 10px; padding: 10px 20px; font-size: 16px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">Auto-Resolve</button>
-  `;
-  
-  promptDiv.appendChild(countdown);
-  document.body.appendChild(promptDiv);
-  
-  // Add event listeners
-  document.getElementById('contest-yes').addEventListener('click', () => {
-    socket.emit('contest-response', { battleId, wantsToContest: true });
-    promptDiv.remove();
-  });
-  
-  document.getElementById('contest-no').addEventListener('click', () => {
-    socket.emit('contest-response', { battleId, wantsToContest: false });
-    promptDiv.remove();
-  });
-  
-  // Countdown timer
-  let timeLeft = timeLimit;
-  const updateCountdown = () => {
-    countdown.textContent = `Time: ${timeLeft}s`;
-    if (timeLeft <= 0) {
-      // Auto-resolve if no response
-      socket.emit('contest-response', { battleId, wantsToContest: false });
-      promptDiv.remove();
-    } else {
-      timeLeft--;
-      setTimeout(updateCountdown, 1000);
-    }
-  };
-  updateCountdown();
-}
-
-function showDiceBattleAnimation(battleLog, winner, loser, duration) {
-  // Create dice battle animation UI
-  const animationDiv = document.createElement('div');
-  animationDiv.id = 'dice-battle-animation';
-  animationDiv.style.cssText = `
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.9);
-    color: white;
-    padding: 30px;
-    border-radius: 15px;
-    text-align: center;
-    z-index: 1000;
-    border: 2px solid #ffd700;
-    min-width: 300px;
-  `;
-  
-  animationDiv.innerHTML = `
-    <h3>⚔️ DICE BATTLE ⚔️</h3>
-    <div id="dice-display" style="font-size: 24px; margin: 20px 0;"></div>
-    <div id="battle-status" style="font-size: 18px; color: #ffd700;"></div>
-  `;
-  
-  document.body.appendChild(animationDiv);
-  
-  const diceDisplay = document.getElementById('dice-display');
-  const battleStatus = document.getElementById('battle-status');
-  
-  // Show initial dice
-  diceDisplay.innerHTML = `
-    <div style="display: flex; justify-content: space-between; margin: 20px 0;">
-      <div style="text-align: center;">
-        <div>Attacker</div>
-        <div style="font-size: 32px; color: #ff6b6b;">${battleLog.attackerDice.join(', ')}</div>
-      </div>
-      <div style="text-align: center;">
-        <div>Defender</div>
-        <div style="font-size: 32px; color: #4CAF50;">${battleLog.defenderDice.join(', ')}</div>
-      </div>
-    </div>
-  `;
-  
-  battleStatus.textContent = 'Rolling dice...';
-  
-  // Show tie-breaker rounds if any
-  let currentRound = 0;
-  const showTieBreaker = () => {
-    if (currentRound < battleLog.rounds.length) {
-      const round = battleLog.rounds[currentRound];
-      diceDisplay.innerHTML += `
-        <div style="margin: 10px 0; padding: 10px; background: rgba(255, 255, 255, 0.1); border-radius: 5px;">
-          <div>Tie-breaker ${currentRound + 1}</div>
-          <div style="font-size: 20px;">
-            <span style="color: #ff6b6b;">${round.attacker}</span> vs <span style="color: #4CAF50;">${round.defender}</span>
-          </div>
-        </div>
-      `;
-      currentRound++;
-      setTimeout(showTieBreaker, 1000);
-    } else {
-      // Show final result
-      battleStatus.textContent = `Battle complete!`;
-      setTimeout(() => {
-        animationDiv.remove();
-      }, 1000);
-    }
-  };
-  
-  // Start tie-breaker sequence after initial delay
-  setTimeout(showTieBreaker, 1000);
-}
+// Battle functions now handled by BattleManager
 
 // Visual update and piece creation functions now handled by RenderingManager
     'SPLITTER': 0.02,    // Evolved pieces might need adjustments
@@ -1305,6 +1174,9 @@ initializeColorSelection();
 if (!visualEffects) {
   visualEffects = new VisualEffectsManager(scene, renderer);
 }
+
+// Initialize battle system
+initializeBattleSystem();
 
 // Update particle system in animation loop
 const originalAnimate = window.animate;
