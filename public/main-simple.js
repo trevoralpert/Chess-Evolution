@@ -55,6 +55,21 @@ import {
   mouse,
   raycaster
 } from './modules/MouseInteractionManager.js';
+import {
+  showNotification,
+  showTypedNotification,
+  showCornerNotification,
+  showAINotification,
+  showAIPlayerAddedNotification,
+  showBattleNotification,
+  showTurnNotification,
+  showEvolutionNotification,
+  showEliminationNotification,
+  showVictoryNotification,
+  showGameEventNotification,
+  clearAllNotifications,
+  addNotificationStyles
+} from './modules/NotificationManager.js';
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -657,10 +672,10 @@ function setupSocketListeners() {
           visualEffects.createEvolutionEffect(worldPos, oldType, newType);
         }
         
-        // Show notification
+        // Show evolution notification
         const player = gameState.players[playerId];
         const playerName = player ? player.name : 'Unknown Player';
-        showNotification(`${playerName}'s ${oldType} evolved to ${newType}!`, '#00ff00', 3000);
+        showEvolutionNotification(playerName, oldType, newType);
       }).catch(error => {
         console.error(`❌ Failed to recreate evolved piece mesh:`, error);
       });
@@ -693,11 +708,8 @@ function setupSocketListeners() {
     console.log(`Player eliminated: ${playerName} (${reason})`);
     
     // Show elimination notification
-    if (socket.id === playerId) {
-      showNotification(`You have been eliminated! ${reason}`, '#ff0000', 5000);
-    } else {
-      showNotification(`${playerName} has been eliminated! ${reason}`, '#ff8800', 3000);
-    }
+    const isYou = socket.id === playerId;
+    showEliminationNotification(playerName, reason, isYou);
     
     // Update UI
     updateUI();
@@ -2333,36 +2345,7 @@ socket.on('multi-jump-capture', (data) => {
   });
 });
 
-function showNotification(message, color, duration) {
-  // Create notification element
-  const notification = document.createElement('div');
-  notification.style.cssText = `
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.9);
-    color: ${color};
-    padding: 20px;
-    border-radius: 10px;
-    text-align: center;
-    z-index: 1000;
-    font-size: 24px;
-    font-weight: bold;
-    border: 3px solid ${color};
-    animation: pulse 1s infinite;
-  `;
-  
-  notification.textContent = message;
-  document.body.appendChild(notification);
-  
-  // Remove notification after duration
-  setTimeout(() => {
-    if (notification.parentNode) {
-      notification.parentNode.removeChild(notification);
-    }
-  }, duration);
-}
+// showNotification function now imported from NotificationManager module
 
 function showBattleContestPrompt(battleId, attackingPiece, defendingPiece, timeLimit) {
   // Remove any existing prompt
@@ -4797,25 +4780,8 @@ socket.on('ai-player-added', (data) => {
   currentAIPlayers.push(data.aiPlayer);
   updateAIPlayersList();
   
-  // Show notification
-  const notification = document.createElement('div');
-  notification.style.cssText = `
-    position: fixed;
-    top: 50px;
-    right: 20px;
-    background: #00cc66;
-    color: white;
-    padding: 10px;
-    border-radius: 5px;
-    z-index: 1000;
-    font-size: 14px;
-  `;
-  notification.textContent = `🤖 AI Player Added: ${data.aiPlayer.name} (${data.difficulty})`;
-  document.body.appendChild(notification);
-  
-  setTimeout(() => {
-    notification.remove();
-  }, 3000);
+  // Show AI player added notification
+  showAIPlayerAddedNotification(data.aiPlayer.name, data.difficulty);
 });
 
 socket.on('ai-player-removed', (data) => {
@@ -4864,25 +4830,7 @@ socket.on('ai-move-completed', (data) => {
   console.log('AI move completed:', data);
   
   // Show AI move notification
-  const notification = document.createElement('div');
-  notification.style.cssText = `
-    position: fixed;
-    top: 80px;
-    right: 20px;
-    background: rgba(0, 204, 102, 0.9);
-    color: white;
-    padding: 8px;
-    border-radius: 3px;
-    z-index: 1000;
-    font-size: 12px;
-    max-width: 300px;
-  `;
-  notification.textContent = `🤖 ${data.aiName}: ${data.moveResult}`;
-  document.body.appendChild(notification);
-  
-  setTimeout(() => {
-    notification.remove();
-  }, 2000);
+  showAINotification(data.aiName, data.moveResult);
 });
 
 // Update currentAIPlayers when game state changes
@@ -5529,12 +5477,12 @@ setTimeout(() => {
 // AI player event handlers
 socket.on('ai-player-added', (data) => {
   console.log('AI player added:', data);
-  showNotification('AI Player Added', `${data.name} has joined the game!`, 'success');
+      showTypedNotification('AI Player Added', `${data.name} has joined the game!`, 'success');
 });
 
 socket.on('ai-add-failed', (data) => {
   console.error('Failed to add AI player:', data.error);
-  showNotification('AI Error', data.error, 'error');
+      showTypedNotification('AI Error', data.error, 'error');
 });
 
 // Initialize color selection when page loads
