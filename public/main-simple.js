@@ -48,6 +48,9 @@ function startGameInitialization() {
 
 // Menu System Variables (declare at module level)
 let menuScreen, gameUI, gameOverScreen;
+
+// ✅ PHASE 5 FIX: Use var instead of let to avoid temporal dead zone issues
+var lastRightClickEvent = null; // Store right-click position for context menu
 let playerName = '';
 let menuSelectedColor = '#00ff00';
 let selectedColor = null; // Current selected color ID from color picker
@@ -85,66 +88,35 @@ function initializeAfterDOM() {
 function initMenuSystem() {
   console.log('🎮 Initializing menu system...');
   
-  // Color picker setup for menu
-  const menuColorOptions = document.getElementById('menu-color-options');
-  const colors = [
-    '#00ff00', '#ff0000', '#0088ff', '#ffff00', '#ff00ff', 
-    '#00ffff', '#ff8800', '#ffffff', '#8800ff', '#00ff88'
-  ];
-  
-  colors.forEach(color => {
-    const colorDiv = document.createElement('div');
-    colorDiv.style.width = '30px';
-    colorDiv.style.height = '30px';
-    colorDiv.style.backgroundColor = color;
-    colorDiv.style.border = '2px solid transparent';
-    colorDiv.style.cursor = 'pointer';
-    colorDiv.style.borderRadius = '5px';
-    
-    colorDiv.addEventListener('click', () => {
-      // Remove previous selection
-      menuColorOptions.querySelectorAll('div').forEach(d => {
-        d.style.border = '2px solid transparent';
-      });
-      // Select this color
-      colorDiv.style.border = '2px solid white';
-      menuSelectedColor = color;
-    });
-    
-    // Select first color by default
-    if (color === colors[0]) {
-      colorDiv.style.border = '2px solid white';
-    }
-    
-    menuColorOptions.appendChild(colorDiv);
-  });
+  // Auto-color assignment - no manual color picker needed
+  console.log('🎨 Auto-color assignment system initialized - colors assigned by player index');
   
   // Menu button handlers
   document.getElementById('quick-play-btn').addEventListener('click', () => {
-    console.log('Starting quick play...');
+    console.log('🚀 Quick Play - Starting vs AI...');
     playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
-    gameMode = 'quickplay';
+    gameMode = 'vs-ai';
     startGame();
   });
   
   document.getElementById('vs-ai-btn').addEventListener('click', () => {
-    console.log('Starting vs AI...');
+    console.log('🤖 Starting vs AI...');
     playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
-    gameMode = 'vsai';
+    gameMode = 'vs-ai';
     startGame();
   });
   
   document.getElementById('create-game-btn').addEventListener('click', () => {
-    console.log('Starting multiplayer game...');
+    console.log('🎯 Creating multiplayer game...');
     playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
-    gameMode = 'multiplayer';
+    gameMode = 'create-vs-human';
     startGame();
   });
   
   document.getElementById('join-game-btn').addEventListener('click', () => {
-    console.log('Joining multiplayer game...');
+    console.log('🤝 Joining multiplayer game...');
     playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
-    gameMode = 'multiplayer';
+    gameMode = 'join-vs-human';
     startGame();
   });
   
@@ -184,9 +156,7 @@ function initMenuSystem() {
 
 // Start the game
 function startGame() {
-  // Get the proper color ID from the new color selection system
-  const colorToUse = selectedColor || 'magenta'; // Default to magenta if none selected
-  console.log('🎮 Starting game with:', { playerName, color: colorToUse, gameMode });
+  console.log('🎮 Starting game with:', { playerName, gameMode });
   
   // Prevent multiple connections
   if (socket && socket.connected) {
@@ -194,29 +164,57 @@ function startGame() {
     return;
   }
   
-  // Hide menu, show game UI and timer
-  menuScreen.style.display = 'none';
-  gameUI.style.display = 'block';
-  const timingUI = document.getElementById('timing-ui');
-  if (timingUI) timingUI.style.display = 'block';
-  isInGame = true;
-  
-  // Initialize the game with player settings
-  window.playerSettings = {
-    name: playerName,
-    color: colorToUse,
-    mode: gameMode
-  };
-  
-  // Initialize socket connection
+  // Initialize socket connection first
   socket = io();
   window.globalSocket = socket;
-  console.log('Socket.io initialized for game');
+  console.log('Socket.io initialized, waiting for connection...');
+  
+  // Wait for connection, then send appropriate game mode request
+  socket.on('connection-established', (data) => {
+    console.log('✅ Connected to server:', data);
+    
+    // Hide menu, show game UI and timer
+    menuScreen.style.display = 'none';
+    gameUI.style.display = 'block';
+    const timingUI = document.getElementById('timing-ui');
+    if (timingUI) timingUI.style.display = 'block';
+    isInGame = true;
+    
+    // Send the appropriate game creation request based on mode
+    switch (gameMode) {
+      case 'vs-ai':
+        console.log('🤖 Requesting vs AI game...');
+        socket.emit('create-vs-ai-game', {
+          playerName: playerName,
+          difficulty: 'MEDIUM' // Can be made configurable later
+        });
+        break;
+        
+      case 'create-vs-human':
+        console.log('🎯 Requesting create vs human game...');
+        socket.emit('create-vs-human-game', {
+          playerName: playerName
+        });
+        break;
+        
+      case 'join-vs-human':
+        console.log('🤝 Requesting join human game...');
+        socket.emit('join-human-game', {
+          playerName: playerName
+        });
+        break;
+        
+      default:
+        console.error('Unknown game mode:', gameMode);
+        socket.emit('create-vs-ai-game', {
+          playerName: playerName,
+          difficulty: 'MEDIUM'
+        });
+    }
+  });
   
   // Set up all socket event listeners
   setupSocketListeners();
-  
-  // Continue with normal game initialization after socket is ready
 }
 
 // Return to menu
@@ -334,11 +332,10 @@ function setupSocketListeners() {
     // Initialize game components
     initializeGameComponents();
     
-    // Send player info to server
-    const colorToUse = selectedColor || 'magenta'; // Use new color selection system
+    // Send player info to server - colors auto-assigned by Phase 3 system
     socket.emit('player-joined', {
-      name: playerName,
-      color: colorToUse
+      name: playerName
+      // ✅ PHASE 4 FIX: No color sent - server auto-assigns based on player index
     });
     
     // Request AI difficulties for the dropdown
@@ -377,6 +374,10 @@ function setupSocketListeners() {
     console.log('🔄 Pieces in received state:', Object.keys(newGameState.pieces || {}));
     console.log('🔄 Number of pieces received:', Object.keys(newGameState.pieces || {}).length);
     
+    // PHASE 1D DEBUG: Force rendering in all game modes, including waiting
+    console.log('🎮 EMPTY BOARD DEBUG: Current game mode:', gameMode);
+    console.log('🎮 EMPTY BOARD DEBUG: Pieces to render:', Object.values(newGameState.pieces || {}).map(p => `${p.type}@(${p.row},${p.col})`));
+    
     // Process delta updates for performance
     const delta = performanceOptimizer.processDeltaUpdate(newGameState);
     
@@ -391,7 +392,9 @@ function setupSocketListeners() {
         console.log(`🎯 Player ${playerId} has ${evolutionPoints} evolution points from server`);
       });
       
+      console.log('🎮 EMPTY BOARD DEBUG: About to call updateVisuals() with pieces:', Object.keys(gameState.pieces || {}));
       await updateVisuals();
+      console.log('🎮 EMPTY BOARD DEBUG: updateVisuals() completed, rendered meshes:', Object.keys(pieceMeshes));
       updateUI();
       console.log('🔄 Full update completed');
     } else {
@@ -444,8 +447,8 @@ function setupSocketListeners() {
       clearSelectionHighlight();
       hideDualMovementUI();
     } else {
-      console.error('Move failed:', data.error);
-      showNotification(data.error, '#ff0000', 3000);
+      console.error('Move failed:', data.message);
+      showNotification(data.message || 'Move failed', '#ff0000', 3000);
     }
   });
 
@@ -582,12 +585,13 @@ function setupSocketListeners() {
   });
 
   socket.on('evolution-point-award', (data) => {
-    const { playerId, amount, reason } = data;
-    console.log(`Evolution points awarded: ${amount} to ${playerId} for ${reason}`);
+    // ✅ PHASE 6 BUG FIX: Server sends 'points', not 'amount'
+    const { playerId, points, reason } = data;
+    console.log(`Evolution points awarded: ${points} to ${playerId} for ${reason}`);
     
     // Update player's evolution points in game state
     if (gameState.players[playerId]) {
-      gameState.players[playerId].evolutionPoints = (gameState.players[playerId].evolutionPoints || 0) + amount;
+      gameState.players[playerId].evolutionPoints = (gameState.players[playerId].evolutionPoints || 0) + points;
       console.log(`🎯 Updated player ${playerId} evolution points to:`, gameState.players[playerId].evolutionPoints);
     }
     
@@ -653,18 +657,8 @@ function setupSocketListeners() {
     updateChatStatus(data.status);
   });
 
-  // Color selection handlers
-  socket.on('color-selected', (data) => {
-    const { playerId, color } = data;
-    console.log(`Player ${playerId} selected color: ${color}`);
-    updateColorSelector();
-  });
-
-  socket.on('available-colors', (data) => {
-    const { colors } = data;
-    console.log('Available colors:', colors);
-    updateColorSelector();
-  });
+  // Auto-color assignment - no color selection needed
+  console.log('🎨 Using auto-color assignment - no manual color selection required');
 
   // Evolution choice handlers
   socket.on('evolution-choice-available', (data) => {
@@ -693,7 +687,8 @@ function setupSocketListeners() {
   socket.on('evolution-choice-dialog', (data) => {
     console.log('🎯 Evolution choice dialog event received:', data);
     const { pieceId, piece, reason, availablePaths, bankInfo, timeLimit } = data;
-    showEvolutionChoiceDialog(pieceId, piece, reason, availablePaths, bankInfo, timeLimit);
+    // ✅ PHASE 5: Use context menu instead of popup dialog
+    showEvolutionContextMenu(data, lastRightClickEvent);
   });
 
   socket.on('evolution-completed', (data) => {
@@ -1267,8 +1262,9 @@ function startTimer(playerId, timeLimit, startTime) {
   timerDuration = timeLimit;
   isTimerPaused = false;
   
-  // Update UI
-  updateTimerDisplay();
+  // Update UI with initial time
+  const initialRemaining = Math.max(0, timerDuration - (Date.now() - timerStartTime));
+  updateTimerDisplay(initialRemaining);
   
   // Start the timer interval
   if (currentTimer) {
@@ -1277,7 +1273,9 @@ function startTimer(playerId, timeLimit, startTime) {
   
   currentTimer = setInterval(() => {
     if (!isTimerPaused) {
-      updateTimerDisplay();
+      const elapsed = Date.now() - timerStartTime;
+      const remaining = Math.max(0, timerDuration - elapsed);
+      updateTimerDisplay(remaining);
     }
   }, 100); // Update every 100ms for smooth animation
   
@@ -1308,41 +1306,7 @@ function resumeTimer() {
   }
 }
 
-function updateTimerDisplay() {
-  const timeRemainingElement = document.getElementById('time-remaining');
-  const timerBarElement = document.getElementById('timer-bar');
-  const timerStatusElement = document.getElementById('timer-status');
-  
-  if (isTimerPaused) {
-    const remainingSeconds = pausedTimeRemaining / 1000;
-    timeRemainingElement.textContent = remainingSeconds.toFixed(1);
-    timerBarElement.style.width = `${(pausedTimeRemaining / 7000) * 100}%`;
-    return;
-  }
-  
-  const elapsed = Date.now() - timerStartTime;
-  const remaining = Math.max(0, timerDuration - elapsed);
-  const remainingSeconds = remaining / 1000;
-  
-  timeRemainingElement.textContent = remainingSeconds.toFixed(1);
-  
-  // Update progress bar
-  const progress = (remaining / timerDuration) * 100;
-  timerBarElement.style.width = `${progress}%`;
-  
-  // Update status
-  if (remaining <= 0) {
-    timerStatusElement.textContent = 'Time expired!';
-    timerStatusElement.style.color = '#ff0000';
-    if (currentTimer) {
-      clearInterval(currentTimer);
-      currentTimer = null;
-    }
-  } else {
-    timerStatusElement.textContent = 'Timer Active';
-    timerStatusElement.style.color = '#ccc';
-  }
-}
+
 
 function updateActivePlayer(playerId, playerName) {
   activePlayerId = playerId;
@@ -1940,20 +1904,16 @@ let gameState = {
   gridConfig: { rows: 20, cols: 8 }
 };
 
-// Color mapping from server color IDs to hex values - MOVED HERE TO FIX INITIALIZATION ORDER
+// ✅ PHASE 4: Color mapping synchronized with server auto-assignment system
 const COLOR_MAP = {
-  'red': 0xFF0000,
-  'blue': 0x0080FF,
-  'light_blue': 0x40C0FF,
-  'green': 0x00FF00,
-  'yellow': 0xFFD700,
-  'purple': 0x8000FF,
-  'magenta': 0xFF00FF,
-  'cyan': 0x00FFFF,
-  'orange': 0xFF8000,
-  'pink': 0xFF69B4,
-  'lime': 0x00FF80,
-  'teal': 0x008080
+  'red': 0xFF0000,      // Player 1
+  'blue': 0x0080FF,     // Player 2
+  'green': 0x00FF00,    // Player 3
+  'orange': 0xFF8000,   // Player 4
+  'purple': 0x8000FF,   // Player 5
+  'yellow': 0xFFD700,   // Player 6
+  'cyan': 0x00FFFF,     // Player 7
+  'pink': 0xFF69B4      // Player 8
 };
 
 // Visual elements
@@ -3151,15 +3111,19 @@ async function createPieceMeshOptimized(piece) {
             child.material = child.material.map(mat => {
               const newMat = mat.clone();
               newMat.color.setHex(playerColor);
-              newMat.metalness = 0.4;
-              newMat.roughness = 0.6;
+              // ✅ PHASE 3: Balanced material properties for optimal visual distinction
+              newMat.emissive.setHex(playerColor).multiplyScalar(0.15); // Subtle glow
+              newMat.metalness = 0.3; // Reduced metalness for better color visibility
+              newMat.roughness = 0.6; // Balanced roughness for good lighting response
               return newMat;
             });
           } else {
             child.material = child.material.clone();
             child.material.color.setHex(playerColor);
-            child.material.metalness = 0.4;
-            child.material.roughness = 0.6;
+            // ✅ PHASE 3: Balanced material properties for optimal visual distinction
+            child.material.emissive.setHex(playerColor).multiplyScalar(0.15); // Subtle glow
+            child.material.metalness = 0.3; // Reduced metalness for better color visibility
+            child.material.roughness = 0.6; // Balanced roughness for good lighting response
           }
           
           // Set userData on child meshes for click detection
@@ -3186,10 +3150,12 @@ async function createPieceMeshOptimized(piece) {
     const pieceColor = getPieceColorForPlayer(piece, player, playerIndex);
     console.log(`Applying geometric fallback color ${pieceColor.toString(16)} to ${piece.type} mesh`);
     
+    // ✅ PHASE 3: Balanced material properties for geometric fallbacks
     const material = performanceOptimizer.getCachedMaterial('standard', {
       color: pieceColor,
-      metalness: 0.3,
-      roughness: 0.7
+      emissive: new THREE.Color(pieceColor).multiplyScalar(0.15), // Subtle glow
+      metalness: 0.3, // Balanced metalness
+      roughness: 0.6  // Balanced roughness
     });
     
     mesh.material = material;
@@ -3347,27 +3313,11 @@ function createCachedTextLabel(symbol) {
   return texture;
 }
 
-// Get evolution points for a piece from the server's player data
+// Get evolution points for a piece - PHASE 1C: Display piece BASE VALUES, not player evolution bank
 function getEvolutionPointsForPiece(piece) {
   // Debug logging to see what data we have
   console.log('🔍 Getting evolution points for piece:', piece.id, 'type:', piece.type);
   console.log('🔍 Piece player ID:', piece.playerId);
-  console.log('🔍 GameState players:', gameState.players);
-  
-  const player = gameState.players[piece.playerId];
-  console.log('🔍 Found player:', player);
-  
-  // For player evolution points (shared across all pieces), check player object
-  if (player && player.evolutionPoints !== undefined) {
-    console.log('🔍 Player evolution points found:', player.evolutionPoints);
-    return player.evolutionPoints;
-  }
-  
-  // For individual piece evolution points, check piece object
-  if (piece.evolutionPoints !== undefined) {
-    console.log('🔍 Piece evolution points found:', piece.evolutionPoints);
-    return piece.evolutionPoints;
-  }
   
   // King pieces don't have evolution points - hide their labels
   if (piece.type === 'KING') {
@@ -3375,9 +3325,10 @@ function getEvolutionPointsForPiece(piece) {
     return 0;
   }
   
-  // Default piece values based on piece type (when no player-wide evolution points are available)
-  const defaultValues = {
-    'PAWN': 1,
+  // PHASE 1C: Always display piece BASE VALUES (intrinsic to piece type)
+  // These are the inherent point values of pieces, NOT the player's evolution bank
+  const pieceBaseValues = {
+    'PAWN': 1,        // ✅ Pawns always show 1 point (their base value)
     'ROOK': 5,
     'KNIGHT': 3,
     'BISHOP': 3,
@@ -3385,14 +3336,14 @@ function getEvolutionPointsForPiece(piece) {
     'JUMPER': 3,
     'SUPER_JUMPER': 5,
     'HYPER_JUMPER': 7,
-    'SPLITTER': 4,
+    'SPLITTER': 2,    // ✅ Splitters always show 2 points (their base value)
     'HYBRID_QUEEN': 12,
     'MISTRESS_JUMPER': 8
   };
   
-  const defaultValue = defaultValues[piece.type] || 1;
-  console.log('🔍 No evolution points found, using default for', piece.type, ':', defaultValue);
-  return defaultValue;
+  const baseValue = pieceBaseValues[piece.type] || 1;
+  console.log('🔍 Using piece base value for', piece.type, ':', baseValue);
+  return baseValue;
 }
 
 // Create evolution points label with team color styling
@@ -3633,18 +3584,8 @@ function updateUI() {
     }
   }
   
-  // Update selected color display
-  const selectedColorEl = document.getElementById('selected-color');
-  if (selectedColorEl) {
-    const myPlayer = gameState.players[socket.id];
-    if (myPlayer && myPlayer.selectedColor) {
-      selectedColorEl.textContent = `Selected: ${myPlayer.selectedColor}`;
-      selectedColorEl.style.color = myPlayer.selectedColor;
-    } else {
-      selectedColorEl.textContent = menuSelectedColor ? `Selected: ${menuSelectedColor}` : 'None selected';
-      selectedColorEl.style.color = menuSelectedColor || '#aaa';
-    }
-  }
+  // Update auto-assigned color display
+  updatePlayerColorDisplay();
   
   // Add player color indicators
   updatePlayerColorIndicators();
@@ -4499,36 +4440,18 @@ function highlightValidMoves() {
     positionMoveTypes[key].push(move);
   });
   
-  // Add new highlights
-  const processedPositions = new Set();
-  
+  // Add new highlights - create separate highlight for each move type
   validMoves.forEach(move => {
-    const posKey = `${move.row},${move.col}`;
-    
-    // Skip if we already processed this position
-    if (processedPositions.has(posKey)) return;
-    processedPositions.add(posKey);
-    
     const position = getWorldPosition(move.row, move.col);
-    const movesAtPosition = positionMoveTypes[posKey];
     
     // Different colors and shapes for different move types
     let highlightColor, highlightGeometry;
     
-    // Check if this position has multiple move types (specifically move + split)
-    const hasMultipleTypes = movesAtPosition.length > 1 && 
-                           movesAtPosition.some(m => m.type === 'split') && 
-                           movesAtPosition.some(m => m.type === 'move');
-    
-    if (hasMultipleTypes) {
-      // Special highlight for positions with multiple options
-      highlightColor = 0xffff00; // Yellow for multi-option
-      highlightGeometry = new THREE.TorusGeometry(0.2, 0.05, 8, 16); // Ring shape
-    } else if (move.type === 'attack') {
+    if (move.type === 'attack') {
       highlightColor = 0xff4444; // Red for attack
       highlightGeometry = new THREE.SphereGeometry(0.15, 8, 8);
     } else if (move.type === 'split') {
-      highlightColor = 0x44ff44; // Green for split (same as regular move)
+      highlightColor = 0xffff00; // BRIGHT YELLOW for split moves - visually distinct from regular moves
       // Create a torus (3D ring) for split moves - more clickable than flat ring
       highlightGeometry = new THREE.TorusGeometry(0.4, 0.05, 8, 32);
     } else if (move.type === 'jump-capture') {
@@ -4562,7 +4485,7 @@ function highlightValidMoves() {
     highlight.userData = { isValidMoveHighlight: true, move: move };
     
     // Make sure the highlight is above the globe surface
-    const heightAdjustment = 0.05;
+    const heightAdjustment = move.type === 'split' ? 0.08 : 0.05; // Split highlights slightly higher
     const normalizedPos = highlight.position.clone().normalize();
     highlight.position.addScaledVector(normalizedPos, heightAdjustment);
     
@@ -4718,8 +4641,21 @@ function getPlayerColor(playerId, playerIndex) {
 
 // Enhanced piece color function that prioritizes player identification
 function getPieceColorForPlayer(piece, player, playerIndex) {
-  // Check if this is a split piece that should inherit parent color
-  if (piece.id && piece.id.includes('-split-')) {
+  // ✅ PHASE 4: Check if piece has inherited color from server (for split pieces)
+  if (piece.inheritedColor && COLOR_MAP[piece.inheritedColor]) {
+    const inheritedHexColor = COLOR_MAP[piece.inheritedColor];
+    console.log(`🎨 PHASE 4 - SPLIT INHERITANCE SUCCESS: Split piece ${piece.id} using server-inherited color ${piece.inheritedColor} → 0x${inheritedHexColor.toString(16).toUpperCase()}`);
+    return inheritedHexColor;
+  }
+  
+  // Debug: Log if inheritedColor exists but not found in COLOR_MAP
+  if (piece.inheritedColor && !COLOR_MAP[piece.inheritedColor]) {
+    console.warn(`🚨 PHASE 4 - COLOR_MAP MISMATCH: Split piece ${piece.id} has inheritedColor '${piece.inheritedColor}' but it's not in COLOR_MAP:`, Object.keys(COLOR_MAP));
+  }
+  
+  // Legacy fallback: Check if this is a split piece that needs to inherit color from existing meshes
+  if (piece.id && piece.id.includes('-split-') && !piece.inheritedColor) {
+    console.log(`🎨 SPLIT INHERITANCE: Legacy fallback for split piece ${piece.id} without server color info`);
     // For split pieces, find any existing piece with the same player that has a color we can inherit
     // Look for other pieces from the same player that might have evolved colors
     let parentColor = null;
@@ -4784,6 +4720,14 @@ function getPieceColorForPlayer(piece, player, playerIndex) {
 // Handle right-click for evolution menu
 function onRightClick(event) {
   console.log('🖱️ Right-click event triggered - onRightClick called');
+  
+  // ✅ PHASE 5: Store right-click position for context menu
+  lastRightClickEvent = {
+    clientX: event.clientX,
+    clientY: event.clientY,
+    pageX: event.pageX,
+    pageY: event.pageY
+  };
   
   // Calculate mouse position
   const rect = renderer.domElement.getBoundingClientRect();
@@ -5404,6 +5348,7 @@ document.getElementById('ready-toggle-btn').addEventListener('click', () => {
 let currentEvolutionChoice = null;
 let evolutionTimer = null;
 let playerEvolutionBank = { points: 0, totalEarned: 0 };
+// ✅ PHASE 6 BUG FIX: lastRightClickEvent now declared at top of file
 
 // Evolution event handlers
 document.getElementById('evolution-toggle').addEventListener('click', () => {
@@ -6127,6 +6072,71 @@ socket.on('ready-toggle-failed', (data) => {
   alert('Failed to toggle ready status: ' + data.error);
 });
 
+// === NEW GAME MODE EVENT HANDLERS ===
+
+socket.on('game-created', (data) => {
+  console.log('🎉 Game created successfully!', data);
+  console.log('🎮 EMPTY BOARD DEBUG: game-created event received, gameType:', data.gameType);
+  console.log('🎮 EMPTY BOARD DEBUG: players in created game:', data.players);
+  showNotification('Game Created!', data.message);
+  
+  if (data.gameType === 'vs-human-waiting') {
+    console.log('🎮 EMPTY BOARD DEBUG: Human vs human waiting mode - forcing visual update');
+    showNotification('Waiting for Opponent', 'Game created! Waiting for another player to join...');
+    
+    // Force visual update to ensure pieces are shown even while waiting
+    if (data.players && Object.keys(data.players).length > 0) {
+      console.log('🎮 EMPTY BOARD DEBUG: Found players in game-created, calling updateVisuals');
+      // Trigger piece rendering even in waiting mode
+      setTimeout(() => updateVisuals(), 500);
+    }
+  }
+});
+
+socket.on('game-joined', (data) => {
+  console.log('🎉 Successfully joined game!', data);
+  showNotification('Game Joined!', data.message);
+});
+
+socket.on('game-creation-failed', (data) => {
+  console.error('❌ Game creation failed:', data.error);
+  showNotification('Failed to Create Game', data.error);
+  returnToMenu();
+});
+
+socket.on('join-failed', (data) => {
+  console.error('❌ Failed to join game:', data.error);
+  showNotification('Failed to Join Game', data.error);
+  returnToMenu();
+});
+
+socket.on('game-waiting-for-players', (data) => {
+  console.log('🕐 Game waiting for players:', data);
+  if (!isInGame) {
+    showNotification('Game Available!', `${data.creatorName} is waiting for an opponent. Click "Join Game" to play!`);
+  }
+});
+
+socket.on('player-joined-game', (data) => {
+  console.log('👥 Player joined the game:', data);
+  showNotification('Player Joined!', `${data.playerName} joined the game! (${data.totalPlayers} players total)`);
+});
+
+socket.on('game-preview', (data) => {
+  console.log('👀 Game preview:', data);
+  // Update join button status based on whether game can be joined
+  const joinBtn = document.getElementById('join-game-btn');
+  if (joinBtn) {
+    if (data.canJoin && !data.gameInProgress) {
+      joinBtn.disabled = false;
+      joinBtn.textContent = `JOIN GAME (${data.playersCount}/4)`;
+    } else {
+      joinBtn.disabled = true;
+      joinBtn.textContent = data.gameInProgress ? 'GAME IN PROGRESS' : 'GAME FULL';
+    }
+  }
+});
+
 socket.on('game-starting', (data) => {
   console.log('Game starting in 3 seconds...');
   startGameCountdown(data.countdown);
@@ -6631,38 +6641,9 @@ setTimeout(() => {
   gameInfoEl.textContent = 'Click on your pieces to select them';
 }, 2000); 
 
-// Color selection system
-let availableColors = [];
-
-// Initialize color selection
-function initializeColorSelection() {
-  socket.emit('get-available-colors');
-}
-
-// Socket handlers for color selection
-socket.on('available-colors', (data) => {
-  availableColors = data.colors;
-  updateColorSelector();
-});
-
-socket.on('color-selected', (data) => {
-  console.log('🎨 Color selected:', data.colorId);
-  selectedColor = data.colorId;
-  updateColorSelector();
-  updateSelectedColorDisplay();
-  
-  // Force piece color update by clearing cache and recreating pieces
-  performanceOptimizer.clearPieceCache();
-  if (gameState && gameState.pieces) {
-    console.log('🔄 Updating piece colors after color selection');
-    updateVisuals();
-  }
-});
-
-socket.on('color-selection-failed', (data) => {
-  console.warn('Color selection failed:', data.error);
-  alert('Color selection failed: ' + data.error);
-});
+// ✅ PHASE 3: Auto-Color Assignment System
+// Colors are now assigned automatically based on player index - no manual selection needed
+console.log('🎨 Auto-color assignment system active - colors assigned by player index');
 
 // AI player event handlers
 socket.on('ai-player-added', (data) => {
@@ -6675,58 +6656,30 @@ socket.on('ai-add-failed', (data) => {
   showNotification('AI Error', data.error, 'error');
 });
 
-// Update color selector UI
-function updateColorSelector() {
-  const colorOptionsEl = document.getElementById('color-options');
-  if (!colorOptionsEl) return;
+// ✅ PHASE 3: Auto-Color Assignment - Display current player's color
+function updatePlayerColorDisplay() {
+  const colorDisplayEl = document.getElementById('player-color-display');
+  if (!colorDisplayEl) return;
   
-  colorOptionsEl.innerHTML = '';
-  
-  availableColors.forEach(color => {
-    const option = document.createElement('div');
-    option.className = 'color-option';
-    option.style.backgroundColor = `#${color.hex.toString(16).padStart(6, '0')}`;
-    option.title = color.name;
-    option.dataset.colorId = color.id;
+  const myPlayer = gameState.players[socket.id];
+  if (myPlayer) {
+    const playerColor = getPlayerColor(myPlayer.id, myPlayer.index);
+    const colorHex = '#' + playerColor.toString(16).padStart(6, '0');
     
-    if (selectedColor === color.id) {
-      option.classList.add('selected');
-      option.textContent = '✓';
-    }
-    
-    option.addEventListener('click', () => {
-      console.log('🎨 User clicked on color:', color.id, color.name);
-      if (selectedColor !== color.id) {
-        console.log('🎨 Sending color selection to server:', color.id);
-        socket.emit('select-color', { colorId: color.id });
-      } else {
-        console.log('🎨 Color already selected, ignoring click');
-      }
-    });
-    
-    colorOptionsEl.appendChild(option);
-  });
-}
-
-// Update selected color display
-function updateSelectedColorDisplay() {
-  const selectedColorEl = document.getElementById('selected-color');
-  if (!selectedColorEl) return;
-  
-  if (selectedColor) {
-    const colorInfo = availableColors.find(c => c.id === selectedColor);
-    if (colorInfo) {
-      selectedColorEl.textContent = `Selected: ${colorInfo.name}`;
-      selectedColorEl.style.color = `#${colorInfo.hex.toString(16).padStart(6, '0')}`;
-    }
+    colorDisplayEl.textContent = `Player ${myPlayer.index + 1} Color`;
+    colorDisplayEl.style.color = colorHex;
+    colorDisplayEl.style.fontWeight = 'bold';
   } else {
-    selectedColorEl.textContent = 'None selected';
-    selectedColorEl.style.color = '#aaa';
+    colorDisplayEl.textContent = 'Auto-assigned on join';
+    colorDisplayEl.style.color = '#888';
   }
 }
 
-// Initialize color selection when page loads
-initializeColorSelection(); 
+// Auto-update color display when game state changes
+socket.on('game-state-update', (data) => {
+  // ... existing game state update logic ...
+  updatePlayerColorDisplay(); // Update color display
+}); 
 
 // Performance Optimization System (duplicate removed)
 
@@ -6777,7 +6730,16 @@ setTimeout(() => {
 
 // ... existing code ...
 
+// ✅ PHASE 5: Legacy dialog system - replaced by context menu
+// function showEvolutionChoiceDialog(pieceId, piece, reason, availablePaths, bankInfo, timeLimit) {
+//   console.log('🎯 showEvolutionChoiceDialog called with:', { pieceId, piece, reason, availablePaths, bankInfo, timeLimit });
+
 function showEvolutionChoiceDialog(pieceId, piece, reason, availablePaths, bankInfo, timeLimit) {
+  console.log('🎯 PHASE 5: Legacy showEvolutionChoiceDialog - redirecting to context menu');
+  // Fallback to context menu if called directly
+  showEvolutionContextMenu({pieceId, piece, reason, availablePaths, bankInfo, timeLimit}, lastRightClickEvent || {clientX: window.innerWidth/2, clientY: window.innerHeight/2});
+  return; // Skip the old dialog code below
+  
   console.log('🎯 showEvolutionChoiceDialog called with:', { pieceId, piece, reason, availablePaths, bankInfo, timeLimit });
   
   // Create dialog HTML with inline styles
@@ -7097,5 +7059,207 @@ function closeEvolutionDialog() {
   if (window.evolutionCountdown) {
     clearInterval(window.evolutionCountdown);
     window.evolutionCountdown = null;
+  }
+}
+
+// ✅ PHASE 5: Evolution Context Menu System
+function showEvolutionContextMenu(data, mouseEvent) {
+  console.log('🎯 PHASE 5: showEvolutionContextMenu called with:', data);
+  
+  // Remove any existing context menu
+  hideEvolutionContextMenu();
+  
+  if (!mouseEvent) {
+    console.warn('⚠️ No mouse event provided for context menu position');
+    return;
+  }
+  
+  const { pieceId, piece, reason, availablePaths, bankInfo, timeLimit } = data;
+  
+  // Create context menu at mouse position
+  const contextMenu = document.createElement('div');
+  contextMenu.id = 'evolution-context-menu';
+  contextMenu.style.cssText = `
+    position: fixed;
+    left: ${mouseEvent.clientX}px;
+    top: ${mouseEvent.clientY}px;
+    background: #2a2a2a;
+    color: white;
+    border: 2px solid #4CAF50;
+    border-radius: 8px;
+    padding: 8px 0;
+    z-index: 10000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    min-width: 200px;
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    animation: contextMenuFadeIn 0.2s ease-out;
+  `;
+  
+  // Add CSS animation for smooth appearance
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes contextMenuFadeIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .context-menu-item {
+      padding: 10px 15px;
+      cursor: pointer;
+      border-bottom: 1px solid #444;
+      transition: background-color 0.2s ease;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .context-menu-item:last-child {
+      border-bottom: none;
+    }
+    .context-menu-item:hover {
+      background-color: #4CAF50;
+      color: white;
+    }
+    .context-menu-item.disabled {
+      color: #666;
+      cursor: not-allowed;
+    }
+    .context-menu-item.disabled:hover {
+      background-color: transparent;
+      color: #666;
+    }
+    .context-menu-header {
+      padding: 8px 15px;
+      background: #4CAF50;
+      color: white;
+      font-weight: bold;
+      font-size: 12px;
+      text-align: center;
+    }
+    .context-menu-cost {
+      color: #ffd700;
+      font-size: 12px;
+      font-weight: bold;
+    }
+  `;
+  
+  if (!document.getElementById('context-menu-styles')) {
+    style.id = 'context-menu-styles';
+    document.head.appendChild(style);
+  }
+  
+  // Create menu content
+  let menuHTML = `
+    <div class="context-menu-header">
+      ${piece.symbol} ${piece.type} Evolution
+      <div style="font-size: 10px; font-weight: normal; margin-top: 2px;">
+        Points: ${bankInfo.points} | Time: <span id="context-timer">${timeLimit}s</span>
+      </div>
+    </div>
+  `;
+  
+  // Add evolution paths
+  availablePaths.forEach(path => {
+    const canAfford = bankInfo.points >= path.cost;
+    const itemClass = canAfford ? 'context-menu-item' : 'context-menu-item disabled';
+    
+    menuHTML += `
+      <div class="${itemClass}" data-action="evolve" data-piece-id="${pieceId}" data-path='${JSON.stringify(path)}'>
+        <div>
+          <div>🔄 → ${path.targetType}</div>
+          <div style="font-size: 11px; color: #ccc;">${path.description}</div>
+        </div>
+        <div class="context-menu-cost">${path.cost}pts</div>
+      </div>
+    `;
+  });
+  
+  // Add bank option
+  menuHTML += `
+    <div class="context-menu-item" data-action="bank" data-piece-id="${pieceId}">
+      <div>
+        <div>💰 Bank Points</div>
+        <div style="font-size: 11px; color: #ccc;">Save for later</div>
+      </div>
+      <div class="context-menu-cost">+${bankInfo.points}</div>
+    </div>
+  `;
+  
+  contextMenu.innerHTML = menuHTML;
+  document.body.appendChild(contextMenu);
+  
+  // Position adjustment to keep menu on screen
+  const menuRect = contextMenu.getBoundingClientRect();
+  const windowWidth = window.innerWidth;
+  const windowHeight = window.innerHeight;
+  
+  if (menuRect.right > windowWidth) {
+    contextMenu.style.left = (mouseEvent.clientX - menuRect.width) + 'px';
+  }
+  if (menuRect.bottom > windowHeight) {
+    contextMenu.style.top = (mouseEvent.clientY - menuRect.height) + 'px';
+  }
+  
+  // Add click handlers
+  contextMenu.addEventListener('click', (e) => {
+    const item = e.target.closest('.context-menu-item');
+    if (!item || item.classList.contains('disabled')) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const action = item.getAttribute('data-action');
+    const pieceId = item.getAttribute('data-piece-id');
+    
+    if (action === 'evolve') {
+      const path = JSON.parse(item.getAttribute('data-path'));
+      console.log('🎯 PHASE 5: Context menu evolution chosen:', path);
+      chooseEvolution(pieceId, path);
+    } else if (action === 'bank') {
+      console.log('🎯 PHASE 5: Context menu bank chosen');
+      bankEvolutionPoints(pieceId);
+    }
+    
+    hideEvolutionContextMenu();
+  });
+  
+  // Start countdown timer
+  let timeLeft = timeLimit;
+  const timerElement = document.getElementById('context-timer');
+  
+  const countdown = setInterval(() => {
+    timeLeft--;
+    if (timerElement) {
+      timerElement.textContent = timeLeft + 's';
+    }
+    
+    if (timeLeft <= 0) {
+      clearInterval(countdown);
+      console.log('🎯 PHASE 5: Context menu timeout, auto-banking');
+      bankEvolutionPoints(pieceId);
+      hideEvolutionContextMenu();
+    }
+  }, 1000);
+  
+  // Store countdown reference for cleanup
+  window.evolutionContextCountdown = countdown;
+  
+  // Hide menu when clicking elsewhere
+  setTimeout(() => {
+    document.addEventListener('click', hideEvolutionContextMenu, { once: true });
+  }, 100);
+  
+  console.log('🎯 PHASE 5: Evolution context menu displayed successfully');
+}
+
+function hideEvolutionContextMenu() {
+  const contextMenu = document.getElementById('evolution-context-menu');
+  if (contextMenu) {
+    contextMenu.remove();
+  }
+  
+  // Clear countdown timer
+  if (window.evolutionContextCountdown) {
+    clearInterval(window.evolutionContextCountdown);
+    window.evolutionContextCountdown = null;
   }
 } 

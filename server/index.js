@@ -224,35 +224,42 @@ setTimeout(() => {
   }, 2000); // Check 2 seconds after victory system init
 }, 1000);
 
-io.on('connection', (socket) => {
-  console.log(`New client connected: ${socket.id}`);
+// === GAME MODE HELPER FUNCTIONS ===
+
+function clearGameState() {
+  console.log('🧹 Clearing game state for new game');
+  gameState.players = {};
+  gameState.pieces = {};
+  gameState.grid = {};
+  gameState.playerCount = 0;
+  gameState.pendingBattles = {};
+  gameState.pendingEvolutions = {};
+  gameState.waitingForPlayers = false;
+  gameState.gameEnded = false;
+  gameState.gameStartTime = null;
+  gameState.activePlayer = null;
   
-  // Check if game is full
-  if (gameState.playerCount >= GAME_CONFIG.MAX_PLAYERS) {
-    socket.emit('game-full');
-    socket.disconnect();
-    return;
-  }
-  
-  // Find the next available player slot (reuse slots when players disconnect)
-  let playerIndex = 0;
-  while (playerIndex < GAME_CONFIG.MAX_PLAYERS && 
-         Object.values(gameState.players).some(p => p.index === playerIndex)) {
-    playerIndex++;
-  }
+  // ✅ PHASE 3: No color tracking needed - colors auto-assigned by index
+}
+
+function createPlayer(socketId, playerName, playerIndex) {
+  console.log(`👤 Creating player: ${playerName} (index: ${playerIndex})`);
   
   const spawnArea = GAME_CONFIG.SPAWN_AREAS[playerIndex];
   
-  // Assign first available color
-  const availableColors = getAvailableColors();
-  const defaultColor = availableColors.length > 0 ? availableColors[0].id : 'red';
+  // ✅ PHASE 3: Auto-assign color based on player index
+  const assignedColor = getPlayerColorById(playerIndex);
+  const assignedColorName = getPlayerColorName(playerIndex);
+  
+  console.log(`🎨 Auto-assigned ${assignedColorName} (${assignedColor}) to player ${playerIndex + 1}`);
   
   const player = {
-    id: socket.id,
-    name: `Player ${playerIndex + 1}`,
+    id: socketId,
+    name: playerName || `Player ${playerIndex + 1}`,
     index: playerIndex,
-    color: defaultColor,
-    selectedColor: defaultColor,
+    color: assignedColor,
+    selectedColor: assignedColor, // For compatibility
+    assignedColorName: assignedColorName, // For display purposes
     spawnArea: spawnArea,
     pieces: [],
     stats: {
@@ -263,42 +270,234 @@ io.on('connection', (socket) => {
     }
   };
   
-  // Mark color as taken
-  takenColors.add(defaultColor);
-  
-  gameState.players[socket.id] = player;
-  gameState.playerCount = Object.keys(gameState.players).length;
+  // No need to track taken colors - each player index has a unique color
   
   // Initialize evolution bank with starting points
-  evolutionManager.initializePlayerBank(socket.id);
-  evolutionManager.addEvolutionPoints(socket.id, 5, 'game_start'); // Starting with 5 evolution points
-  
-  // Start recording if this is the first player
-  if (gameState.playerCount === 1) {
-    spectatorManager.startRecording('main', gameState);
-    gameState.gameStartTime = Date.now(); // Set game start time
-  }
+  evolutionManager.initializePlayerBank(socketId);
+  evolutionManager.addEvolutionPoints(socketId, 1, 'game_start');
   
   // Create starting pieces for the player
   createStartingPieces(player);
   
   // Add player to timing system
-  timingManager.addPlayer(socket.id);
+  timingManager.addPlayer(socketId);
   
-  // Initialize timing system if this is the first player
-  if (gameState.playerCount === 1) {
-    timingManager.initialize(gameState);
+  return player;
+}
+
+function createAIPlayer(aiPlayerId, difficulty, playerIndex) {
+  console.log(`🤖 Creating AI player: ${difficulty} (index: ${playerIndex})`);
+  
+  const spawnArea = GAME_CONFIG.SPAWN_AREAS[playerIndex];
+  
+  // ✅ PHASE 3: Auto-assign color based on player index
+  const assignedColor = getPlayerColorById(playerIndex);
+  const assignedColorName = getPlayerColorName(playerIndex);
+  
+  console.log(`🎨 Auto-assigned ${assignedColorName} (${assignedColor}) to AI player ${playerIndex + 1}`);
+  
+  const aiPlayer = {
+    id: aiPlayerId,
+    index: playerIndex,
+    color: assignedColor,
+    selectedColor: assignedColor, // For compatibility
+    assignedColorName: assignedColorName, // For display purposes
+    spawnArea: spawnArea,
+    pieces: [],
+    isAI: true,
+    aiDifficulty: difficulty,
+    name: `AI ${AI_DIFFICULTY[difficulty].name}`,
+    stats: {
+      piecesLost: 0,
+      piecesEvolved: 0,
+      battlesWon: 0,
+      battlesLost: 0
+    }
+  };
+  
+  // No need to track taken colors - each player index has a unique color
+  
+  // Register with AI manager
+  aiManager.addAIPlayer(aiPlayerId, difficulty, {});
+  
+  // Initialize evolution bank with starting points
+  evolutionManager.initializePlayerBank(aiPlayerId);
+  evolutionManager.addEvolutionPoints(aiPlayerId, 1, 'game_start');
+  
+  // Create starting pieces for AI
+  createStartingPieces(aiPlayer);
+  
+  // Add AI player to timing system
+  timingManager.addPlayer(aiPlayerId);
+  
+  return aiPlayer;
+}
+
+function initializeGameSystems() {
+  console.log('🎮 Initializing game systems');
+  
+  // Start recording for spectators
+  spectatorManager.startRecording('main', gameState);
+  gameState.gameStartTime = Date.now();
+  
+  // Always initialize timing system with the new gameState (even with 0 players)
+  timingManager.initialize(gameState);
+  
+  // Add players to main chat room
+  Object.values(gameState.players).forEach(player => {
+    if (!player.isAI) {
+      chatManager.joinChatRoom('main', player.id, player.name, player.id);
+    }
+  });
+  
+  // Start AI turn cycle if needed
+  setTimeout(() => {
+    const hasAI = Object.values(gameState.players).some(p => p.isAI);
+    if (hasAI) {
+      startAITurnCycle();
+    }
+  }, 1000);
+}
+
+io.on('connection', (socket) => {
+  console.log(`New client connected: ${socket.id}`);
+  
+  // Send connection confirmation (no auto-player creation)
+  socket.emit('connection-established', {
+    socketId: socket.id,
+    availableGameModes: ['create-vs-ai', 'create-vs-human', 'join-human-game', 'spectate']
+  });
+  
+  // Send current game state for spectator preview if game exists
+  if (Object.keys(gameState.players).length > 0) {
+    socket.emit('game-preview', {
+      playersCount: gameState.playerCount,
+      gameInProgress: !gameState.gameEnded,
+      canJoin: gameState.playerCount < GAME_CONFIG.MAX_PLAYERS
+    });
   }
   
-  // Add player to main chat room
-  chatManager.joinChatRoom('main', socket.id, player.name, socket.id);
+  // === NEW GAME MODE HANDLERS ===
   
-  // Broadcast updated game state
-  broadcastGameState();
+  // Quick Play vs AI - Immediate 1v1 game  
+  socket.on('create-vs-ai-game', (data) => {
+    const { playerName, difficulty } = data;
+    console.log(`🤖 Creating vs AI game: ${playerName} vs AI (${difficulty})`);
+    
+    // Clear any existing game
+    clearGameState();
+    
+    // Create human player
+    const humanPlayer = createPlayer(socket.id, playerName, 0);
+    gameState.players[socket.id] = humanPlayer;
+    gameState.playerCount = 1;
+    
+    // Create AI opponent
+    const aiPlayerId = `ai-${Date.now()}`;
+    const aiPlayer = createAIPlayer(aiPlayerId, difficulty || 'MEDIUM', 1);
+    gameState.players[aiPlayerId] = aiPlayer;
+    gameState.playerCount = 2;
+    
+    // Initialize game systems
+    initializeGameSystems();
+    
+    // Start the game immediately
+    socket.emit('game-created', { 
+      gameType: 'vs-ai',
+      players: gameState.players,
+      message: `Game started: ${playerName} vs AI ${difficulty}` 
+    });
+    
+    broadcastGameState();
+  });
+  
+  // Create game vs Human - Wait for another player
+  socket.on('create-vs-human-game', (data) => {
+    const { playerName } = data;
+    console.log(`👥 Creating vs Human game: ${playerName} waiting for opponent`);
+    
+    // Check if there's already a waiting game
+    if (gameState.playerCount > 0) {
+      socket.emit('game-creation-failed', { 
+        error: 'A game is already in progress. Try joining instead.' 
+      });
+      return;
+    }
+    
+    // Clear any existing game
+    clearGameState();
+    
+    // Create human player and wait
+    const humanPlayer = createPlayer(socket.id, playerName, 0);
+    gameState.players[socket.id] = humanPlayer;
+    gameState.playerCount = 1;
+    gameState.waitingForPlayers = true;
+    
+    // Initialize basic systems (no AI)
+    initializeGameSystems();
+    
+    socket.emit('game-created', { 
+      gameType: 'vs-human-waiting',
+      players: gameState.players,
+      message: `Game created: ${playerName} waiting for opponent...` 
+    });
+    
+    // Broadcast that a game is waiting for players
+    io.emit('game-waiting-for-players', {
+      creatorName: playerName,
+      playersNeeded: 1
+    });
+    
+    broadcastGameState();
+  });
+  
+  // Join Human Game - Join existing waiting game  
+  socket.on('join-human-game', (data) => {
+    const { playerName } = data;
+    console.log(`🤝 ${playerName} attempting to join human game`);
+    
+    // Check if there's a waiting game
+    if (gameState.playerCount !== 1 || !gameState.waitingForPlayers) {
+      socket.emit('join-failed', { 
+        error: 'No games available to join. Try creating a new game.' 
+      });
+      return;
+    }
+    
+    // Check if game is full
+    if (gameState.playerCount >= GAME_CONFIG.MAX_PLAYERS) {
+      socket.emit('join-failed', { error: 'Game is full' });
+      return;
+    }
+    
+    // Add as second player
+    const humanPlayer = createPlayer(socket.id, playerName, 1);
+    gameState.players[socket.id] = humanPlayer;
+    gameState.playerCount = 2;
+    gameState.waitingForPlayers = false;
+    
+    // Add player to timing system  
+    timingManager.addPlayer(socket.id);
+    
+    // Start the game now that we have 2 players
+    socket.emit('game-joined', { 
+      gameType: 'vs-human',
+      players: gameState.players,
+      message: `${playerName} joined the game!` 
+    });
+    
+    // Notify other players
+    socket.broadcast.emit('player-joined-game', {
+      playerName: playerName,
+      totalPlayers: gameState.playerCount
+    });
+    
+    broadcastGameState();
+  });
   
   // Handle player information updates
   socket.on('player-joined', (data) => {
-    const { name, color } = data;
+    const { name } = data; // ✅ PHASE 4 FIX: No longer accept color - auto-assigned by Phase 3 system
     const player = gameState.players[socket.id];
     
     if (player) {
@@ -308,11 +507,7 @@ io.on('connection', (socket) => {
         console.log(`Player ${socket.id} updated name to: ${name}`);
       }
       
-      // Update player color if provided
-      if (color) {
-        player.selectedColor = color;
-        console.log(`Player ${socket.id} updated color to: ${color}`);
-      }
+      // ✅ PHASE 4: Color is already auto-assigned in createPlayer() - no manual override allowed
       
       // Initialize statistics with proper name
       statisticsManager.initPlayerStats(socket.id, player.name);
@@ -624,7 +819,7 @@ io.on('connection', (socket) => {
     
     // Initialize evolution bank with starting points
     evolutionManager.initializePlayerBank(aiPlayerId);
-    evolutionManager.addEvolutionPoints(aiPlayerId, 5, 'game_start');
+    evolutionManager.addEvolutionPoints(aiPlayerId, 1, 'game_start');
     
     // Create starting pieces for AI
     createStartingPieces(aiPlayer);
@@ -895,22 +1090,28 @@ io.on('connection', (socket) => {
       return;
     }
     
-    const choice = evolutionManager.createEvolutionChoice(pieceId, piece, socket.id);
+    // ✅ PHASE 6 BUG FIX: Use proper evolution path system and correct event name
+    const availablePaths = evolutionManager.getAvailableEvolutionPaths(pieceId, piece, socket.id);
     
-    if (!choice) {
+    if (availablePaths.length === 0) {
       socket.emit('evolution-choice-failed', { error: 'No evolution paths available for this piece' });
       return;
     }
     
+    // Get bank info
+    const bankInfo = evolutionManager.getPlayerBankInfo(socket.id);
+    
     // Pause cooldowns during evolution choice
     timingManager.pauseAllCooldowns();
     
-    socket.emit('evolution-choice-available', {
+    // ✅ PHASE 6 BUG FIX: Send evolution-choice-dialog to match Phase 5 context menu system
+    socket.emit('evolution-choice-dialog', {
       pieceId: pieceId,
       piece: piece,
-      availablePaths: choice.availablePaths,
-      bankInfo: evolutionManager.getPlayerBankInfo(socket.id),
-      timeLeft: 30
+      reason: 'right_click', // Indicate this was requested via right-click
+      availablePaths: availablePaths,
+      bankInfo: bankInfo,
+      timeLimit: 30 // 30 seconds to make choice
     });
   });
 
@@ -1061,32 +1262,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Color selection handlers
-  socket.on('get-available-colors', () => {
-    const availableColors = getAvailableColors();
-    socket.emit('available-colors', { colors: availableColors });
-  });
-
-  socket.on('select-color', (data) => {
-    const { colorId } = data;
-    console.log(`🎨 Server: Player ${socket.id} wants to select color ${colorId}`);
-    const result = setPlayerColor(socket.id, colorId);
-    
-    if (result.success) {
-      console.log(`🎨 Server: Color ${colorId} successfully assigned to player ${socket.id}`);
-      socket.emit('color-selected', { colorId: colorId });
-      
-      // Broadcast updated game state to all players
-      broadcastGameState();
-      
-      // Broadcast available colors to all players
-      const availableColors = getAvailableColors();
-      io.emit('available-colors', { colors: availableColors });
-    } else {
-      console.log(`🎨 Server: Color selection failed for player ${socket.id}:`, result.error);
-      socket.emit('color-selection-failed', { error: result.error });
-    }
-  });
+  // ✅ PHASE 3: Auto-Color Assignment - No color selection handlers needed
+  // Colors are assigned automatically based on player index
+  console.log('🎨 Auto-color assignment active - manual color selection disabled');
 
   socket.on('get-chat-history', (data) => {
     const { roomId } = data;
@@ -1193,14 +1371,8 @@ io.on('connection', (socket) => {
       // Remove from chat
       chatManager.leaveChatRoom('main', socket.id);
       
-      // Free up the player's color
-      if (player.selectedColor) {
-        takenColors.delete(player.selectedColor);
-        
-        // Broadcast updated available colors to all players
-        const availableColors = getAvailableColors();
-        io.emit('available-colors', { colors: availableColors });
-      }
+      // ✅ PHASE 3: No color freeing needed - colors are auto-assigned by index
+      // Colors are automatically available for the next player with the same index
       
       // Check if only one player remains
       if (gameState.playerCount === 1) {
@@ -1256,14 +1428,7 @@ io.on('connection', (socket) => {
         }
       });
       
-              // Free up the player's color
-        if (player.selectedColor) {
-          takenColors.delete(player.selectedColor);
-          
-          // Broadcast updated available colors to all players
-          const availableColors = getAvailableColors();
-          io.emit('available-colors', { colors: availableColors });
-        }
+              // ✅ PHASE 3: No color freeing needed - auto-assigned by index
       }
     
     delete gameState.players[socket.id];
@@ -1489,7 +1654,7 @@ function startGameFromLobby(lobbyId) {
     
     // Initialize evolution bank with starting points
     evolutionManager.initializePlayerBank(player.id);
-    evolutionManager.addEvolutionPoints(player.id, 5, 'game_start'); // Starting with 5 evolution points
+    evolutionManager.addEvolutionPoints(player.id, 1, 'game_start'); // Starting with 1 evolution point
   });
   
   // Start recording for spectators
@@ -1883,20 +2048,11 @@ function handlePieceMove(playerId, moveData) {
   gameState.grid[targetPosKey] = pieceId;
   
   // Check for circumnavigation bonus (pawns and splitters reaching opposite pole)
-  if ((piece.type === 'PAWN' || piece.type === 'SPLITTER') && checkCircumnavigation(piece)) {
-    const bank = evolutionManager.addEvolutionPoints(piece.playerId, 8, 'circumnavigation');
-    console.log(`${piece.symbol} completed circumnavigation! +8 evolution points (${bank.points} total)`);
-    
-    // Broadcast evolution point award
-    io.emit('evolution-point-award', {
-      pieceId: piece.id,
-      pieceType: piece.type,
-      playerId: piece.playerId,
-      points: 8,
-      totalPoints: bank.points,
-      reason: 'circumnavigation',
-      position: { row: piece.row, col: piece.col }
-    });
+  if (piece.type === 'PAWN' || piece.type === 'SPLITTER') {
+    const circumnavigatedPlayer = checkCircumnavigation(piece);
+    if (circumnavigatedPlayer) {
+      awardCircumnavigationBonus(circumnavigatedPlayer, piece);
+    }
   }
   
   // Check equator bonus for pawns
@@ -1934,14 +2090,8 @@ function checkSplitterBalance(piece, playerId) {
     };
   }
   
-  // Check evolution point cost: 1 point required (reduced from 2)
-  const bank = evolutionManager.getPlayerBankInfo(playerId);
-  if (bank.points < 1) {
-    return { 
-      allowed: false, 
-      reason: `Splitter needs 1 evolution point to split (has ${bank.points})` 
-    };
-  }
+  // PHASE 1C: Remove evolution point cost requirement - splitting is inherent to Splitters!
+  // Splitters can split without consuming evolution points
   
   // Population limit removed - unlimited splitters allowed
   return { allowed: true };
@@ -1950,26 +2100,26 @@ function checkSplitterBalance(piece, playerId) {
 function applySplitCosts(piece, playerId) {
   const currentTurn = gameState.currentTurn || 0;
   
-  // Deduct evolution points from bank (reduced from 2 to 1)
+  // PHASE 1C: Splitters should NOT lose points when splitting - splitting is free!
+  // Remove evolution point deduction - splitters maintain their inherent 2-point value
   const bank = evolutionManager.getPlayerBankInfo(playerId);
-  evolutionManager.addEvolutionPoints(playerId, -1, 'splitter_split_cost');
   
-  // Set cooldown
+  // Set cooldown only
   piece.lastSplitTurn = currentTurn;
   
   // Temporary weakening: reduce attack value for 2 turns
   piece.splitWeakened = true;
   piece.weakenedUntilTurn = currentTurn + 2;
   
-  console.log(`Splitter split cost applied: -1 evolution points, cooldown until turn ${currentTurn + 1}`);
+  console.log(`Splitter split executed: NO evolution point cost, cooldown until turn ${currentTurn + 1}`);
   
-  // Broadcast split cost event
-  const updatedBank = evolutionManager.getPlayerBankInfo(playerId);
+  // Broadcast split cost event (no evolution point cost)
   io.emit('split-cost-applied', {
     pieceId: piece.id,
-    evolutionPoints: updatedBank.points,
+    evolutionPoints: bank.points, // No change in points
     cooldownTurns: 1,
-    weakenedTurns: 2
+    weakenedTurns: 2,
+    splitFree: true // Indicate that splitting was free
   });
 }
 
@@ -2027,7 +2177,7 @@ function checkEquatorBonus(piece) {
 function checkCircumnavigation(piece) {
   // Check if a pawn or splitter has reached the opposite pole
   const player = gameState.players[piece.playerId];
-  if (!player) return false;
+  if (!player) return null;
   
   const spawnRow = player.spawnArea.baseRow;
   const isNorthPole = spawnRow <= 9; // North half of sphere
@@ -2042,8 +2192,40 @@ function checkCircumnavigation(piece) {
     oppositeRow = 0;
   }
   
-  // Check if piece has reached the opposite pole
-  return piece.row === oppositeRow;
+  // ✅ PHASE 6 BUG FIX: Return player object if circumnavigation achieved, null if not
+  if (piece.row === oppositeRow) {
+    return player; // Return the player object for consistent API
+  }
+  
+  return null; // No circumnavigation
+}
+
+// ✅ PHASE 6 BUG FIX: Add missing awardCircumnavigationBonus function
+function awardCircumnavigationBonus(player, piece) {
+  if (!player || !piece) {
+    console.warn('⚠️ awardCircumnavigationBonus called with invalid parameters');
+    return;
+  }
+  
+  // Award 8 evolution points for circumnavigation
+  const bank = evolutionManager.addEvolutionPoints(player.id, 8, 'circumnavigation');
+  console.log(`${piece.symbol} completed circumnavigation! +8 evolution points (${bank.points} total)`);
+  
+  // Broadcast evolution point award
+  io.emit('evolution-point-award', {
+    pieceId: piece.id,
+    pieceType: piece.type,
+    playerId: player.id,
+    points: 8,
+    totalPoints: bank.points,
+    reason: 'circumnavigation',
+    position: { row: piece.row, col: piece.col }
+  });
+  
+  // Offer evolution choice if player has enough points and is human
+  if (player && !player.isAI && bank.points > 0) {
+    offerEvolutionChoice(player.id, piece.id, 'circumnavigation');
+  }
 }
 
 function handlePieceSplit(playerId, splitData) {
@@ -2179,8 +2361,15 @@ function handlePieceSplit(playerId, splitData) {
     col: targetCol,
     kills: 0,
     timeAlive: 0,
-    isSplitCopy: true // Mark this as a split copy
+    isSplitCopy: true, // Mark this as a split copy
+    // ✅ PHASE 4: Copy color information from parent piece to ensure split pieces match team colors
+    inheritedColor: player.selectedColor || player.color, // Inherit player's color
+    parentPieceId: piece.id // Track which piece this was split from for debugging
   };
+  
+  // Debug: Log the color inheritance for split pieces
+  console.log(`🎨 PHASE 4 - SPLIT COLOR INHERITANCE: Split piece ${splitPieceId} inherits color '${splitPiece.inheritedColor}' from player ${player.name} (selectedColor: '${player.selectedColor}', color: '${player.color}')`);
+  console.log(`🎨 Player ${player.name} color assignment: selectedColor='${player.selectedColor}', color='${player.color}', assignedColorName='${player.assignedColorName}'`);
   
   // Add the split piece to the game
   gameState.pieces[splitPieceId] = splitPiece;
@@ -2669,8 +2858,8 @@ function offerEvolutionChoice(playerId, pieceId, reason) {
     return;
   }
   
-  // Get available evolution paths
-  const availablePaths = getAvailableEvolutionPaths(piece);
+  // ✅ PHASE 6 BUG FIX: Use proper EvolutionManager method instead of incomplete standalone function
+  const availablePaths = evolutionManager.getAvailableEvolutionPaths(pieceId, piece, playerId);
   console.log(`🎯 OFFER EVOLUTION - Available paths:`, availablePaths);
   if (availablePaths.length === 0) {
     console.log(`🎯 OFFER EVOLUTION - No available paths for ${piece.type}`);
@@ -3101,15 +3290,15 @@ function getValidMoves(pieceId) {
             attackDirections = [{ row: -1, col: -1 }, { row: -1, col: 1 }];
           }
         } else if (piece.type === 'SPLITTER') {
-          // Splitters only move forward (no backward movement)
+          // SPLITTERS ARE ENHANCED PAWNS - They can move forward like pawns AND split sideways
           if (isNorthPole) {
-            // North pole splitters move toward south (+1 row) 
-            moveDirections = [{ row: 1, col: 0 }];
-            attackDirections = []; // Splitters have NO attack moves - they only capture by splitting
+            // North pole splitters move toward south (+1 row) like pawns
+            moveDirections = [{ row: 1, col: 0 }]; // Forward movement like pawns
+            attackDirections = [{ row: 1, col: -1 }, { row: 1, col: 1 }]; // Diagonal attacks like pawns
           } else {
-            // South pole splitters move toward north (-1 row)
-            moveDirections = [{ row: -1, col: 0 }];
-            attackDirections = []; // Splitters have NO attack moves - they only capture by splitting
+            // South pole splitters move toward north (-1 row) like pawns  
+            moveDirections = [{ row: -1, col: 0 }]; // Forward movement like pawns
+            attackDirections = [{ row: -1, col: -1 }, { row: -1, col: 1 }]; // Diagonal attacks like pawns
           }
         }
       }
@@ -3345,57 +3534,34 @@ function broadcastPlayerUpdate(playerId, player) {
   io.emit('player-update', { playerId, player });
 }
 
-// Available colors for player selection
-const AVAILABLE_COLORS = [
+// ✅ PHASE 3: Auto-Color Assignment System
+// 8 distinct colors for automatic assignment based on player index
+const AUTO_ASSIGN_COLORS = [
   { id: 'red', name: 'Red', hex: 0xFF0000 },
   { id: 'blue', name: 'Blue', hex: 0x0080FF },
-  { id: 'light_blue', name: 'Light Blue', hex: 0x40C0FF },
   { id: 'green', name: 'Green', hex: 0x00FF00 },
-  { id: 'yellow', name: 'Yellow', hex: 0xFFD700 },
-  { id: 'purple', name: 'Purple', hex: 0x8000FF },
-  { id: 'magenta', name: 'Magenta', hex: 0xFF00FF },
-  { id: 'cyan', name: 'Cyan', hex: 0x00FFFF },
   { id: 'orange', name: 'Orange', hex: 0xFF8000 },
-  { id: 'pink', name: 'Pink', hex: 0xFF69B4 },
-  { id: 'lime', name: 'Lime', hex: 0x00FF80 },
-  { id: 'teal', name: 'Teal', hex: 0x008080 }
+  { id: 'purple', name: 'Purple', hex: 0x8000FF },
+  { id: 'yellow', name: 'Yellow', hex: 0xFFD700 },
+  { id: 'cyan', name: 'Cyan', hex: 0x00FFFF },
+  { id: 'pink', name: 'Pink', hex: 0xFF69B4 }
 ];
 
-// Track taken colors
-const takenColors = new Set();
+// Auto-assign color based on player index (0-7)
+function getPlayerColorById(playerIndex) {
+  const colorIndex = playerIndex % AUTO_ASSIGN_COLORS.length;
+  return AUTO_ASSIGN_COLORS[colorIndex].id;
+}
 
+// Get color name for display
+function getPlayerColorName(playerIndex) {
+  const colorIndex = playerIndex % AUTO_ASSIGN_COLORS.length;
+  return AUTO_ASSIGN_COLORS[colorIndex].name;
+}
+
+// No color availability checking needed - colors assigned automatically
 function getPlayerColor(index) {
-  const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'cyan', 'orange', 'pink'];
-  return colors[index % colors.length];
-}
-
-function getAvailableColors() {
-  return AVAILABLE_COLORS.filter(color => !takenColors.has(color.id));
-}
-
-function isColorAvailable(colorId) {
-  return !takenColors.has(colorId);
-}
-
-function setPlayerColor(playerId, colorId) {
-  const player = gameState.players[playerId];
-  if (!player) return { success: false, error: 'Player not found' };
-  
-  if (!isColorAvailable(colorId)) {
-    return { success: false, error: 'Color not available' };
-  }
-  
-  // Remove old color if player had one
-  if (player.selectedColor) {
-    takenColors.delete(player.selectedColor);
-  }
-  
-  // Set new color
-  player.selectedColor = colorId;
-  player.color = colorId; // Update the color field for compatibility
-  takenColors.add(colorId);
-  
-  return { success: true, color: colorId };
+  return getPlayerColorById(index);
 }
 
 // Tournament match handling
@@ -3462,7 +3628,7 @@ function initializeTournamentPlayers(gameState, player1, player2) {
     
     // Initialize evolution bank with starting points
     evolutionManager.initializePlayerBank(player.id);
-    evolutionManager.addEvolutionPoints(player.id, 5, 'tournament_start');
+    evolutionManager.addEvolutionPoints(player.id, 1, 'tournament_start');
     
     // Create pieces for this player
     const pieceIds = createPiecesForPlayer(gameState, player.id, spawnArea);

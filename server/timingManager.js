@@ -110,12 +110,19 @@ class TimingManager {
   }
 
   clearPlayerCooldown(playerId) {
-    if (this.playerCooldowns[playerId] && this.playerCooldowns[playerId].timer) {
-      clearTimeout(this.playerCooldowns[playerId].timer);
-      this.playerCooldowns[playerId] = {
-        cooldownEnd: 0,
-        timer: null
-      };
+    // ✅ NULL SAFETY: Guard against invalid playerIds
+    if (!playerId) return;
+    
+    try {
+      if (this.playerCooldowns && this.playerCooldowns[playerId] && this.playerCooldowns[playerId].timer) {
+        clearTimeout(this.playerCooldowns[playerId].timer);
+        this.playerCooldowns[playerId] = {
+          cooldownEnd: 0,
+          timer: null
+        };
+      }
+    } catch (error) {
+      console.error(`❌ Error clearing cooldown for player ${playerId}:`, error);
     }
   }
 
@@ -207,6 +214,13 @@ class TimingManager {
 
   registerMove(playerId, moveData) {
     // Check if we need at least 2 players for game to start
+    if (!this.gameState || !this.gameState.players) {
+      return { 
+        success: false, 
+        error: 'Game not initialized' 
+      };
+    }
+    
     const playerCount = Object.keys(this.gameState.players).length;
     if (playerCount < 2) {
       return { 
@@ -284,7 +298,7 @@ class TimingManager {
     // Remove from pending moves
     delete this.pendingMoves[playerId];
 
-    // Execute the move directly through the callback
+    // Execute the move directly through the callback (move data already preserves all flags)
     if (this.moveExecutor) {
       this.moveExecutor(playerId, pendingMove.move);
     }
@@ -300,18 +314,32 @@ class TimingManager {
   // No longer needed - all players can move when not on cooldown
 
   removePlayer(playerId) {
-    // Clear any timers for this player
-    this.clearPlayerTimer(playerId);
+    // ✅ NULL SAFETY: Guard against invalid playerIds or undefined states
+    if (!playerId) {
+      console.warn('⚠️ TimingManager.removePlayer called with null/undefined playerId');
+      return;
+    }
     
-    // Remove from pending moves
-    delete this.pendingMoves[playerId];
-    
-    // Remove from cooldown system
-    if (this.playerCooldowns[playerId]) {
-      if (this.playerCooldowns[playerId].timer) {
-        clearTimeout(this.playerCooldowns[playerId].timer);
+    try {
+      // Clear any timers for this player
+      this.clearPlayerTimer(playerId);
+      
+      // Remove from pending moves
+      if (this.pendingMoves && this.pendingMoves[playerId]) {
+        delete this.pendingMoves[playerId];
       }
-      delete this.playerCooldowns[playerId];
+      
+      // Remove from cooldown system
+      if (this.playerCooldowns && this.playerCooldowns[playerId]) {
+        if (this.playerCooldowns[playerId].timer) {
+          clearTimeout(this.playerCooldowns[playerId].timer);
+        }
+        delete this.playerCooldowns[playerId];
+      }
+      
+      console.log(`✅ Player ${playerId} safely removed from timing system`);
+    } catch (error) {
+      console.error(`❌ Error removing player ${playerId} from timing system:`, error);
     }
   }
 
@@ -346,31 +374,53 @@ class TimingManager {
   }
 
   removePlayer(playerId) {
-    // Clear any active cooldown
-    this.clearPlayerCooldown(playerId);
-    
-    // Clear any active timer
-    this.clearPlayerTimer(playerId);
-    
-    // Remove from cooldowns and timers
-    delete this.playerCooldowns[playerId];
-    delete this.playerTimers[playerId];
-    delete this.queuedMoves[playerId];
-    
-    console.log(`Player ${playerId} removed from real-time system`);
-    
-    // Check if we need to update game start status
-    const playerCount = Object.keys(this.gameState.players).length;
-    if (playerCount < 2) {
-      this.io.emit('waiting-for-players', {
-        message: 'Waiting for players...',
-        playersReady: playerCount,
-        playersNeeded: 2
-      });
+    // ✅ NULL SAFETY: Guard against invalid playerIds or undefined states
+    if (!playerId) {
+      console.warn('⚠️ TimingManager.removePlayer called with null/undefined playerId');
+      return;
     }
     
-    // Broadcast updated player states
-    this.broadcastPlayerStates();
+    try {
+      // Clear any active cooldown
+      this.clearPlayerCooldown(playerId);
+      
+      // Clear any active timer
+      this.clearPlayerTimer(playerId);
+      
+      // Remove from cooldowns and timers (with null safety)
+      if (this.playerCooldowns) {
+        delete this.playerCooldowns[playerId];
+      }
+      if (this.playerTimers) {
+        delete this.playerTimers[playerId];
+      }
+      if (this.queuedMoves) {
+        delete this.queuedMoves[playerId];
+      }
+      
+      console.log(`✅ Player ${playerId} safely removed from real-time system`);
+      
+      // Check if we need to update game start status (only if gameState exists)
+      if (this.gameState && this.gameState.players) {
+        const playerCount = Object.keys(this.gameState.players).length;
+        if (playerCount < 2) {
+          if (this.io && typeof this.io.emit === 'function') {
+            this.io.emit('waiting-for-players', {
+              message: 'Waiting for players...',
+              playersReady: playerCount,
+              playersNeeded: 2
+            });
+          }
+        }
+        
+        // Broadcast updated player states (with null safety)
+        if (typeof this.broadcastPlayerStates === 'function') {
+          this.broadcastPlayerStates();
+        }
+      }
+    } catch (error) {
+      console.error(`❌ Error in TimingManager.removePlayer for ${playerId}:`, error);
+    }
   }
 
   getPlayerCooldown(playerId) {
@@ -418,12 +468,19 @@ class TimingManager {
 
   // New methods for real-time system
   clearPlayerTimer(playerId) {
-    if (this.playerTimers[playerId] && this.playerTimers[playerId].intervalId) {
-      clearInterval(this.playerTimers[playerId].intervalId);
-      this.playerTimers[playerId] = {
-        timeRemaining: 0,
-        intervalId: null
-      };
+    // ✅ NULL SAFETY: Guard against invalid playerIds
+    if (!playerId) return;
+    
+    try {
+      if (this.playerTimers && this.playerTimers[playerId] && this.playerTimers[playerId].intervalId) {
+        clearInterval(this.playerTimers[playerId].intervalId);
+        this.playerTimers[playerId] = {
+          timeRemaining: 0,
+          intervalId: null
+        };
+      }
+    } catch (error) {
+      console.error(`❌ Error clearing timer for player ${playerId}:`, error);
     }
   }
 
@@ -439,7 +496,8 @@ class TimingManager {
       this.moveExecutor(playerId, {
         pieceId: queuedMove.pieceId,
         targetRow: queuedMove.targetRow,
-        targetCol: queuedMove.targetCol
+        targetCol: queuedMove.targetCol,
+        isSplitAction: queuedMove.isSplitAction // PRESERVE split action flag
       });
     }
 
@@ -462,6 +520,7 @@ class TimingManager {
         pieceId: moveData.pieceId,
         targetRow: moveData.targetRow,
         targetCol: moveData.targetCol,
+        isSplitAction: moveData.isSplitAction, // PRESERVE split action flag
         timestamp: Date.now()
       };
 
@@ -498,8 +557,9 @@ class TimingManager {
       this.firstMovePlayer = playerId;
       
       // Notify all clients that game has started
+      const playerName = this.gameState?.players?.[playerId]?.name || playerId;
       this.io.emit('game-started-first-move', {
-        message: `Player ${this.gameState.players[playerId]?.name || playerId} has begun moving`,
+        message: `Player ${playerName} has begun moving`,
         startingPlayer: playerId
       });
 
