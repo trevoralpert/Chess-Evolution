@@ -145,6 +145,30 @@ import {
   setupLobbySocketHandlers,
   setupAllSocketHandlers
 } from './modules/SocketEventManager.js';
+import {
+  initializeThreeJS,
+  setupCameraControls,
+  initializeManualCameraControls,
+  ManualCameraControls,
+  createGameBoard,
+  loadModel,
+  preloadModels,
+  getModelScale,
+  createCachedTextLabel,
+  createPieceMeshOptimized,
+  createGeometricPiece,
+  updatePieceMeshOptimized,
+  updateVisuals,
+  updateVisualsDelta,
+  removePieceEfficient,
+  renderLoop,
+  handleWindowResize,
+  getSceneComponents,
+  getPieceMeshes,
+  getModelCache,
+  getTextLabelCache,
+  dispose
+} from './modules/RenderingManager.js';
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -261,13 +285,17 @@ window.globalSocket = null;
 
 // Timer management variables now imported from TimerManager module
 
-// Three.js scene setup
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0x0a0a0a);
-document.body.appendChild(renderer.domElement);
+// Three.js scene setup now handled by RenderingManager
+const { scene, camera, renderer, controls } = initializeThreeJS();
+
+// Create the game board
+createGameBoard();
+
+// Start render loop
+renderLoop();
+
+// Handle window resize
+window.addEventListener('resize', handleWindowResize);
 
 // Mouse interaction setup - Now imported from MouseInteractionManager module
 
@@ -308,108 +336,7 @@ function updateQueueDisplay(queuedMove) {
   }
 }
 
-// Camera controls setup
-let controls;
-let manualCameraControls = null;
-
-if (typeof THREE !== 'undefined' && THREE.TrackballControls) {
-  controls = new THREE.TrackballControls(camera, renderer.domElement);
-  controls.noPan = true;
-  controls.minDistance = 8;
-  controls.maxDistance = 15;
-  controls.rotateSpeed = 1.8;  // Increased from 1.0 for more responsive rotation
-  controls.zoomSpeed = 1.2;
-  controls.staticMoving = true;
-  controls.dynamicDampingFactor = 0.3;
-  
-  console.log('TrackballControls initialized successfully with unlimited 3D rotation');
-} else if (typeof THREE !== 'undefined' && THREE.OrbitControls) {
-  // Fallback to OrbitControls if TrackballControls not available
-  controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.enablePan = false;
-  controls.minDistance = 8;
-  controls.maxDistance = 15;
-  
-  // Enable unrestricted 3D rotation - remove polar angle restrictions completely
-  controls.minPolarAngle = 0; // Default minimum
-  controls.maxPolarAngle = Math.PI; // Default maximum
-  
-  // Override the internal constraint logic to disable polar limits
-  const originalUpdate = controls.update;
-  controls.update = function() {
-    // Temporarily disable polar angle constraints
-    const originalMinPolar = this.minPolarAngle;
-    const originalMaxPolar = this.maxPolarAngle;
-    
-    // Set to unlimited range during update
-    this.minPolarAngle = -Infinity;
-    this.maxPolarAngle = Infinity;
-    
-    // Call original update
-    const result = originalUpdate.call(this);
-    
-    // Restore original values (though they won't be used)
-    this.minPolarAngle = originalMinPolar;
-    this.maxPolarAngle = originalMaxPolar;
-    
-    return result;
-  };
-  
-  console.log('OrbitControls initialized as fallback (with attempted unrestricted rotation)');
-} else {
-  console.log('Using manual camera controls instead of OrbitControls');
-  // Manual camera control system
-  manualCameraControls = {
-    cameraDistance: 10,
-    cameraAngleX: 0,
-    cameraAngleY: 0,
-    
-    updateCameraPosition() {
-      camera.position.x = this.cameraDistance * Math.sin(this.cameraAngleX) * Math.cos(this.cameraAngleY);
-      camera.position.y = this.cameraDistance * Math.sin(this.cameraAngleY);
-      camera.position.z = this.cameraDistance * Math.cos(this.cameraAngleX) * Math.cos(this.cameraAngleY);
-      camera.lookAt(0, 0, 0);
-    },
-    
-    handleCameraMouseMove(e) {
-      if (isCurrentlyDragging() && getMouseState().mouseDownTime > 0) {
-        const mouseState = getMouseState();
-        const deltaX = e.clientX - mouseState.mouseStartPos.x;
-        const deltaY = e.clientY - mouseState.mouseStartPos.y;
-        
-        this.cameraAngleX += deltaX * 0.01;
-        this.cameraAngleY += deltaY * 0.01;
-        
-        // Enable unrestricted 3D rotation - remove polar angle restrictions
-        // this.cameraAngleY = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, this.cameraAngleY));
-        
-        this.updateCameraPosition();
-        
-        // Note: mouseStartPos update is now handled in the MouseInteractionManager
-        // mouseStartPos.x = e.clientX;
-        // mouseStartPos.y = e.clientY;
-      }
-    },
-    
-    handleWheel(e) {
-      this.cameraDistance += e.deltaY * 0.01;
-      this.cameraDistance = Math.max(8, Math.min(15, this.cameraDistance));
-      this.updateCameraPosition();
-    }
-  };
-  
-  // Initialize camera position
-  manualCameraControls.updateCameraPosition();
-  
-  // Add wheel event listener for zoom
-  window.addEventListener('wheel', (e) => {
-    manualCameraControls.handleWheel(e);
-  });
-}
-// Set initial camera position to show both poles better
-camera.position.set(5, 5, 10);
-camera.lookAt(0, 0, 0);
-
+// Camera controls setup now handled by RenderingManager
 // Globe setup
 const globeRadius = 5;
 const sphereGeometry = new THREE.SphereGeometry(globeRadius, 64, 64);
@@ -621,123 +548,7 @@ const gameInfoEl = document.getElementById('game-info');
 const statusEl = document.getElementById('status');
 
 // Model loading system
-const modelCache = {};
-let modelLoader = null;
-
-// Initialize GLTFLoader when available
-function initializeGLTFLoader() {
-  if (typeof THREE.GLTFLoader !== 'undefined') {
-    modelLoader = new THREE.GLTFLoader();
-    console.log('✅ GLTFLoader initialized successfully');
-    return true;
-  } else {
-    console.warn('⚠️ GLTFLoader not available, using geometric fallbacks');
-    return false;
-  }
-}
-
-// Try to initialize GLTFLoader
-const hasGLTFLoader = initializeGLTFLoader();
-
-// Model file mappings - using finalized GLB files from Final pieces folder
-const MODEL_PATHS = {
-  'KING': './chess piece models/Final pieces/KING.glb',
-  'QUEEN': './chess piece models/Final pieces/QUEEN.glb',
-  'ROOK': './chess piece models/Final pieces/ROOK.glb',
-  'KNIGHT': './chess piece models/Final pieces/KNIGHT.glb',
-  'BISHOP': './chess piece models/Final pieces/BISHOP.glb',
-  'PAWN': './chess piece models/Final pieces/PAWN.glb',
-  'SPLITTER': './chess piece models/Final pieces/SPLITTER.glb',
-  'JUMPER': './chess piece models/Final pieces/JUMPER.glb',
-  'SUPER_JUMPER': './chess piece models/Final pieces/SUPER_JUMPER.glb',
-  'HYPER_JUMPER': './chess piece models/Final pieces/HYPER_JUMPER.glb',
-  'MISTRESS_JUMPER': './chess piece models/Final pieces/MISTRESS_JUMPER.glb',
-  'HYBRID_QUEEN': './chess piece models/Final pieces/HYBRID_QUEEN.glb'
-};
-
-// Load a 3D model with caching
-async function loadModel(pieceType) {
-  // Check cache first
-  if (modelCache[pieceType]) {
-    return modelCache[pieceType];
-  }
-  
-  // If no GLTFLoader, return null to use geometric fallback
-  if (!hasGLTFLoader || !modelLoader) {
-    console.warn(`GLTFLoader not available for ${pieceType}, using geometric fallback`);
-    return null;
-  }
-  
-  const modelPath = MODEL_PATHS[pieceType];
-  if (!modelPath) {
-    console.warn(`No model path found for piece type: ${pieceType}`);
-    return null;
-  }
-  
-  try {
-    console.log(`Loading model for ${pieceType}: ${modelPath}`);
-    
-    const gltf = await new Promise((resolve, reject) => {
-      modelLoader.load(
-        modelPath,
-        resolve,
-        (progress) => {
-          console.log(`Loading ${pieceType}: ${(progress.loaded / progress.total * 100)}%`);
-        },
-        reject
-      );
-    });
-    
-    // Cache the loaded model
-    modelCache[pieceType] = gltf;
-    console.log(`Successfully loaded model for ${pieceType}`);
-    return gltf;
-    
-  } catch (error) {
-    console.error(`Failed to load model for ${pieceType}:`, error);
-    return null;
-  }
-}
-
-// Preload all models with progress tracking
-async function preloadModels() {
-  console.log('Preloading all 3D models...');
-  const pieceTypes = Object.keys(MODEL_PATHS);
-  
-  // Update UI with loading status
-  gameInfoEl.textContent = 'Loading 3D models...';
-  
-  let loadedCount = 0;
-  const totalCount = pieceTypes.length;
-  
-  const loadPromises = pieceTypes.map(async (pieceType) => {
-    try {
-      await loadModel(pieceType);
-      loadedCount++;
-      
-      // Update progress
-      const progress = Math.round((loadedCount / totalCount) * 100);
-      gameInfoEl.textContent = `Loading 3D models... ${progress}% (${loadedCount}/${totalCount})`;
-      
-    } catch (error) {
-      console.error(`Failed to preload ${pieceType}:`, error);
-      loadedCount++;
-      
-      // Update progress even for failed loads
-      const progress = Math.round((loadedCount / totalCount) * 100);
-      gameInfoEl.textContent = `Loading 3D models... ${progress}% (${loadedCount}/${totalCount})`;
-    }
-  });
-  
-  await Promise.all(loadPromises);
-  console.log('Model preloading complete!');
-}
-
-// Test if models are accessible
-async function testModelAccess() {
-  try {
-    const response = await fetch('./chess piece models/Final pieces/KING.glb');
-    if (response.ok) {
+// Model loading functions now handled by RenderingManager
       console.log('✅ Model files are accessible');
       return true;
     } else {
@@ -778,16 +589,7 @@ let gameState = {
 // COLOR_MAP now imported from ColorManager module
 
 // Visual elements
-const pieceMeshes = {};
-let validMoves = [];
-let selectedPieceId = null;
-
-// Visual effects manager - MOVED HERE TO FIX INITIALIZATION ORDER (will be initialized after scene is ready)
-let visualEffects = null;
-
-// Text label cache - MOVED HERE TO FIX INITIALIZATION ORDER
-const textLabelCache = new Map();
-
+// Piece meshes and caches now handled by RenderingManager
 // CLASS DEFINITIONS - MOVED HERE TO FIX INITIALIZATION ORDER
 // TransitionManager and VisualEffectsManager classes now imported from VisualEffectsManager module
 
@@ -1027,333 +829,7 @@ function showDiceBattleAnimation(battleLog, winner, loser, duration) {
   setTimeout(showTieBreaker, 1000);
 }
 
-async function updateVisuals() {
-  console.log('🔧 updateVisuals called');
-  console.log('🔧 gameState.pieces:', gameState.pieces);
-  console.log('🔧 Number of pieces in gameState:', Object.keys(gameState.pieces || {}).length);
-  console.log('🔧 Current pieceMeshes:', Object.keys(pieceMeshes));
-  
-  // Remove pieces that no longer exist
-  Object.keys(pieceMeshes).forEach(pieceId => {
-    if (!gameState.pieces[pieceId]) {
-      console.log(`🔧 Removing piece ${pieceId} (no longer exists)`);
-      performanceOptimizer.removePieceEfficient(pieceId);
-    }
-  });
-  
-  // Add or update pieces
-  const piecePromises = Object.values(gameState.pieces).map(async piece => {
-    if (!pieceMeshes[piece.id]) {
-      console.log(`🔧 Creating new mesh for piece ${piece.id} (${piece.type})`);
-      try {
-        await createPieceMeshOptimized(piece);
-        console.log(`🔧 Successfully created mesh for piece ${piece.id}`);
-      } catch (error) {
-        console.error(`❌ Failed to create mesh for piece ${piece.id}:`, error);
-      }
-    } else {
-      console.log(`🔧 Updating existing mesh for piece ${piece.id}`);
-      updatePieceMeshOptimized(piece);
-    }
-  });
-  
-  // Wait for all piece creation to complete
-  await Promise.all(piecePromises);
-  console.log('🔧 updateVisuals completed');
-}
-
-// Delta update function for better performance
-async function updateVisualsDelta(delta) {
-  // Remove pieces
-  delta.removedPieces.forEach(pieceId => {
-    performanceOptimizer.removePieceEfficient(pieceId);
-  });
-  
-  // Add new pieces
-  const addPromises = delta.addedPieces.map(async piece => {
-    try {
-      await createPieceMeshOptimized(piece);
-    } catch (error) {
-      console.error(`Failed to create mesh for piece ${piece.id}:`, error);
-    }
-  });
-  
-  // Update moved pieces
-  delta.movedPieces.forEach(piece => {
-    performanceOptimizer.updatePieceEfficient(piece);
-  });
-  
-  // Wait for all additions to complete
-  await Promise.all(addPromises);
-}
-
-async function createPieceMesh(piece) {
-  // Use optimized version
-  return await createPieceMeshOptimized(piece);
-}
-
-async function createPieceMeshOptimized(piece) {
-  const player = gameState.players[piece.playerId];
-  const position = getWorldPosition(piece.row, piece.col);
-  
-  // Get player index for consistent coloring
-  const playerIndex = player.index !== undefined ? player.index : 
-                     Object.keys(gameState.players).indexOf(piece.playerId);
-  
-  console.log(`Creating piece ${piece.type} for player ${player.name} (index: ${playerIndex})`);
-  console.log(`Player object:`, player);
-  const debugColor = getPlayerColor(piece.playerId, playerIndex);
-  console.log(`Player color: 0x${debugColor.toString(16).padStart(6, '0').toUpperCase()}`);
-  
-  let mesh;
-  
-  // Try to load GLB model with caching
-  try {
-    const gltf = await performanceOptimizer.getCachedModel(piece.type);
-    if (gltf && gltf.scene) {
-      console.log(`Using cached GLB model for ${piece.type}`);
-      
-      // Clone the model scene
-      mesh = gltf.scene.clone();
-      
-      // Apply player color tinting to materials and set userData for click detection
-      const playerColor = getPieceColorForPlayer(piece, player, playerIndex);
-      console.log(`Applying GLB color ${playerColor.toString(16)} to ${piece.type} mesh`);
-      mesh.traverse((child) => {
-        if (child.isMesh && child.material) {
-          // Create material and cache it
-          if (Array.isArray(child.material)) {
-            child.material = child.material.map(mat => {
-              const newMat = mat.clone();
-              newMat.color.setHex(playerColor);
-              newMat.metalness = 0.4;
-              newMat.roughness = 0.6;
-              return newMat;
-            });
-          } else {
-            child.material = child.material.clone();
-            child.material.color.setHex(playerColor);
-            child.material.metalness = 0.4;
-            child.material.roughness = 0.6;
-          }
-          
-          // Set userData on child meshes for click detection
-          child.userData.piece = piece;
-          child.userData.pieceId = piece.id;
-        }
-      });
-      
-      // Scale the model appropriately for the sphere
-      const modelScale = getModelScale(piece.type);
-      mesh.scale.set(modelScale, modelScale, modelScale);
-      
-    } else {
-      throw new Error(`Failed to load GLB model for ${piece.type}`);
-    }
-    
-  } catch (error) {
-    console.warn(`GLB model loading failed for ${piece.type}, falling back to geometric shape:`, error);
-    
-    // Fallback to geometric shapes
-    mesh = createGeometricPiece(piece.type);
-    
-    // Use player-specific color for better identification
-    const pieceColor = getPieceColorForPlayer(piece, player, playerIndex);
-    console.log(`Applying geometric fallback color ${pieceColor.toString(16)} to ${piece.type} mesh`);
-    
-    const material = performanceOptimizer.getCachedMaterial('standard', {
-      color: pieceColor,
-      metalness: 0.3,
-      roughness: 0.7
-    });
-    
-    mesh.material = material;
-    console.log(`Material applied with color:`, material.color.getHex().toString(16));
-    
-    // Apply geometric shape scaling
-    const scale = getGeometricScale(piece.type);
-    mesh.scale.set(scale, scale, scale);
-  }
-  
-  // Position on sphere surface
-  mesh.position.set(position.x, position.y, position.z);
-  mesh.userData = { pieceId: piece.id, piece: piece };
-  
-  // Orient piece so bottom faces sphere center (top points away from center)
-  // Calculate the normal vector from center to piece position
-  const normal = new THREE.Vector3(position.x, position.y, position.z).normalize();
-  
-  // Create a rotation matrix to align the piece with the sphere surface
-  const up = new THREE.Vector3(0, 1, 0); // Piece's original "up" direction
-  const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal);
-  mesh.setRotationFromQuaternion(quaternion);
-  
-  // Apply height adjustments for GLB models to match piece positioning
-  const heightAdjustment = getModelHeightAdjustment(piece.type);
-  if (heightAdjustment !== 0) {
-    // Move the mesh along the normal vector (away from sphere center)
-    const adjustmentVector = normal.clone().multiplyScalar(heightAdjustment);
-    mesh.position.add(adjustmentVector);
-    console.log(`Applied height adjustment ${heightAdjustment} to ${piece.type} GLB model`);
-  }
-  
-  // Debug: Log King positions only
-  if (piece.type === 'KING') {
-    console.log(`${piece.symbol} King at grid (${piece.row}, ${piece.col}) - Player ${playerIndex + 1}`);
-  }
-  
-  // Add text label with piece symbol (cached)
-  const labelTexture = createCachedTextLabel(piece.symbol);
-  const labelMaterial = new THREE.SpriteMaterial({ map: labelTexture });
-  const label = new THREE.Sprite(labelMaterial);
-  label.scale.set(0.5, 0.5, 1);
-  label.position.set(0, 0.3, 0);
-  label.raycast = function() {}; // Disable raycasting for piece symbol labels
-  
-  mesh.add(label);
-  
-  // Add floating evolution points label (skip for King pieces)
-  if (piece.type !== 'KING') {
-    console.log('🎯 Creating evolution points label for piece:', piece.id);
-    const evolutionPoints = getEvolutionPointsForPiece(piece);
-    console.log('🎯 Evolution points retrieved:', evolutionPoints);
-    const evolutionLabelTexture = createEvolutionPointsLabel(evolutionPoints, piece.playerId);
-    console.log('🎯 Evolution label texture created:', evolutionLabelTexture);
-    const evolutionLabelMaterial = new THREE.SpriteMaterial({ map: evolutionLabelTexture });
-    const evolutionLabel = new THREE.Sprite(evolutionLabelMaterial);
-    evolutionLabel.scale.set(1.0, 0.5, 1); // Much larger scale
-    evolutionLabel.position.set(0, 1.2, 0); // Higher above the piece
-    console.log('🎯 Evolution label positioned at:', evolutionLabel.position, 'with scale:', evolutionLabel.scale);
-    evolutionLabel.userData = { isEvolutionLabel: true };
-    evolutionLabel.raycast = function() {}; // Disable raycasting for evolution labels
-    
-    mesh.add(evolutionLabel);
-    console.log('🎯 Evolution label added to mesh, total children:', mesh.children.length);
-  } else {
-    console.log('🎯 Skipping evolution label for King piece (Kings do not have evolution points)');
-  }
-  
-  // Set userData for click detection
-  mesh.userData.piece = piece;
-  mesh.userData.pieceId = piece.id;
-  
-  scene.add(mesh);
-  pieceMeshes[piece.id] = mesh;
-  
-  console.log(`✅ Successfully added piece ${piece.type} to scene at position:`, mesh.position);
-  console.log(`📊 Scene now has ${scene.children.length} total objects`);
-}
-
-// Optimized piece update function
-function updatePieceMeshOptimized(piece) {
-  const mesh = pieceMeshes[piece.id];
-  if (mesh) {
-    const position = getWorldPosition(piece.row, piece.col);
-    console.log('🔄 POSITION UPDATE - Piece', piece.id, 'moved to:');
-    console.log('  Grid position:', piece.row, piece.col);
-    console.log('  World position:', position);
-    console.log('  Previous world position:', mesh.position);
-    
-    mesh.position.set(position.x, position.y, position.z);
-    mesh.userData.piece = piece;
-    
-    // Orient piece so bottom faces sphere center (top points away from center)
-    const normal = new THREE.Vector3(position.x, position.y, position.z).normalize();
-    const up = new THREE.Vector3(0, 1, 0); // Piece's original "up" direction
-    const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal);
-    mesh.setRotationFromQuaternion(quaternion);
-    
-    // Update evolution points label
-    updateEvolutionPointsLabel(mesh, piece);
-  }
-}
-
-// Update evolution points label for a specific piece
-function updateEvolutionPointsLabel(mesh, piece) {
-  // Find the evolution label in the mesh children
-  const evolutionLabel = mesh.children.find(child => 
-    child.userData && child.userData.isEvolutionLabel
-  );
-  
-  if (evolutionLabel) {
-    const evolutionPoints = getEvolutionPointsForPiece(piece);
-    const newTexture = createEvolutionPointsLabel(evolutionPoints, piece.playerId);
-    
-    // Dispose of old texture to prevent memory leaks
-    if (evolutionLabel.material.map) {
-      evolutionLabel.material.map.dispose();
-    }
-    
-    // Apply new texture
-    evolutionLabel.material.map = newTexture;
-    evolutionLabel.material.needsUpdate = true;
-  }
-}
-
-// updateAllEvolutionPointLabels function now imported from EvolutionManager module
-
-// Cached text label creation - textLabelCache moved to top of file to fix initialization order
-
-function createCachedTextLabel(symbol) {
-  if (textLabelCache.has(symbol)) {
-    return textLabelCache.get(symbol);
-  }
-  
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
-  canvas.width = 64;
-  canvas.height = 64;
-  
-  context.fillStyle = 'white';
-  context.font = '32px Arial';
-  context.textAlign = 'center';
-  context.fillText(symbol, 32, 40);
-  
-  const texture = new THREE.CanvasTexture(canvas);
-  textLabelCache.set(symbol, texture);
-  
-  return texture;
-}
-
-// getEvolutionPointsForPiece and createEvolutionPointsLabel functions now imported from EvolutionManager module
-    'SPLITTER': 0.35,
-    'JUMPER': 0.4,
-    'SUPER_JUMPER': 0.45,
-    'HYPER_JUMPER': 0.5,
-    'MISTRESS_JUMPER': 0.55,
-    'HYBRID_QUEEN': 0.6
-  };
-  return scaleMap[pieceType] || 0.4;
-}
-
-// Helper function to get appropriate scale for geometric shapes (fallback)
-function getGeometricScale(pieceType) {
-  const scaleMap = {
-    'KING': 1.2,
-    'QUEEN': 1.1,
-    'ROOK': 1.0,
-    'KNIGHT': 1.0,
-    'BISHOP': 1.0,
-    'PAWN': 1.0,
-    'SPLITTER': 1.0,
-    'JUMPER': 1.0,
-    'SUPER_JUMPER': 1.1,
-    'HYPER_JUMPER': 1.15,
-    'MISTRESS_JUMPER': 1.2,
-    'HYBRID_QUEEN': 1.3
-  };
-  return scaleMap[pieceType] || 1.0;
-}
-
-// Helper function to get height adjustments for GLB models
-function getModelHeightAdjustment(pieceType) {
-  const adjustmentMap = {
-    'KING': 0.08,        // King appears sunken, lift it up
-    'QUEEN': 0.04,       // Queen might need slight adjustment
-    'ROOK': 0.02,        // Rook might need slight adjustment
-    'KNIGHT': 0.02,      // Knight might need slight adjustment
-    'BISHOP': 0.03,      // Bishop might need slight adjustment
-    'PAWN': 0.0,         // Pawn is the reference - no adjustment needed
+// Visual update and piece creation functions now handled by RenderingManager
     'SPLITTER': 0.02,    // Evolved pieces might need adjustments
     'JUMPER': 0.03,
     'SUPER_JUMPER': 0.03,
