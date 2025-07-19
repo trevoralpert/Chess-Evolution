@@ -278,6 +278,37 @@ import {
   initializeLobbySystem,
   getLobbyStats
 } from './modules/LobbyManager.js';
+import {
+  showSpectatorUI,
+  hideSpectatorUI,
+  joinSpectator,
+  leaveSpectator,
+  showReplayUI,
+  hideReplayUI,
+  playReplay,
+  stopReplay,
+  toggleReplayPlayback,
+  playReplayStep,
+  stepReplayBackward,
+  stepReplayForward,
+  seekReplayToPosition,
+  setReplaySpeed,
+  updateReplayUI,
+  updateSpectatorGamesList,
+  updateReplaysList,
+  updateSpectatorUI,
+  handleReplayLoaded,
+  handleSpectatorJoined,
+  handleSpectatorLeft,
+  setupSpectatorSocketHandlers,
+  getCurrentReplay,
+  getSpectatorStatus,
+  getReplayStats,
+  getSpectatorStats,
+  initializeSpectatorReplaySystem,
+  formatGameDuration,
+  formatDate
+} from './modules/SpectatorReplayManager.js';
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -943,129 +974,14 @@ document.getElementById('replay-step-forward').addEventListener('click', () => {
 });
 
 document.getElementById('replay-speed').addEventListener('change', (e) => {
-  replaySpeed = parseFloat(e.target.value);
+  setReplaySpeed(parseFloat(e.target.value));
 });
 
 document.getElementById('replay-timeline').addEventListener('input', (e) => {
   seekReplayToPosition(parseFloat(e.target.value));
 });
 
-// Spectator functions
-function showSpectatorUI() {
-  document.getElementById('spectator-ui').style.display = 'block';
-  document.getElementById('tournament-ui').style.display = 'none';
-  document.getElementById('replay-ui').style.display = 'none';
-  socket.emit('get-spectatable-games');
-}
-
-function hideSpectatorUI() {
-  document.getElementById('spectator-ui').style.display = 'none';
-  if (isSpectating) {
-    leaveSpectator();
-  }
-}
-
-function joinSpectator() {
-  socket.emit('join-spectator', { gameId: 'main' });
-}
-
-function leaveSpectator() {
-  socket.emit('leave-spectator', { gameId: 'main' });
-}
-
-// Replay functions
-function showReplayUI() {
-  document.getElementById('replay-ui').style.display = 'block';
-  document.getElementById('tournament-ui').style.display = 'none';
-  document.getElementById('spectator-ui').style.display = 'none';
-  socket.emit('get-replays');
-}
-
-function hideReplayUI() {
-  document.getElementById('replay-ui').style.display = 'none';
-  if (currentReplay) {
-    stopReplay();
-  }
-}
-
-function playReplay(gameId) {
-  socket.emit('get-replay', { gameId });
-}
-
-function stopReplay() {
-  currentReplay = null;
-  replayPlaying = false;
-  replayCurrentMove = 0;
-  document.getElementById('replay-controls').style.display = 'none';
-  document.getElementById('stop-replay-btn').style.display = 'none';
-  updateReplayUI();
-}
-
-function toggleReplayPlayback() {
-  if (!currentReplay) return;
-  
-  replayPlaying = !replayPlaying;
-  document.getElementById('replay-play-pause').textContent = replayPlaying ? '⏸️' : '▶️';
-  
-  if (replayPlaying) {
-    playReplayStep();
-  }
-}
-
-function playReplayStep() {
-  if (!replayPlaying || !currentReplay) return;
-  
-  if (replayCurrentMove < currentReplay.moves.length) {
-    replayCurrentMove++;
-    socket.emit('replay-seek', { 
-      gameId: currentReplay.gameId, 
-      moveIndex: replayCurrentMove - 1 
-    });
-    
-    setTimeout(() => {
-      playReplayStep();
-    }, 1000 / replaySpeed);
-  } else {
-    replayPlaying = false;
-    document.getElementById('replay-play-pause').textContent = '▶️';
-  }
-}
-
-function stepReplayBackward() {
-  if (!currentReplay || replayCurrentMove <= 0) return;
-  
-  replayCurrentMove--;
-  socket.emit('replay-seek', { 
-    gameId: currentReplay.gameId, 
-    moveIndex: replayCurrentMove - 1 
-  });
-}
-
-function stepReplayForward() {
-  if (!currentReplay || replayCurrentMove >= currentReplay.moves.length) return;
-  
-  replayCurrentMove++;
-  socket.emit('replay-seek', { 
-    gameId: currentReplay.gameId, 
-    moveIndex: replayCurrentMove - 1 
-  });
-}
-
-function seekReplayToPosition(position) {
-  if (!currentReplay) return;
-  
-  const targetMove = Math.floor((position / 100) * currentReplay.moves.length);
-  replayCurrentMove = targetMove;
-  socket.emit('replay-seek', { 
-    gameId: currentReplay.gameId, 
-    moveIndex: targetMove - 1 
-  });
-}
-
-// updateReplayUI and formatTime functions now imported from UIManager module
-
-// Spectator and replay socket handlers now in setupSpectatorSocketHandlers
-// Remaining socket handlers now managed by setupAllSocketHandlers
+// Spectator and replay functions now handled by SpectatorReplayManager
 });
 
 // Initialize color selection when page loads
@@ -1085,6 +1001,9 @@ initializeBattleSystem();
 
 // Initialize lobby system
 initializeLobbySystem();
+
+// Initialize spectator/replay system
+initializeSpectatorReplaySystem();
 
 // Update particle system in animation loop
 const originalAnimate = window.animate;
