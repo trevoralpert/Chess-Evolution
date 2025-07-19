@@ -476,8 +476,8 @@ function setupSocketListeners() {
       clearSelectionHighlight();
       hideDualMovementUI();
     } else {
-      console.error('Move failed:', data.error);
-      showNotification(data.error, '#ff0000', 3000);
+      console.error('Move failed:', data.message);
+      showNotification(data.message || 'Move failed', '#ff0000', 3000);
     }
   });
 
