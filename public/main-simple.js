@@ -19,6 +19,26 @@ import {
   getAvailableColors,
   setAvailableColors
 } from './modules/ColorManager.js';
+import {
+  startTimer,
+  pauseTimer,
+  resumeTimer,
+  updateTimerDisplay,
+  updateActivePlayer,
+  updateTurnQueue,
+  startRealTimeTimer,
+  updateTimerDisplayWithValue,
+  updateTimerUI,
+  startEvolutionTimer,
+  clearEvolutionTimer,
+  clearAllTimers,
+  setupTimerSocketHandlers,
+  getCurrentTimer,
+  getActivePlayerId,
+  getTimerState,
+  isTimerActive,
+  isEvolutionTimerActive
+} from './modules/TimerManager.js';
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -266,6 +286,9 @@ function startGame() {
   
   // Set up color management socket handlers
   setupColorSocketHandlers(socket);
+  
+  // Set up timer management socket handlers
+  setupTimerSocketHandlers(socket);
 }
 
 // Return to menu
@@ -273,10 +296,7 @@ function returnToMenu() {
   console.log('🏠 Returning to menu...');
   
   // Clear any running timers
-  if (typeof currentTimer !== 'undefined' && currentTimer) {
-    clearInterval(currentTimer);
-    currentTimer = null;
-  }
+  clearAllTimers();
   
   // Hide game screens and timer
   gameUI.style.display = 'none';
@@ -300,10 +320,7 @@ function showGameOver(winner, stats) {
   console.log('🏁 Game Over!', winner, stats);
   
   // Clear any running timers
-  if (typeof currentTimer !== 'undefined' && currentTimer) {
-    clearInterval(currentTimer);
-    currentTimer = null;
-  }
+  clearAllTimers();
   
   // Hide game UI and timer
   gameUI.style.display = 'none';
@@ -809,9 +826,8 @@ function setupSocketListeners() {
     console.log('🕒 Player timer update:', data);
     if (data.playerId === socket.id) {
       // Stop client-side timer when server updates start
-      if (currentTimer) {
-        clearInterval(currentTimer);
-        currentTimer = null;
+      if (getCurrentTimer()) {
+        clearAllTimers();
         console.log('🕒 Stopped client-side timer, using server updates');
       }
       updateTimerDisplay(data.timeRemaining);
@@ -863,13 +879,7 @@ console.log('Socket.io will be initialized when game starts');
 // Make socket globally accessible for evolution dialog functions
 window.globalSocket = null;
 
-// Timer management variables
-let currentTimer = null;
-let timerStartTime = 0;
-let timerDuration = 7000; // 7 seconds default
-let activePlayerId = null;
-let isTimerPaused = false;
-let pausedTimeRemaining = 0;
+// Timer management variables now imported from TimerManager module
 
 // Three.js scene setup
 const scene = new THREE.Scene();
@@ -966,206 +976,9 @@ function handleMouseUp(e) {
   isDragging = false;
 }
 
-// Timer management functions
-function startTimer(playerId, timeLimit, startTime) {
-  activePlayerId = playerId;
-  timerStartTime = startTime;
-  timerDuration = timeLimit;
-  isTimerPaused = false;
-  
-  // Update UI
-  updateTimerDisplay();
-  
-  // Start the timer interval
-  if (currentTimer) {
-    clearInterval(currentTimer);
-  }
-  
-  currentTimer = setInterval(() => {
-    if (!isTimerPaused) {
-      updateTimerDisplay();
-    }
-  }, 100); // Update every 100ms for smooth animation
-  
-  console.log(`Timer started for player ${playerId}: ${timeLimit}ms`);
-}
+// Timer management functions now imported from TimerManager module
 
-function pauseTimer() {
-  isTimerPaused = true;
-  const elapsed = Date.now() - timerStartTime;
-  pausedTimeRemaining = Math.max(0, timerDuration - elapsed);
-  
-  document.getElementById('timer-status').textContent = 'Timer Paused (Battle/Evolution)';
-  document.getElementById('timer-bar').style.background = '#666';
-  
-  console.log('Timer paused');
-}
-
-function resumeTimer() {
-  if (isTimerPaused) {
-    isTimerPaused = false;
-    timerStartTime = Date.now();
-    timerDuration = pausedTimeRemaining;
-    
-    document.getElementById('timer-status').textContent = 'Timer Active';
-    document.getElementById('timer-bar').style.background = 'linear-gradient(90deg, #00ff00, #ffff00, #ff6600, #ff0000)';
-    
-    console.log('Timer resumed');
-  }
-}
-
-function updateTimerDisplay() {
-  const timeRemainingElement = document.getElementById('time-remaining');
-  const timerBarElement = document.getElementById('timer-bar');
-  const timerStatusElement = document.getElementById('timer-status');
-  
-  if (isTimerPaused) {
-    const remainingSeconds = pausedTimeRemaining / 1000;
-    timeRemainingElement.textContent = remainingSeconds.toFixed(1);
-    timerBarElement.style.width = `${(pausedTimeRemaining / 7000) * 100}%`;
-    return;
-  }
-  
-  const elapsed = Date.now() - timerStartTime;
-  const remaining = Math.max(0, timerDuration - elapsed);
-  const remainingSeconds = remaining / 1000;
-  
-  timeRemainingElement.textContent = remainingSeconds.toFixed(1);
-  
-  // Update progress bar
-  const progress = (remaining / timerDuration) * 100;
-  timerBarElement.style.width = `${progress}%`;
-  
-  // Update status
-  if (remaining <= 0) {
-    timerStatusElement.textContent = 'Time expired!';
-    timerStatusElement.style.color = '#ff0000';
-    if (currentTimer) {
-      clearInterval(currentTimer);
-      currentTimer = null;
-    }
-  } else {
-    timerStatusElement.textContent = 'Timer Active';
-    timerStatusElement.style.color = '#ccc';
-  }
-}
-
-function updateActivePlayer(playerId, playerName) {
-  activePlayerId = playerId;
-  document.getElementById('active-player-name').textContent = playerName || 'Unknown';
-  
-  // Highlight if it's your turn
-  const timingUI = document.getElementById('timing-ui');
-  if (playerId === socket.id) {
-    timingUI.style.borderColor = '#00ff00';
-    timingUI.style.boxShadow = '0 0 10px #00ff00';
-  } else {
-    timingUI.style.borderColor = '#ff6600';
-    timingUI.style.boxShadow = 'none';
-  }
-}
-
-function updateTurnQueue(turnQueue) {
-  const turnQueueList = document.getElementById('turn-queue-list');
-  if (turnQueue && turnQueue.length > 0) {
-    const queueText = turnQueue.map((playerId, index) => {
-      const player = gameState.players[playerId];
-      const playerName = player ? player.name : 'Unknown';
-      return `${index + 1}. ${playerName}${playerId === activePlayerId ? ' (Current)' : ''}`;
-    }).join(', ');
-    turnQueueList.textContent = queueText;
-  } else {
-    turnQueueList.textContent = '-';
-  }
-}
-
-// Real-time system timer functions
-function startRealTimeTimer(duration) {
-  timerDuration = duration;
-  timerStartTime = Date.now();
-  isTimerPaused = false;
-  
-  // Start the timer interval
-  if (currentTimer) {
-    clearInterval(currentTimer);
-  }
-  
-  currentTimer = setInterval(() => {
-    if (!isTimerPaused) {
-      const elapsed = Date.now() - timerStartTime;
-      const remaining = Math.max(0, timerDuration - elapsed);
-      updateTimerDisplay(remaining);
-      
-      if (remaining <= 0) {
-        clearInterval(currentTimer);
-        currentTimer = null;
-      }
-    }
-  }, 100); // Update every 100ms for smooth animation
-  
-  console.log(`Real-time timer started: ${duration}ms`);
-}
-
-function updateTimerDisplay(timeRemaining) {
-  const timeRemainingElement = document.getElementById('time-remaining');
-  const timerBarElement = document.getElementById('timer-bar');
-  const timerStatusElement = document.getElementById('timer-status');
-  
-  console.log('🕒 updateTimerDisplay called with:', timeRemaining, 'Elements found:', {
-    timeRemaining: !!timeRemainingElement,
-    timerBar: !!timerBarElement, 
-    timerStatus: !!timerStatusElement
-  });
-  
-  if (!timeRemainingElement || !timerBarElement || !timerStatusElement) {
-    console.log('⚠️ Timer elements not found in DOM');
-    return;
-  }
-  
-  const remainingSeconds = timeRemaining / 1000;
-  timeRemainingElement.textContent = remainingSeconds.toFixed(1);
-  console.log('🕒 Updated timer display to:', remainingSeconds.toFixed(1));
-  
-  // Update progress bar
-  const progress = (timeRemaining / timerDuration) * 100;
-  timerBarElement.style.width = `${progress}%`;
-  
-  // Update status and colors
-  if (timeRemaining <= 0) {
-    timerStatusElement.textContent = 'Ready to move';
-    timerStatusElement.style.color = '#00ff00';
-    timerBarElement.style.background = '#00ff00';
-  } else {
-    timerStatusElement.textContent = 'Timer counting down...';
-    timerStatusElement.style.color = '#ff8800';
-    timerBarElement.style.background = 'linear-gradient(90deg, #00ff00, #ffff00, #ff6600, #ff0000)';
-  }
-}
-
-function updateTimerUI(timer, queuedMove) {
-  const timerStatusElement = document.getElementById('timer-status');
-  const timeRemainingElement = document.getElementById('time-remaining');
-  
-  if (!timerStatusElement || !timeRemainingElement) return;
-  
-  if (timer) {
-    const remainingSeconds = timer.timeRemaining / 1000;
-    timeRemainingElement.textContent = remainingSeconds.toFixed(1);
-    
-    if (timer.timeRemaining <= 0) {
-      timerStatusElement.textContent = 'Ready to move';
-      timerStatusElement.style.color = '#00ff00';
-    } else {
-      if (queuedMove) {
-        timerStatusElement.textContent = 'Move queued - waiting for timer';
-        timerStatusElement.style.color = '#ffaa00';
-      } else {
-        timerStatusElement.textContent = 'Timer counting down...';
-        timerStatusElement.style.color = '#ff8800';
-      }
-    }
-  }
-}
+// Real-time timer functions now imported from TimerManager module
 
 function updateQueueDisplay(queuedMove) {
   const statusElement = document.getElementById('timer-status');
@@ -3914,25 +3727,14 @@ function showEvolutionChoice(data) {
     pathsContainer.appendChild(pathDiv);
   });
   
-  // Start timer
-  let timeLeft = data.timeLeft || 30;
-  evolutionTimer = setInterval(() => {
-    timeLeft--;
-    document.getElementById('evolution-timer').textContent = `Time left: ${timeLeft}s`;
-    
-    if (timeLeft <= 0) {
-      clearInterval(evolutionTimer);
-      hideEvolutionChoice();
-    }
-  }, 1000);
+  // Start timer using TimerManager
+  const timeLeft = data.timeLeft || 30;
+  startEvolutionTimer(timeLeft);
 }
 
 function hideEvolutionChoice() {
   document.getElementById('evolution-choice-panel').style.display = 'none';
-  if (evolutionTimer) {
-    clearInterval(evolutionTimer);
-    evolutionTimer = null;
-  }
+  clearEvolutionTimer();
   currentEvolutionChoice = null;
 }
 
@@ -4960,7 +4762,7 @@ document.getElementById('ready-toggle-btn').addEventListener('click', () => {
 
 // Evolution system functionality
 let currentEvolutionChoice = null;
-let evolutionTimer = null;
+// evolutionTimer now managed in TimerManager module
 let playerEvolutionBank = { points: 0, totalEarned: 0 };
 
 // Evolution event handlers
@@ -6015,9 +5817,8 @@ socket.on('player-timeout', (data) => {
   showNotification('Player Timeout', data.message, 'warning');
   
   // Clear the timer display
-  if (currentTimer) {
-    clearInterval(currentTimer);
-    currentTimer = null;
+  if (getCurrentTimer()) {
+    clearAllTimers();
   }
   
   document.getElementById('timer-status').textContent = 'Player timed out';
@@ -6039,9 +5840,8 @@ socket.on('move-pending', (data) => {
   showNotification('Move Pending', data.message, 'info');
   
   // Pause timer briefly to show move is being processed
-  if (currentTimer) {
-    clearInterval(currentTimer);
-    currentTimer = null;
+  if (getCurrentTimer()) {
+    clearAllTimers();
   }
   
   document.getElementById('timer-status').textContent = 'Processing move...';
