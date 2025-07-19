@@ -309,42 +309,39 @@ import {
   formatGameDuration,
   formatDate
 } from './modules/SpectatorReplayManager.js';
+import {
+  createGridOverlay,
+  createGlobe,
+  setupLighting,
+  initializeSceneSetup,
+  testModelAccess,
+  setupModelLoading
+} from './modules/SceneSetupManager.js';
+import {
+  setupSpectatorEventHandlers,
+  setupReplayEventHandlers,
+  setupWindowEventHandlers,
+  setupAllEventHandlers,
+  initializeEventHandlerSystem
+} from './modules/EventHandlerManager.js';
+import {
+  loadGLTFLoader,
+  startGameInitialization,
+  initializeGame,
+  initializeVisualEffects,
+  initializeAllSystems,
+  initializeSocketSystem,
+  setupParticleSystemAnimation,
+  setupUtilityFunctions,
+  checkThreeJS
+} from './modules/GameInitializationManager.js';
 
-// Check if Three.js is loaded
-if (typeof THREE === 'undefined') {
-  console.error('Three.js not loaded!');
-} else {
-  console.log('Three.js loaded successfully:', THREE);
-}
-
-// Load GLTFLoader and add it to THREE object
-async function loadGLTFLoader() {
-  try {
-    // Check if GLTFLoader is already available from the script tag
-    if (typeof THREE.GLTFLoader !== 'undefined') {
-      console.log('✅ GLTFLoader already available from script tag');
-      return true;
-    }
-    
-    // If not, try to import it (using same version as HTML file)
-    const GLTFLoaderModule = await import('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/loaders/GLTFLoader.js');
-    THREE.GLTFLoader = GLTFLoaderModule.GLTFLoader;
-    console.log('✅ GLTFLoader imported and added to THREE object');
-    return true;
-  } catch (error) {
-    console.error('❌ Failed to load GLTFLoader:', error);
-    return false;
-  }
-}
+// Check if Three.js is loaded and initialize game
+checkThreeJS();
 
 // Initialize GLTFLoader and then start the game
-(async function initializeGame() {
-  console.log('🔧 Loading GLTFLoader...');
-  await loadGLTFLoader();
-  console.log('🚀 GLTFLoader ready, starting game initialization...');
-  
-  // Continue with the rest of the initialization
-  startGameInitialization();
+(async function() {
+  await initializeGame();
 })();
 
 // Game initialization functions now handled by GameLogicManager
