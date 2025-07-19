@@ -39,6 +39,22 @@ import {
   isTimerActive,
   isEvolutionTimerActive
 } from './modules/TimerManager.js';
+import {
+  handleMouseDown,
+  handleMouseMove,
+  handleMouseUp,
+  onRightClick,
+  onMouseClick,
+  onTouchStart,
+  onTouchEnd,
+  setupMouseInteraction,
+  getMouseState,
+  getTouchState,
+  resetMouseState,
+  isCurrentlyDragging,
+  mouse,
+  raycaster
+} from './modules/MouseInteractionManager.js';
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -889,16 +905,12 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x0a0a0a);
 document.body.appendChild(renderer.domElement);
 
-// Mouse interaction setup
-const mouse = new THREE.Vector2();
-const raycaster = new THREE.Raycaster();
+// Mouse interaction setup - Now imported from MouseInteractionManager module
 
 // UI elements that need to be available globally
 const modeIndicator = document.getElementById('mode-indicator');
 
-// Mouse state tracking
-let mouseDownTime = 0;
-let isDragging = false;
+// Mouse state tracking - Now managed in MouseInteractionManager module
 
 // Movement mode tracking - MOVED HERE TO FIX INITIALIZATION ORDER
 let selectedMovementMode = null;
@@ -910,71 +922,9 @@ console.log('Three.js scene initialized successfully');
 // Initialize performance optimizer
 const performanceOptimizer = new PerformanceOptimizer();
 
-// Mouse interaction tracking
-let mouseStartPos = { x: 0, y: 0 };
-// isDragging moved to global scope
+// Mouse interaction tracking - Now managed in MouseInteractionManager module
 
-function handleMouseDown(e) {
-  mouseDownTime = Date.now();
-  mouseStartPos = { x: e.clientX, y: e.clientY };
-  isDragging = false;
-  console.log(`🖱️ Mouse down at: ${mouseDownTime}`);
-  
-  // Don't prevent default - let OrbitControls handle the event too
-  // We're just capturing it to track our own state
-}
-
-function handleMouseMove(e) {
-  if (mouseDownTime > 0) {
-    const deltaX = e.clientX - mouseStartPos.x;
-    const deltaY = e.clientY - mouseStartPos.y;
-    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    
-    // Consider it dragging if moved more than 5 pixels
-    if (distance > 5) {
-      if (!isDragging) {
-        console.log(`🖱️ Mouse drag detected - distance: ${distance}px`);
-        isDragging = true;
-      }
-    }
-    
-    // Handle camera movement if using manual controls
-    if (manualCameraControls) {
-      manualCameraControls.handleCameraMouseMove(e);
-    }
-  }
-}
-
-function handleMouseUp(e) {
-  const mouseUpTime = Date.now();
-  const clickDuration = mouseUpTime - mouseDownTime;
-  
-  console.log(`🖱️ Mouse up - duration: ${clickDuration}ms, isDragging: ${isDragging}, mouseDownTime: ${mouseDownTime}`);
-  
-  // Check if mouseDownTime was never set (indicates mouseDown wasn't called)
-  if (mouseDownTime === 0) {
-    console.log(`🖱️ Click ignored - mouseDown was never called`);
-    return;
-  }
-  
-  // Only process click if it was quick and didn't drag much
-  if (clickDuration < 300 && !isDragging) {
-    console.log(`🖱️ Processing click event`);
-    const clickHandled = onMouseClick(e);
-    
-    // If we successfully processed a piece click, prevent OrbitControls from handling it
-    // This prevents the camera from moving when clicking on pieces
-    if (clickHandled === true) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  } else {
-    console.log(`🖱️ Click ignored - too long (${clickDuration}ms) or dragging (${isDragging})`);
-  }
-  
-  mouseDownTime = 0;
-  isDragging = false;
-}
+// Mouse event handlers now imported from MouseInteractionManager module
 
 // Timer management functions now imported from TimerManager module
 
@@ -1058,9 +1008,10 @@ if (typeof THREE !== 'undefined' && THREE.TrackballControls) {
     },
     
     handleCameraMouseMove(e) {
-      if (isDragging && mouseDownTime > 0) {
-        const deltaX = e.clientX - mouseStartPos.x;
-        const deltaY = e.clientY - mouseStartPos.y;
+      if (isCurrentlyDragging() && getMouseState().mouseDownTime > 0) {
+        const mouseState = getMouseState();
+        const deltaX = e.clientX - mouseState.mouseStartPos.x;
+        const deltaY = e.clientY - mouseState.mouseStartPos.y;
         
         this.cameraAngleX += deltaX * 0.01;
         this.cameraAngleY += deltaY * 0.01;
@@ -1070,8 +1021,9 @@ if (typeof THREE !== 'undefined' && THREE.TrackballControls) {
         
         this.updateCameraPosition();
         
-        mouseStartPos.x = e.clientX;
-        mouseStartPos.y = e.clientY;
+        // Note: mouseStartPos update is now handled in the MouseInteractionManager
+        // mouseStartPos.x = e.clientX;
+        // mouseStartPos.y = e.clientY;
       }
     },
     
@@ -4141,493 +4093,7 @@ function getPieceColorForPlayer(piece, player, playerIndex) {
   return basePlayerColor;
 }
 
-// Handle right-click for evolution menu
-function onRightClick(event) {
-  console.log('🖱️ Right-click event triggered - onRightClick called');
-  
-  // Calculate mouse position
-  const rect = renderer.domElement.getBoundingClientRect();
-  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-  
-  // Update raycaster
-  raycaster.setFromCamera(mouse, camera);
-  
-  // Test all clickable objects (pieces)
-  const clickableObjects = [];
-  Object.values(pieceMeshes).forEach(mesh => {
-    clickableObjects.push(mesh);
-    if (mesh.children && mesh.children.length > 0) {
-      mesh.children.forEach(child => {
-        if (child.type === 'Mesh' || child.type === 'Group') {
-          clickableObjects.push(child);
-          if (child.children && child.children.length > 0) {
-            child.children.forEach(grandchild => {
-              if (grandchild.type === 'Mesh') {
-                clickableObjects.push(grandchild);
-              }
-            });
-          }
-        }
-      });
-    }
-  });
-
-  const intersects = raycaster.intersectObjects(clickableObjects, true);
-  
-  if (intersects.length > 0) {
-    let clickedObject = intersects[0].object;
-    
-    // Find the piece mesh by traversing up the hierarchy
-    while (clickedObject && !clickedObject.userData.piece) {
-      clickedObject = clickedObject.parent;
-    }
-    
-    if (clickedObject && clickedObject.userData.piece) {
-      const piece = clickedObject.userData.piece;
-      console.log(`🖱️ Right-clicked piece: ${piece.type} ${piece.symbol}`);
-      
-      // Check if this is our piece
-      if (piece.playerId === socket.id) {
-        console.log('🖱️ Requesting evolution choice for our piece');
-        
-        // Request evolution choice from server
-        socket.emit('request-evolution-choice', {
-          pieceId: piece.id
-        });
-        
-        return true; // Click handled
-      } else {
-        console.log('🖱️ Cannot evolve opponent piece');
-        showNotification('Evolution', 'Cannot evolve opponent pieces', 'error');
-      }
-    }
-  }
-  
-  return false; // Click not handled
-}
-
-function onMouseClick(event) {
-  console.log('🖱️ Click event triggered - onMouseClick called');
-  
-  // Check if this is a right-click
-  const isRightClick = event.button === 2;
-  
-  let clickHandled = false;
-  
-  // For now, just allow all clicks - we can add drag detection later if needed
-  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-  
-  raycaster.setFromCamera(mouse, camera);
-  
-  // Get all potential clickable objects (pieces and valid move highlights)
-  const clickableObjects = [];
-  
-  // Add piece meshes and their children (GLB models have geometry in children)
-  Object.values(pieceMeshes).forEach(mesh => {
-    clickableObjects.push(mesh);
-    // Also add child meshes that contain the actual geometry
-    if (mesh.children && mesh.children.length > 0) {
-      mesh.children.forEach(child => {
-        if (child.type === 'Mesh' || child.type === 'Group') {
-          clickableObjects.push(child);
-          // Add nested children if they exist (GLB can have nested structure)
-          if (child.children && child.children.length > 0) {
-            child.children.forEach(grandchild => {
-              if (grandchild.type === 'Mesh') {
-                clickableObjects.push(grandchild);
-              }
-            });
-          }
-        }
-      });
-    }
-  });
-  
-  // Add valid move highlights
-  let validMoveCount = 0;
-  const validMoveHighlights = [];
-  scene.children.forEach(child => {
-    if (child.userData && child.userData.isValidMoveHighlight) {
-      clickableObjects.push(child);
-      validMoveHighlights.push(child);
-      validMoveCount++;
-      console.log('🟢 Found valid move highlight:', child.userData.move);
-    }
-  });
-  
-  console.log('🔍 Clickable objects setup:', {
-    totalClickable: clickableObjects.length,
-    pieceMeshes: Object.keys(pieceMeshes).length,
-    validMoveHighlights: validMoveCount
-  });
-  
-  const intersects = raycaster.intersectObjects(clickableObjects, true); // Include child objects
-  
-  console.log('🔍 Raycaster debug:', {
-    mouseX: mouse.x,
-    mouseY: mouse.y,
-    intersectsLength: intersects.length,
-    sceneChildrenCount: scene.children.length,
-    pieceMeshesCount: Object.keys(pieceMeshes).length,
-    clickableObjectsCount: clickableObjects.length,
-    validMoveHighlightsCount: clickableObjects.filter(obj => obj.userData?.isValidMoveHighlight).length,
-    cameraPosition: camera.position,
-    rayDirection: raycaster.ray.direction
-  });
-  
-  // Debug: Check the structure of the first few piece meshes
-  console.log('🔍 Analyzing piece mesh structure:');
-  const pieceKeys = Object.keys(pieceMeshes);
-  for (let i = 0; i < Math.min(3, pieceKeys.length); i++) {
-    const pieceKey = pieceKeys[i];
-    const pieceMesh = pieceMeshes[pieceKey];
-    console.log(`🔍 Piece ${pieceKey}:`, {
-      type: pieceMesh.type,
-      visible: pieceMesh.visible,
-      children: pieceMesh.children.length,
-      position: pieceMesh.position,
-      userData: pieceMesh.userData,
-      hasGeometry: pieceMesh.geometry !== undefined,
-      hasMaterial: pieceMesh.material !== undefined
-    });
-    
-    // Check children for actual meshes
-    if (pieceMesh.children && pieceMesh.children.length > 0) {
-      console.log(`🔍 ${pieceKey} children:`, pieceMesh.children.map(child => ({
-        type: child.type,
-        visible: child.visible,
-        hasGeometry: child.geometry !== undefined,
-        hasMaterial: child.material !== undefined,
-        userData: child.userData
-      })));
-    }
-  }
-  
-  // Debug: Try raycasting against all scene children to see if anything hits
-  console.log('🔍 Testing raycaster against all scene children...');
-  const allIntersects = raycaster.intersectObjects(scene.children, true);
-  console.log('🔍 All intersects:', allIntersects.length);
-  if (allIntersects.length > 0) {
-    console.log('🔍 First all intersect:', {
-      type: allIntersects[0].object.type,
-      userData: allIntersects[0].object.userData,
-      parent: allIntersects[0].object.parent?.userData
-    });
-  }
-  
-  // Log first few intersects for debugging
-  if (intersects.length > 0) {
-    console.log('🔍 First intersect:', {
-      type: intersects[0].object.type,
-      userData: intersects[0].object.userData,
-      hasParent: !!intersects[0].object.parent,
-      parentUserData: intersects[0].object.parent?.userData,
-      isValidMoveHighlight: intersects[0].object.userData?.isValidMoveHighlight
-    });
-    
-    // Log all intersects to see if move highlights are detected
-    console.log('🔍 All intersects:', intersects.map(i => ({
-      type: i.object.type,
-      isValidMoveHighlight: i.object.userData?.isValidMoveHighlight,
-      isPiece: !!i.object.userData?.piece
-    })));
-  }
-  
-  // If no intersects, let's check what's in the scene
-  if (intersects.length === 0) {
-    console.log('🔍 No intersects - looking for piece objects in scene...');
-    console.log('🔍 Debug: Valid move highlights in scene:', 
-      scene.children.filter(c => c.userData.isValidMoveHighlight).map(c => ({
-        position: c.position,
-        userData: c.userData
-      }))
-    );
-    
-    // Find all objects with piece userData
-    const pieceObjects = scene.children.filter(child => child.userData?.piece);
-    console.log('🔍 Found piece objects:', pieceObjects.length);
-    
-    if (pieceObjects.length > 0) {
-      console.log('🔍 First piece object:', {
-        type: pieceObjects[0].type,
-        name: pieceObjects[0].name,
-        visible: pieceObjects[0].visible,
-        position: pieceObjects[0].position,
-        userData: pieceObjects[0].userData,
-        hasGeometry: !!pieceObjects[0].geometry,
-        hasMaterial: !!pieceObjects[0].material,
-        childrenCount: pieceObjects[0].children.length
-      });
-      
-      // Check if this piece is in the pieceMeshes array
-      const pieceId = pieceObjects[0].userData.pieceId;
-      const isInPieceMeshes = pieceMeshes[pieceId] === pieceObjects[0];
-      console.log('🔍 Is in pieceMeshes:', isInPieceMeshes, 'pieceId:', pieceId);
-    }
-  }
-  
-  if (intersects.length > 0) {
-    let clickedObject = intersects[0].object;
-    console.log('Clicked object:', clickedObject.userData, clickedObject.type);
-    console.log('Has piece:', !!clickedObject.userData.piece);
-    console.log('Has valid move highlight:', !!clickedObject.userData.isValidMoveHighlight);
-    console.log('Full userData:', JSON.stringify(clickedObject.userData));
-    
-    // Check if this is a valid move highlight first (before traversing)
-    if (clickedObject.userData.isValidMoveHighlight) {
-      console.log('✅ Direct hit on valid move highlight!');
-    } else {
-      // For GLB models, we might need to traverse up to find the piece mesh
-      while (clickedObject && !clickedObject.userData.piece && !clickedObject.userData.isValidMoveHighlight) {
-        clickedObject = clickedObject.parent;
-      }
-    }
-    
-    console.log('Found piece object:', clickedObject ? clickedObject.userData : 'none');
-    
-    // Additional check - make sure we're not missing the valid move highlight
-    if (clickedObject && !clickedObject.userData.piece && !clickedObject.userData.isValidMoveHighlight) {
-      console.log('⚠️ Clicked object has no piece or valid move data - checking original:', intersects[0].object.userData);
-    }
-    
-    // Check if clicked on a piece
-    if (clickedObject && clickedObject.userData.piece) {
-      const piece = clickedObject.userData.piece;
-      console.log('Clicked piece:', piece.symbol, piece.type);
-      
-      // Check if this piece belongs to the current player
-      const currentPlayer = Object.values(gameState.players).find(p => p.id === window.globalSocket.id);
-      console.log('Socket ID:', window.globalSocket.id);
-      console.log('Current player:', currentPlayer);
-      console.log('Piece player ID:', piece.playerId);
-      console.log('Player ID match:', currentPlayer && piece.playerId === currentPlayer.id);
-      
-      // More robust ownership check - also check if piece belongs to socket ID directly
-      const isOwnPiece = (currentPlayer && piece.playerId === currentPlayer.id) || 
-                        (piece.playerId === window.globalSocket.id);
-      
-      if (isOwnPiece) {
-        clickHandled = true;
-        if (isRightClick) {
-          // Right-click: Request evolution options
-          window.globalSocket.emit('request-evolution-choice', { pieceId: piece.id });
-        } else {
-          // Left-click: Select piece and show moves
-          selectedPieceId = piece.id;
-          highlightSelectedPiece(piece.id);
-          
-          // Request valid moves for this piece
-          window.globalSocket.emit('get-valid-moves', { pieceId: piece.id });
-          
-          // Update UI
-          gameInfoEl.textContent = `Selected: ${piece.symbol} ${piece.type}`;
-        }
-      } else {
-        console.log('Cannot select opponent piece');
-        gameInfoEl.textContent = 'Cannot select opponent piece';
-      }
-    }
-    
-    // Check if clicked on a valid move highlight
-    else if (clickedObject && clickedObject.userData.isValidMoveHighlight) {
-      console.log('🎯 Valid move highlight clicked!');
-      clickHandled = true;
-      const move = clickedObject.userData.move;
-      console.log('Clicked valid move:', move);
-      console.log('Move data:', move.row, move.col, move.type);
-      
-      // Find the currently selected piece by checking which piece has valid moves displayed
-      const currentSelectedPieceId = getCurrentlySelectedPieceId();
-      console.log('🔍 MOVE TYPE DEBUG:', move.type, 'for piece:', currentSelectedPieceId);
-      console.log('🎯 Current selected piece ID:', currentSelectedPieceId);
-      
-      if (currentSelectedPieceId) {
-        // For splitters, we handle split and move actions directly based on the move type
-        // No dialog needed since different visual indicators are used
-        
-        // Check if this is a dual movement piece and requires mode selection
-        const selectedPiece = gameState.pieces[currentSelectedPieceId];
-        const isDualMovement = selectedPiece && selectedPiece.type === 'HYBRID_QUEEN';
-        
-        if (isDualMovement && (move.type === 'dual-move-queen' || move.type === 'dual-move-jumper')) {
-          // For dual movement, validate that the mode matches the selected movement mode
-          if (!selectedMovementMode) {
-            gameInfoEl.textContent = `Select movement mode first!`;
-            gameInfoEl.style.color = '#ff6b6b';
-            setTimeout(() => {
-              gameInfoEl.style.color = '#ffffff';
-            }, 2000);
-            return;
-          }
-          
-          const expectedMoveType = selectedMovementMode === 'queen' ? 'dual-move-queen' : 'dual-move-jumper';
-          if (move.type !== expectedMoveType) {
-            gameInfoEl.textContent = `Move doesn't match selected mode!`;
-            gameInfoEl.style.color = '#ff6b6b';
-            setTimeout(() => {
-              gameInfoEl.style.color = '#ffffff';
-            }, 2000);
-            return;
-          }
-        }
-        if (move.type === 'split') {
-          // Send split command to server
-          console.log(`🔄 SPLIT MOVE DETECTED - Sending split-piece event for ${currentSelectedPieceId} to (${move.row}, ${move.col})`);
-          window.globalSocket.emit('split-piece', {
-            pieceId: currentSelectedPieceId,
-            targetRow: move.row,
-            targetCol: move.col
-          });
-          
-          // Update UI
-          gameInfoEl.textContent = `Splitting piece...`;
-          console.log(`Splitting piece ${currentSelectedPieceId} to (${move.row}, ${move.col})`);
-
-        } else {
-          // Send regular move command to server
-          console.log('🚀 MOVE DEBUG - Sending move command:');
-          console.log('  pieceId:', currentSelectedPieceId);
-          console.log('  targetRow:', move.row, 'targetCol:', move.col);
-          console.log('  Current piece position:', gameState.pieces[currentSelectedPieceId]?.mesh?.position);
-          
-          window.globalSocket.emit('move-piece', {
-            pieceId: currentSelectedPieceId,
-            targetRow: move.row,
-            targetCol: move.col
-          });
-          
-          // Update UI
-          gameInfoEl.textContent = `Moving piece...`;
-          console.log(`Moving piece ${currentSelectedPieceId} to (${move.row}, ${move.col})`);
-        }
-        
-        // Clear highlights after action
-        clearValidMoveHighlights();
-        hideDualMovementUI();
-        selectedPieceId = null;
-      }
-    }
-    
-    // Check if clicked on globe (empty space)
-    else if (clickedObject === globe) {
-      // Clear selection when clicking on empty space
-      selectedPieceId = null;
-      clearValidMoveHighlights();
-      hideDualMovementUI();
-      gameInfoEl.textContent = 'Click on your pieces to select them';
-    }
-  } else {
-    // Clicked on empty space - clear selection
-    selectedPieceId = null;
-    clearValidMoveHighlights();
-    hideDualMovementUI();
-    gameInfoEl.textContent = 'Click on your pieces to select them';
-  }
-  
-  return clickHandled;
-}
-
-// Event listener setup function - called during game initialization
-function setupMouseInteraction() {
-  console.log('🖱️ Setting up clean event handlers...');
-  
-  // Use a single click event with capture phase to get priority over OrbitControls
-  renderer.domElement.addEventListener('click', (event) => {
-    console.log('🖱️ Click event captured!');
-    
-    // Process the click and check if it was handled by piece selection
-    const clickHandled = onMouseClick(event);
-    
-    // If we handled a piece/move click, prevent OrbitControls from processing it
-    if (clickHandled) {
-      console.log('🖱️ Click handled by piece selection - preventing camera movement');
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-    }
-  }, true); // Use capture phase to run before OrbitControls
-  
-  // Add right-click for evolution menu
-  renderer.domElement.addEventListener('contextmenu', (event) => {
-    console.log('🖱️ Right-click event captured!');
-    event.preventDefault(); // Prevent context menu
-    
-    const clickHandled = onRightClick(event);
-    if (clickHandled) {
-      console.log('🖱️ Right-click handled by evolution menu');
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-    }
-  }, true);
-  
-  // Add mouse tracking for drag detection (simplified)
-  let isMouseDown = false;
-  // mouseDownTime moved to global scope
-  
-  renderer.domElement.addEventListener('mousedown', (e) => {
-    isMouseDown = true;
-    mouseDownTime = Date.now();
-    handleMouseDown(e);
-  }, false);
-  
-  renderer.domElement.addEventListener('mousemove', (e) => {
-    handleMouseMove(e);
-  }, false);
-  
-  renderer.domElement.addEventListener('mouseup', (e) => {
-    isMouseDown = false;
-    handleMouseUp(e);
-  }, false);
-  
-  renderer.domElement.addEventListener('contextmenu', (event) => {
-    event.preventDefault(); // Prevent context menu on right-click
-  }, false);
-  
-  console.log('🖱️ Pointer event listeners attached to canvas');
-}
-
-// Touch event handling for mobile
-let touchStartTime = 0;
-let touchStartPos = { x: 0, y: 0 };
-
-function onTouchStart(e) {
-  e.preventDefault();
-  touchStartTime = Date.now();
-  const touch = e.touches[0];
-  
-  touchStartPos.x = touch.clientX;
-  touchStartPos.y = touch.clientY;
-}
-
-function onTouchEnd(e) {
-  e.preventDefault();
-  const touchDuration = Date.now() - touchStartTime;
-  const touch = e.changedTouches[0];
-  const touchEndPos = { x: touch.clientX, y: touch.clientY };
-  
-  // Calculate distance moved
-  const deltaX = touchEndPos.x - touchStartPos.x;
-  const deltaY = touchEndPos.y - touchStartPos.y;
-  const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-  
-  // If touch was brief and didn't move much, treat as tap
-  if (touchDuration < 300 && distance < 20) {
-    onMouseClick({ clientX: touchEndPos.x, clientY: touchEndPos.y });
-  }
-}
-
-// Add touch event listeners to canvas with capture phase
-renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false, capture: true });
-renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false, capture: true });
-
-// Handle window resize
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
+// Mouse functions now imported from MouseInteractionManager module
 
 // Add keyboard controls for debug features
 // modeIndicator moved to global scope
