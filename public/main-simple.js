@@ -169,6 +169,47 @@ import {
   getTextLabelCache,
   dispose
 } from './modules/RenderingManager.js';
+import {
+  getGameState,
+  setGameState,
+  resetGameState,
+  initializeGameComponents,
+  startGameInitialization,
+  getPieceSymbols,
+  getCurrentlySelectedPieceId,
+  setSelectedPieceId,
+  getValidMoves,
+  setValidMoves,
+  clearValidMoves,
+  getSelectedMovementMode,
+  setSelectedMovementMode,
+  getPlayerName,
+  getPieceColorForPlayer,
+  isGameActive,
+  getPieceById,
+  getPiecesByPlayerId,
+  getPlayerById,
+  getAllPlayers,
+  getCurrentPlayer,
+  isPieceOwnedByCurrentPlayer,
+  getGameStatistics,
+  highlightSelectedPiece,
+  clearSelectionHighlights,
+  highlightValidMoves,
+  clearValidMoveHighlights,
+  highlightValidMovesForMode,
+  showDualMovementUI,
+  hideDualMovementUI,
+  selectMovementMode,
+  showMoveChoiceDialog,
+  closeMoveChoiceDialog,
+  executeMoveChoice,
+  getMoveTypeColor,
+  getMoveTypeIcon,
+  getMoveTypeName,
+  forceRepositionAllPieces,
+  updateQueueDisplay
+} from './modules/GameLogicManager.js';
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -207,47 +248,7 @@ async function loadGLTFLoader() {
   startGameInitialization();
 })();
 
-function startGameInitialization() {
-  // Wait for DOM to be ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeAfterDOM);
-  } else {
-    initializeAfterDOM();
-  }
-}
-// Menu system functions now imported from MenuManager module
-
-
-
-  // Set up all socket event listeners
-  setupAllSocketHandlers(socket);
-  
-  // Set up color management socket handlers
-  setupColorSocketHandlers(socket);
-  
-  // Set up timer management socket handlers
-  setupTimerSocketHandlers(socket);
-  
-  // Set up evolution socket handlers
-  setupEvolutionSocketHandlers(socket);
-}
-
-// Return to menu
-// returnToMenu function now imported from MenuManager module
-
-// showGameOver function now imported from MenuManager module
-
-// Menu system initialization now handled in MenuManager module
-
-// Continue with game initialization
-function initializeGameComponents() {
-  console.log('🎮 Initializing game components...');
-  
-  // Initialize the 3D scene if not already done
-  if (!scene) {
-    console.error('❌ Scene not initialized!');
-    return;
-  }
+// Game initialization functions now handled by GameLogicManager
   
   // Start the animation loop if not already running
   if (!window.animationStarted) {
@@ -322,20 +323,7 @@ const performanceOptimizer = new PerformanceOptimizer();
 
 // Real-time timer functions now imported from TimerManager module
 
-function updateQueueDisplay(queuedMove) {
-  const statusElement = document.getElementById('timer-status');
-  
-  if (!statusElement) return;
-  
-  if (queuedMove) {
-    statusElement.textContent = `Move queued: ${queuedMove.pieceId} → (${queuedMove.targetRow}, ${queuedMove.targetCol})`;
-    statusElement.style.color = '#ffaa00';
-  } else {
-    statusElement.textContent = 'No move queued';
-    statusElement.style.color = '#ccc';
-  }
-}
-
+// updateQueueDisplay function now handled by GameLogicManager
 // Camera controls setup now handled by RenderingManager
 // Globe setup
 const globeRadius = 5;
@@ -579,12 +567,7 @@ testModelAccess().then((accessible) => {
 
 // Old grid overlay function removed - using new version above
 
-// Game state
-let gameState = {
-  players: {},
-  pieces: {},
-  gridConfig: { rows: 20, cols: 8 }
-};
+// Game state now managed by GameLogicManager
 
 // COLOR_MAP now imported from ColorManager module
 
@@ -937,67 +920,7 @@ function updatePieceMesh(piece) {
 
 // selectedMovementMode moved to global scope
 
-function showDualMovementUI() {
-  const dualMovementUI = document.getElementById('dual-movement-ui');
-  const modeDescription = document.getElementById('mode-description');
-  
-  dualMovementUI.style.display = 'block';
-  modeDescription.textContent = 'Click a mode to see movement options';
-  
-  // Clear previous mode selection
-  selectedMovementMode = null;
-  updateModeButtons();
-}
-
-function hideDualMovementUI() {
-  const dualMovementUI = document.getElementById('dual-movement-ui');
-  dualMovementUI.style.display = 'none';
-  selectedMovementMode = null;
-}
-
-function updateModeButtons() {
-  const queenBtn = document.getElementById('queen-mode-btn');
-  const jumperBtn = document.getElementById('jumper-mode-btn');
-  
-  // Reset button styles
-  queenBtn.style.opacity = selectedMovementMode === 'queen' ? '1' : '0.7';
-  jumperBtn.style.opacity = selectedMovementMode === 'jumper' ? '1' : '0.7';
-  
-  queenBtn.style.border = selectedMovementMode === 'queen' ? '2px solid #fff' : 'none';
-  jumperBtn.style.border = selectedMovementMode === 'jumper' ? '2px solid #fff' : 'none';
-}
-
-function selectMovementMode(mode) {
-  selectedMovementMode = mode;
-  updateModeButtons();
-  
-  // Update mode description
-  const modeDescription = document.getElementById('mode-description');
-  if (mode === 'queen') {
-    modeDescription.textContent = 'Queen Mode: Move like a queen (gold cubes)';
-  } else if (mode === 'jumper') {
-    modeDescription.textContent = 'Jumper Mode: Jump and capture multiple pieces (orange cones)';
-  }
-  
-  // Highlight moves for selected mode
-  highlightValidMovesForMode(mode);
-}
-
-function highlightValidMovesForMode(mode) {
-  // Clear previous highlights
-  clearValidMoveHighlights();
-  
-  // Filter moves by selected mode
-  const filteredMoves = validMoves.filter(move => 
-    (mode === 'queen' && move.type === 'dual-move-queen') ||
-    (mode === 'jumper' && move.type === 'dual-move-jumper')
-  );
-  
-  // Add highlights for filtered moves
-  filteredMoves.forEach(move => {
-    const position = getWorldPosition(move.row, move.col);
-    
-    let highlightColor, highlightGeometry;
+// Dual movement UI functions now handled by GameLogicManager
     
     if (move.type === 'dual-move-queen') {
       highlightColor = 0xffd700; // Gold for dual queen movement
@@ -1172,13 +1095,7 @@ function refreshLobbies() {
 
 // updateLobbyList function now imported from UIManager module
 
-function getPlayerName() {
-  // Try to get player name from game state or use default
-  const playerKeys = Object.keys(gameState?.players || {});
-  const currentPlayer = playerKeys.find(key => key === socket.id);
-  return currentPlayer ? gameState.players[currentPlayer].name : 'Player';
-}
-
+// getPlayerName function now handled by GameLogicManager
 // Statistics management functions
 function showStatisticsUI() {
   document.getElementById('stats-ui').style.display = 'block';
@@ -1532,344 +1449,7 @@ function updateBracketsDisplay(tournament) {
     </div>
   `).join('');
 }
-
-function highlightValidMoves() {
-  // Clear previous highlights
-  clearValidMoveHighlights();
-  
-  // Update mode indicator to show move selection
-  if (modeIndicator && validMoves.length > 0) {
-    modeIndicator.textContent = 'Select a move (click green highlights)';
-    modeIndicator.style.borderColor = '#00ff00';
-    modeIndicator.style.background = 'rgba(0, 50, 0, 0.8)';
-  }
-  
-  // Check for positions with multiple move types
-  const positionMoveTypes = {};
-  validMoves.forEach(move => {
-    const key = `${move.row},${move.col}`;
-    if (!positionMoveTypes[key]) {
-      positionMoveTypes[key] = [];
-    }
-    positionMoveTypes[key].push(move);
-  });
-  
-  // Add new highlights - create separate highlight for each move type
-  validMoves.forEach(move => {
-    const position = getWorldPosition(move.row, move.col);
-    
-    // Different colors and shapes for different move types
-    let highlightColor, highlightGeometry;
-    
-    if (move.type === 'attack') {
-      highlightColor = 0xff4444; // Red for attack
-      highlightGeometry = new THREE.SphereGeometry(0.15, 8, 8);
-    } else if (move.type === 'split') {
-      highlightColor = 0xffff00; // BRIGHT YELLOW for split moves - visually distinct from regular moves
-      // Create a torus (3D ring) for split moves - more clickable than flat ring
-      highlightGeometry = new THREE.TorusGeometry(0.4, 0.05, 8, 32);
-    } else if (move.type === 'jump-capture') {
-      highlightColor = 0xff8800; // Orange for jump capture
-      highlightGeometry = new THREE.TetrahedronGeometry(0.12); // Pyramid shape for jump
-    } else if (move.type === 'multi-jump-capture') {
-      highlightColor = 0xaa00ff; // Purple for multi-jump capture
-      highlightGeometry = new THREE.OctahedronGeometry(0.15); // Larger octahedron for multi-capture
-    } else if (move.type === 'dual-move-queen') {
-      highlightColor = 0xffd700; // Gold for dual queen movement
-      highlightGeometry = new THREE.BoxGeometry(0.18, 0.18, 0.18); // Cube shape for queen mode
-    } else if (move.type === 'dual-move-jumper') {
-      highlightColor = 0xff6600; // Orange-red for dual jumper movement
-      highlightGeometry = new THREE.ConeGeometry(0.12, 0.25, 6); // Cone shape for jumper mode
-    } else {
-      highlightColor = 0x44ff44; // Green for regular move
-      highlightGeometry = new THREE.SphereGeometry(0.25, 16, 16); // Increased size for better clicking
-    }
-    
-    const highlightMaterial = new THREE.MeshBasicMaterial({
-      color: highlightColor,
-      transparent: true,
-      opacity: 0.8,
-      wireframe: move.type === 'jump-capture' || move.type === 'multi-jump-capture' || move.type === 'dual-move-queen' || move.type === 'dual-move-jumper', // Wireframe for special moves (not split since it uses ring geometry)
-      depthTest: true,
-      depthWrite: true
-    });
-    
-    const highlight = new THREE.Mesh(highlightGeometry, highlightMaterial);
-    highlight.position.set(position.x, position.y, position.z);
-    highlight.userData = { isValidMoveHighlight: true, move: move };
-    
-    // Make sure the highlight is above the globe surface
-    const heightAdjustment = move.type === 'split' ? 0.08 : 0.05; // Split highlights slightly higher
-    const normalizedPos = highlight.position.clone().normalize();
-    highlight.position.addScaledVector(normalizedPos, heightAdjustment);
-    
-    scene.add(highlight);
-    console.log(`Added ${move.type} highlight at (${move.row}, ${move.col}) - userData:`, highlight.userData, 'position:', highlight.position);
-  });
-}
-
-function clearValidMoveHighlights() {
-  // Remove all valid move highlights
-  const highlightsToRemove = [];
-  scene.children.forEach(child => {
-    if (child.userData.isValidMoveHighlight) {
-      highlightsToRemove.push(child);
-    }
-  });
-  
-  console.log(`🧹 Clearing ${highlightsToRemove.length} valid move highlights`);
-  highlightsToRemove.forEach(child => scene.remove(child));
-  
-  // Clear selection highlight
-  clearSelectionHighlight();
-}
-
-function clearSelectionHighlight() {
-  // Remove selection highlight
-  scene.children.forEach(child => {
-    if (child.userData.isSelectionHighlight) {
-      scene.remove(child);
-    }
-  });
-}
-
-function highlightSelectedPiece(pieceId) {
-  // Clear previous selection highlight
-  clearSelectionHighlight();
-  
-  const piece = gameState.pieces[pieceId];
-  if (!piece) return;
-  
-  const position = getWorldPosition(piece.row, piece.col);
-  
-  // Create different selection highlights for different piece types
-  if (piece.type === 'HYBRID_QUEEN') {
-    // Special dual-ring highlight for Hybrid Queen
-    const outerRingGeometry = new THREE.RingGeometry(0.18, 0.23, 16);
-    const outerRingMaterial = new THREE.MeshBasicMaterial({
-      color: 0xf39c12, // Orange for Hybrid Queen
-      transparent: true,
-      opacity: 0.8,
-      side: THREE.DoubleSide
-    });
-    
-    const outerRing = new THREE.Mesh(outerRingGeometry, outerRingMaterial);
-    outerRing.position.set(position.x, position.y, position.z);
-    outerRing.lookAt(0, 0, 0);
-    outerRing.userData = { isSelectionHighlight: true, pieceId: pieceId };
-    scene.add(outerRing);
-    
-    // Add inner ring with different color
-    const innerRingGeometry = new THREE.RingGeometry(0.12, 0.17, 16);
-    const innerRingMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffd700, // Gold inner ring
-      transparent: true,
-      opacity: 0.9,
-      side: THREE.DoubleSide
-    });
-    
-    const innerRing = new THREE.Mesh(innerRingGeometry, innerRingMaterial);
-    innerRing.position.set(position.x, position.y, position.z);
-    innerRing.lookAt(0, 0, 0);
-    innerRing.userData = { isSelectionHighlight: true, pieceId: pieceId };
-    scene.add(innerRing);
-  } else {
-    // Standard selection highlight (yellow ring)
-    const ringGeometry = new THREE.RingGeometry(0.15, 0.2, 16);
-    const ringMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffff00,
-      transparent: true,
-      opacity: 0.8,
-      side: THREE.DoubleSide
-    });
-    
-    const selectionRing = new THREE.Mesh(ringGeometry, ringMaterial);
-    selectionRing.position.set(position.x, position.y, position.z);
-    selectionRing.lookAt(0, 0, 0); // Face the center of the sphere
-    selectionRing.userData = { isSelectionHighlight: true, pieceId: pieceId };
-    scene.add(selectionRing);
-  }
-}
-
-function getCurrentlySelectedPieceId() {
-  return selectedPieceId;
-}
-
-
-
-// Color functions now imported from ColorManager module
-
-
-// Enhanced piece color function that prioritizes player identification
-function getPieceColorForPlayer(piece, player, playerIndex) {
-  // Check if this is a split piece that should inherit parent color
-  if (piece.id && piece.id.includes('-split-')) {
-    // For split pieces, find any existing piece with the same player that has a color we can inherit
-    // Look for other pieces from the same player that might have evolved colors
-    let parentColor = null;
-    
-    // Search through all existing pieces for the same player to find a color to inherit
-    for (const existingPieceId in pieceMeshes) {
-      const existingMesh = pieceMeshes[existingPieceId];
-      if (existingMesh && existingMesh.userData && existingMesh.userData.piece) {
-        const existingPiece = existingMesh.userData.piece;
-        
-        // If this is the same player and has the same type (SPLITTER), inherit its color
-        if (existingPiece.playerId === piece.playerId && 
-            existingPiece.type === piece.type &&
-            existingPieceId !== piece.id) { // Don't inherit from self
-          
-          // Try to extract color from this mesh
-          if (existingMesh.material) {
-            if (Array.isArray(existingMesh.material)) {
-              parentColor = existingMesh.material[0].color.clone();
-            } else {
-              parentColor = existingMesh.material.color.clone();
-            }
-          }
-          
-          // If no material on main mesh, check children
-          if (!parentColor && existingMesh.children && existingMesh.children.length > 0) {
-            for (const child of existingMesh.children) {
-              if (child.material && child.material.color) {
-                if (Array.isArray(child.material)) {
-                  parentColor = child.material[0].color.clone();
-                } else {
-                  parentColor = child.material.color.clone();
-                }
-                break;
-              }
-            }
-          }
-          
-          if (parentColor) {
-            console.log(`🎨 SPLIT INHERITANCE: Split piece ${piece.id} inheriting color ${parentColor.getHexString()} from existing ${existingPiece.type} ${existingPieceId}`);
-            return parentColor;
-          }
-        }
-      }
-    }
-    
-    console.log(`🎨 SPLIT INHERITANCE: Could not find suitable parent color for ${piece.id}, using fallback`);
-  }
-  
-  // Use the player's selected color from the server
-  const basePlayerColor = getPlayerColor(piece.playerId, playerIndex);
-  
-  console.log(`getPieceColorForPlayer: piece=${piece.type}, playerId=${piece.playerId}, baseColor=${basePlayerColor.toString(16)}`);
-  
-  // Return the exact player color without modification for consistency
-  // This ensures all pieces for a player have the same color
-  console.log(`Final color for ${piece.type}: ${basePlayerColor.toString(16)}`);
-  
-  return basePlayerColor;
-}
-
-// Mouse functions now imported from MouseInteractionManager module
-
-// Add keyboard controls for debug features
-// modeIndicator moved to global scope
-
-// Hide mode indicator since we no longer need mode switching
-if (modeIndicator) {
-  modeIndicator.style.display = 'none';
-}
-
-window.addEventListener('keydown', (e) => {
-  
-  // Add debug key to force piece click detection
-  if (e.key === 'd' || e.key === 'D') {
-    console.log('🔍 Debug: Force checking for pieces under mouse');
-    const event = new MouseEvent('click', {
-      clientX: window.innerWidth / 2,
-      clientY: window.innerHeight / 2
-    });
-    onMouseClick(event);
-  }
-  
-  // Debug key to convert selected pawn to splitter
-  if (e.key === 't' || e.key === 'T') {
-    if (selectedPieceId && gameState.pieces[selectedPieceId]) {
-      const piece = gameState.pieces[selectedPieceId];
-      if (piece.type === 'PAWN') {
-        console.log('🔧 DEBUG: Converting PAWN to SPLITTER for testing');
-        // Send evolution command directly
-        window.globalSocket.emit('debug-evolve-piece', {
-          pieceId: selectedPieceId,
-          newType: 'SPLITTER'
-        });
-        showNotification('Debug', 'Converting PAWN to SPLITTER for testing', 'info');
-      } else {
-        showNotification('Debug', 'Select a PAWN first to convert to SPLITTER', 'warning');
-      }
-    } else {
-      showNotification('Debug', 'No piece selected - select a PAWN first', 'warning');
-    }
-  }
-});
-
-// Animation loop
-function animate() {
-  requestAnimationFrame(animate);
-  
-  // Update frame counter for performance monitoring
-  performanceOptimizer.frameCount++;
-  
-  if (controls) {
-    controls.update();
-  }
-  
-  // Rotate globe slowly
-  globe.rotation.y += 0.001;
-  
-  // Animate equator squares with pulsing effect
-  const time = Date.now() * 0.002;
-  gridSquares.forEach(square => {
-    if (square.userData.isEquatorSquare) {
-      // Pulsing opacity effect for equator squares
-      square.material.opacity = square.userData.originalOpacity + Math.sin(time) * 0.2;
-    }
-  });
-  
-  renderer.render(scene, camera);
-}
-
-// Add event listeners for dual movement mode selection
-document.getElementById('queen-mode-btn').addEventListener('click', () => {
-  selectMovementMode('queen');
-});
-
-document.getElementById('jumper-mode-btn').addEventListener('click', () => {
-  selectMovementMode('jumper');
-});
-
-// Tournament UI event listeners
-document.getElementById('create-tournament-btn').addEventListener('click', () => {
-  showTournamentCreation();
-});
-
-document.getElementById('join-tournament-btn').addEventListener('click', () => {
-  showTournamentList();
-});
-
-document.getElementById('create-tournament-confirm').addEventListener('click', () => {
-  createTournament();
-});
-
-document.getElementById('create-tournament-cancel').addEventListener('click', () => {
-  hideTournamentCreation();
-});
-
-// Lobby system functionality
-let currentLobby = null;
-let isInLobby = false;
-
-// Lobby event handlers
-document.getElementById('lobby-toggle').addEventListener('click', () => {
-  const lobbyUI = document.getElementById('lobby-ui');
-  if (lobbyUI.style.display === 'none') {
-    showLobbyUI();
-  } else {
+// Game logic highlighting functions now handled by GameLogicManager
     hideLobbyUI();
   }
 });
@@ -2402,131 +1982,7 @@ window.chooseEvolution = chooseEvolution;
 window.bankEvolutionPoints = bankEvolutionPoints;
 
 // Move choice dialog for splitters
-function showMoveChoiceDialog(pieceId, targetRow, targetCol, moveOptions) {
-  // Create dialog HTML
-  const dialogHtml = `
-    <div id="move-choice-dialog" style="
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, 0.9);
-      border: 2px solid #ff6b6b;
-      border-radius: 10px;
-      padding: 20px;
-      color: white;
-      text-align: center;
-      z-index: 10000;
-      min-width: 300px;
-      max-width: 400px;
-    ">
-      <h3 style="margin: 0 0 20px 0; color: #ff6b6b;">Choose Action</h3>
-      <p style="margin-bottom: 20px;">Position (${targetRow}, ${targetCol}) - Multiple actions available:</p>
-      
-      <div style="display: flex; gap: 10px; justify-content: center;">
-        <button id="move-choice-regular" style="
-          background-color: #4CAF50;
-          color: white;
-          border: none;
-          padding: 10px 20px;
-          border-radius: 5px;
-          cursor: pointer;
-          font-size: 16px;
-          pointer-events: auto;
-          position: relative;
-          z-index: 10001;
-        ">
-          <div style="font-size: 24px;">→</div>
-          <div>Move</div>
-          <div style="font-size: 12px; opacity: 0.8;">Regular movement</div>
-        </button>
-        
-        <button id="move-choice-split" style="
-          background-color: #ff6b6b;
-          color: white;
-          border: none;
-          padding: 10px 20px;
-          border-radius: 5px;
-          cursor: pointer;
-          font-size: 16px;
-          pointer-events: auto;
-          position: relative;
-          z-index: 10001;
-        ">
-          <div style="font-size: 24px;">⧨</div>
-          <div>Split</div>
-          <div style="font-size: 12px; opacity: 0.8;">Create two pieces</div>
-        </button>
-      </div>
-      
-      <button id="move-choice-cancel" style="
-        background-color: #666;
-        color: white;
-        border: none;
-        padding: 5px 15px;
-        border-radius: 5px;
-        cursor: pointer;
-        font-size: 14px;
-        margin-top: 15px;
-        pointer-events: auto;
-        position: relative;
-        z-index: 10001;
-      ">Cancel</button>
-    </div>
-  `;
-  
-  // Add to document
-  document.body.insertAdjacentHTML('beforeend', dialogHtml);
-  
-  // Add event listeners
-  document.getElementById('move-choice-regular').addEventListener('click', function() {
-    executeMoveChoice(pieceId, targetRow, targetCol, 'move');
-    closeMoveChoiceDialog();
-  });
-  
-  document.getElementById('move-choice-split').addEventListener('click', function() {
-    executeMoveChoice(pieceId, targetRow, targetCol, 'split');
-    closeMoveChoiceDialog();
-  });
-  
-  document.getElementById('move-choice-cancel').addEventListener('click', function() {
-    closeMoveChoiceDialog();
-  });
-}
-
-function closeMoveChoiceDialog() {
-  const dialog = document.getElementById('move-choice-dialog');
-  if (dialog) {
-    dialog.remove();
-  }
-}
-
-function executeMoveChoice(pieceId, targetRow, targetCol, moveType) {
-  if (moveType === 'split') {
-    console.log(`🔄 SPLIT chosen - Sending split-piece event for ${pieceId} to (${targetRow}, ${targetCol})`);
-    window.globalSocket.emit('split-piece', {
-      pieceId: pieceId,
-      targetRow: targetRow,
-      targetCol: targetCol
-    });
-    gameInfoEl.textContent = `Splitting piece...`;
-  } else {
-    console.log('🚀 MOVE chosen - Sending move-piece event');
-    window.globalSocket.emit('move-piece', {
-      pieceId: pieceId,
-      targetRow: targetRow,
-      targetCol: targetCol
-    });
-    gameInfoEl.textContent = `Moving piece...`;
-  }
-  
-  // Clear highlights after action
-  clearValidMoveHighlights();
-  selectedPieceId = null;
-}
-
-function closeEvolutionDialog() {
-  const dialog = document.getElementById('evolution-choice-dialog');
+// Move choice dialog functions now handled by GameLogicManager
   if (dialog) {
     dialog.remove();
   }
