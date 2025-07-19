@@ -70,6 +70,25 @@ import {
   clearAllNotifications,
   addNotificationStyles
 } from './modules/NotificationManager.js';
+import {
+  initializeAfterDOM,
+  initMenuSystem,
+  setupMenuButtonHandlers,
+  startGame,
+  returnToMenu,
+  showGameOver,
+  startGameCountdown,
+  setGameMode,
+  getGameMode,
+  setPlayerName,
+  getPlayerName,
+  setMenuSelectedColor,
+  getMenuSelectedColor,
+  getIsInGame,
+  setIsInGame,
+  getMenuElements,
+  updateSelectedColorDisplay
+} from './modules/MenuManager.js';
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -116,202 +135,10 @@ function startGameInitialization() {
     initializeAfterDOM();
   }
 }
+// Menu system functions now imported from MenuManager module
 
-// Menu System Variables (declare at module level)
-let menuScreen, gameUI, gameOverScreen;
-let playerName = '';
-let menuSelectedColor = '#00ff00';
-// selectedColor now imported from ColorManager module
-let gameMode = 'quickplay';
-let isInGame = false;
 
-function initializeAfterDOM() {
-  console.log('DOM ready, initializing game elements...');
-  
-  // Get DOM elements after page is ready
-  menuScreen = document.getElementById('menu-screen');
-  gameUI = document.getElementById('ui');
-  gameOverScreen = document.getElementById('game-over-screen');
-  
-  if (!menuScreen || !gameUI) {
-    console.error('Critical UI elements not found!', {
-      menuScreen: !!menuScreen,
-      gameUI: !!gameUI,
-      gameOverScreen: !!gameOverScreen
-    });
-    return;
-  }
-  
-  console.log('UI elements found successfully');
-  
-  // Hide timing UI initially (only show during gameplay)
-  const timingUI = document.getElementById('timing-ui');
-  if (timingUI) timingUI.style.display = 'none';
-  
-  // Initialize menu system
-  initMenuSystem();
-}
 
-// Initialize menu system
-function initMenuSystem() {
-  console.log('🎮 Initializing menu system...');
-  
-  // Color picker setup for menu
-  const menuColorOptions = document.getElementById('menu-color-options');
-  const colors = [
-    '#00ff00', '#ff0000', '#0088ff', '#ffff00', '#ff00ff', 
-    '#00ffff', '#ff8800', '#ffffff', '#8800ff', '#00ff88'
-  ];
-  
-  colors.forEach(color => {
-    const colorDiv = document.createElement('div');
-    colorDiv.style.width = '30px';
-    colorDiv.style.height = '30px';
-    colorDiv.style.backgroundColor = color;
-    colorDiv.style.border = '2px solid transparent';
-    colorDiv.style.cursor = 'pointer';
-    colorDiv.style.borderRadius = '5px';
-    
-    colorDiv.addEventListener('click', () => {
-      // Remove previous selection
-      menuColorOptions.querySelectorAll('div').forEach(d => {
-        d.style.border = '2px solid transparent';
-      });
-      // Select this color
-      colorDiv.style.border = '2px solid white';
-      menuSelectedColor = color;
-    });
-    
-    // Select first color by default
-    if (color === colors[0]) {
-      colorDiv.style.border = '2px solid white';
-    }
-    
-    menuColorOptions.appendChild(colorDiv);
-  });
-  
-  // Menu button handlers
-  document.getElementById('quick-play-btn').addEventListener('click', () => {
-    console.log('🚀 Quick Play - Starting vs AI...');
-    playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
-    gameMode = 'vs-ai';
-    startGame();
-  });
-  
-  document.getElementById('vs-ai-btn').addEventListener('click', () => {
-    console.log('🤖 Starting vs AI...');
-    playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
-    gameMode = 'vs-ai';
-    startGame();
-  });
-  
-  document.getElementById('create-game-btn').addEventListener('click', () => {
-    console.log('🎯 Creating multiplayer game...');
-    playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
-    gameMode = 'create-vs-human';
-    startGame();
-  });
-  
-  document.getElementById('join-game-btn').addEventListener('click', () => {
-    console.log('🤝 Joining multiplayer game...');
-    playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
-    gameMode = 'join-vs-human';
-    startGame();
-  });
-  
-  document.getElementById('tournament-btn').addEventListener('click', () => {
-    alert('Tournament mode coming soon!\n\nTournament functionality is implemented on the server but needs UI integration.');
-  });
-  
-  document.getElementById('spectate-btn').addEventListener('click', () => {
-    alert('Spectator mode coming soon!\n\nSpectator functionality is implemented on the server but needs UI integration.');
-  });
-  
-  document.getElementById('evolution-guide-btn').addEventListener('click', () => {
-    alert('Evolution Guide coming soon!\n\nBasic rules:\n- Pawns gain 1 point for crossing equator\n- Capture pieces to gain their value\n- Evolve pieces with points:\n  • Pawn → Splitter (2 pts)\n  • Splitter → Bishop/Knight (3 pts)\n  • And many more!');
-  });
-  
-  // Game over screen button
-  document.getElementById('return-to-menu-btn').addEventListener('click', () => {
-    returnToMenu();
-  });
-  
-  // In-game menu button
-  document.getElementById('quit-to-menu-btn').addEventListener('click', () => {
-    if (confirm('Are you sure you want to quit to menu?')) {
-      // Disconnect from server
-      if (socket) {
-        socket.disconnect();
-      }
-      returnToMenu();
-    }
-  });
-  
-  // Pause button
-  document.getElementById('pause-game-btn').addEventListener('click', () => {
-    alert('Pause feature coming soon!');
-  });
-}
-
-// Start the game
-function startGame() {
-  console.log('🎮 Starting game with:', { playerName, gameMode });
-  
-  // Prevent multiple connections
-  if (socket && socket.connected) {
-    console.log('⚠️ Already connected to server');
-    return;
-  }
-  
-  // Initialize socket connection first
-  socket = io();
-  window.globalSocket = socket;
-  console.log('Socket.io initialized, waiting for connection...');
-  
-  // Wait for connection, then send appropriate game mode request
-  socket.on('connection-established', (data) => {
-    console.log('✅ Connected to server:', data);
-    
-    // Hide menu, show game UI and timer
-    menuScreen.style.display = 'none';
-    gameUI.style.display = 'block';
-    const timingUI = document.getElementById('timing-ui');
-    if (timingUI) timingUI.style.display = 'block';
-    isInGame = true;
-    
-    // Send the appropriate game creation request based on mode
-    switch (gameMode) {
-      case 'vs-ai':
-        console.log('🤖 Requesting vs AI game...');
-        socket.emit('create-vs-ai-game', {
-          playerName: playerName,
-          difficulty: 'MEDIUM' // Can be made configurable later
-        });
-        break;
-        
-      case 'create-vs-human':
-        console.log('🎯 Requesting create vs human game...');
-        socket.emit('create-vs-human-game', {
-          playerName: playerName
-        });
-        break;
-        
-      case 'join-vs-human':
-        console.log('🤝 Requesting join human game...');
-        socket.emit('join-human-game', {
-          playerName: playerName
-        });
-        break;
-        
-      default:
-        console.error('Unknown game mode:', gameMode);
-        socket.emit('create-vs-ai-game', {
-          playerName: playerName,
-          difficulty: 'MEDIUM'
-        });
-    }
-  });
-  
   // Set up all socket event listeners
   setupSocketListeners();
   
@@ -323,68 +150,11 @@ function startGame() {
 }
 
 // Return to menu
-function returnToMenu() {
-  console.log('🏠 Returning to menu...');
-  
-  // Clear any running timers
-  clearAllTimers();
-  
-  // Hide game screens and timer
-  gameUI.style.display = 'none';
-  gameOverScreen.style.display = 'none';
-  const timingUI = document.getElementById('timing-ui');
-  if (timingUI) timingUI.style.display = 'none';
-  
-  // Show menu
-  menuScreen.style.display = 'flex';
-  isInGame = false;
-  
-  // Reset game state
-  if (window.location.reload) {
-    // Reload page to fully reset (temporary solution)
-    window.location.reload();
-  }
-}
+// returnToMenu function now imported from MenuManager module
 
-// Show game over screen
-function showGameOver(winner, stats) {
-  console.log('🏁 Game Over!', winner, stats);
-  
-  // Clear any running timers
-  clearAllTimers();
-  
-  // Hide game UI and timer
-  gameUI.style.display = 'none';
-  const timingUI = document.getElementById('timing-ui');
-  if (timingUI) timingUI.style.display = 'none';
-  
-  // Update game over screen
-  const titleEl = document.getElementById('game-over-title');
-  const statsEl = document.getElementById('game-over-stats');
-  
-  if (winner === playerName) {
-    titleEl.textContent = 'VICTORY!';
-    titleEl.style.color = '#27ae60';
-  } else {
-    titleEl.textContent = 'DEFEAT';
-    titleEl.style.color = '#e74c3c';
-  }
-  
-  // Show stats
-  statsEl.innerHTML = `
-    <div>Winner: ${winner}</div>
-    <div>Game Duration: ${stats?.duration || 'Unknown'}</div>
-    <div>Your Pieces Captured: ${stats?.piecesKilled || 0}</div>
-    <div>Your Pieces Lost: ${stats?.piecesLost || 0}</div>
-    <div>Evolution Points Earned: ${stats?.evolutionPoints || 0}</div>
-  `;
-  
-  // Show game over screen
-  gameOverScreen.style.display = 'flex';
-}
+// showGameOver function now imported from MenuManager module
 
-// Initialize menu on load
-initMenuSystem();
+// Menu system initialization now handled in MenuManager module
 
 // Continue with game initialization
 function initializeGameComponents() {
@@ -442,7 +212,7 @@ function setupSocketListeners() {
     socket.emit('get-ai-difficulties');
     
     // Add AI player if vs AI mode
-    if (gameMode === 'vsai') {
+    if (getGameMode() === 'vsai') {
       setTimeout(() => {
         socket.emit('add-ai-player', {
           difficulty: 'MEDIUM',
@@ -475,7 +245,7 @@ function setupSocketListeners() {
     console.log('🔄 Number of pieces received:', Object.keys(newGameState.pieces || {}).length);
     
     // PHASE 1D DEBUG: Force rendering in all game modes, including waiting
-    console.log('🎮 EMPTY BOARD DEBUG: Current game mode:', gameMode);
+    console.log('🎮 EMPTY BOARD DEBUG: Current game mode:', getGameMode());
     console.log('🎮 EMPTY BOARD DEBUG: Pieces to render:', Object.values(newGameState.pieces || {}).map(p => `${p.type}@(${p.row},${p.col})`));
     
     // Process delta updates for performance
@@ -3033,9 +2803,9 @@ function updateUI() {
   if (activePlayerNameEl) {
     const myPlayer = gameState.players[socket.id];
     if (myPlayer) {
-      activePlayerNameEl.textContent = myPlayer.name || playerName || 'Unknown Player';
-    } else {
-      activePlayerNameEl.textContent = playerName || 'Connecting...';
+          activePlayerNameEl.textContent = myPlayer.name || getPlayerName() || 'Unknown Player';
+  } else {
+    activePlayerNameEl.textContent = getPlayerName() || 'Connecting...';
     }
   }
   
@@ -3047,8 +2817,7 @@ function updateUI() {
       selectedColorEl.textContent = `Selected: ${myPlayer.selectedColor}`;
       selectedColorEl.style.color = myPlayer.selectedColor;
     } else {
-      selectedColorEl.textContent = menuSelectedColor ? `Selected: ${menuSelectedColor}` : 'None selected';
-      selectedColorEl.style.color = menuSelectedColor || '#aaa';
+        updateSelectedColorDisplay();
     }
   }
   
@@ -3694,23 +3463,7 @@ function handleEvolutionCompleted(data) {
   }
 }
 
-function startGameCountdown(countdown) {
-  const countdownEl = document.getElementById('game-starting-countdown');
-  const timerEl = document.getElementById('countdown-timer');
-  
-  countdownEl.style.display = 'block';
-  timerEl.textContent = countdown;
-  
-  const interval = setInterval(() => {
-    countdown--;
-    timerEl.textContent = countdown;
-    
-    if (countdown <= 0) {
-      clearInterval(interval);
-      countdownEl.style.display = 'none';
-    }
-  }, 1000);
-}
+// startGameCountdown function now imported from MenuManager module
 
 // Tournament management
 let currentTournament = null;
@@ -4941,7 +4694,7 @@ socket.on('join-failed', (data) => {
 
 socket.on('game-waiting-for-players', (data) => {
   console.log('🕐 Game waiting for players:', data);
-  if (!isInGame) {
+  if (!getIsInGame()) {
     showNotification('Game Available!', `${data.creatorName} is waiting for an opponent. Click "Join Game" to play!`);
   }
 });
