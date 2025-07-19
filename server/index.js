@@ -239,8 +239,7 @@ function clearGameState() {
   gameState.gameStartTime = null;
   gameState.activePlayer = null;
   
-  // Clear colors
-  takenColors.clear();
+  // ✅ PHASE 3: No color tracking needed - colors auto-assigned by index
 }
 
 function createPlayer(socketId, playerName, playerIndex) {
@@ -248,16 +247,19 @@ function createPlayer(socketId, playerName, playerIndex) {
   
   const spawnArea = GAME_CONFIG.SPAWN_AREAS[playerIndex];
   
-  // Assign first available color
-  const availableColors = getAvailableColors();
-  const defaultColor = availableColors.length > 0 ? availableColors[0].id : 'red';
+  // ✅ PHASE 3: Auto-assign color based on player index
+  const assignedColor = getPlayerColorById(playerIndex);
+  const assignedColorName = getPlayerColorName(playerIndex);
+  
+  console.log(`🎨 Auto-assigned ${assignedColorName} (${assignedColor}) to player ${playerIndex + 1}`);
   
   const player = {
     id: socketId,
     name: playerName || `Player ${playerIndex + 1}`,
     index: playerIndex,
-    color: defaultColor,
-    selectedColor: defaultColor,
+    color: assignedColor,
+    selectedColor: assignedColor, // For compatibility
+    assignedColorName: assignedColorName, // For display purposes
     spawnArea: spawnArea,
     pieces: [],
     stats: {
@@ -268,8 +270,7 @@ function createPlayer(socketId, playerName, playerIndex) {
     }
   };
   
-  // Mark color as taken
-  takenColors.add(defaultColor);
+  // No need to track taken colors - each player index has a unique color
   
   // Initialize evolution bank with starting points
   evolutionManager.initializePlayerBank(socketId);
@@ -289,15 +290,18 @@ function createAIPlayer(aiPlayerId, difficulty, playerIndex) {
   
   const spawnArea = GAME_CONFIG.SPAWN_AREAS[playerIndex];
   
-  // Assign first available color for AI
-  const availableColors = getAvailableColors();
-  const defaultColor = availableColors.length > 0 ? availableColors[0].id : 'blue';
+  // ✅ PHASE 3: Auto-assign color based on player index
+  const assignedColor = getPlayerColorById(playerIndex);
+  const assignedColorName = getPlayerColorName(playerIndex);
+  
+  console.log(`🎨 Auto-assigned ${assignedColorName} (${assignedColor}) to AI player ${playerIndex + 1}`);
   
   const aiPlayer = {
     id: aiPlayerId,
     index: playerIndex,
-    color: defaultColor,
-    selectedColor: defaultColor,
+    color: assignedColor,
+    selectedColor: assignedColor, // For compatibility
+    assignedColorName: assignedColorName, // For display purposes
     spawnArea: spawnArea,
     pieces: [],
     isAI: true,
@@ -311,8 +315,7 @@ function createAIPlayer(aiPlayerId, difficulty, playerIndex) {
     }
   };
   
-  // Mark color as taken
-  takenColors.add(defaultColor);
+  // No need to track taken colors - each player index has a unique color
   
   // Register with AI manager
   aiManager.addAIPlayer(aiPlayerId, difficulty, {});
@@ -494,7 +497,7 @@ io.on('connection', (socket) => {
   
   // Handle player information updates
   socket.on('player-joined', (data) => {
-    const { name, color } = data;
+    const { name } = data; // ✅ PHASE 4 FIX: No longer accept color - auto-assigned by Phase 3 system
     const player = gameState.players[socket.id];
     
     if (player) {
@@ -504,11 +507,7 @@ io.on('connection', (socket) => {
         console.log(`Player ${socket.id} updated name to: ${name}`);
       }
       
-      // Update player color if provided
-      if (color) {
-        player.selectedColor = color;
-        console.log(`Player ${socket.id} updated color to: ${color}`);
-      }
+      // ✅ PHASE 4: Color is already auto-assigned in createPlayer() - no manual override allowed
       
       // Initialize statistics with proper name
       statisticsManager.initPlayerStats(socket.id, player.name);
@@ -1257,32 +1256,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Color selection handlers
-  socket.on('get-available-colors', () => {
-    const availableColors = getAvailableColors();
-    socket.emit('available-colors', { colors: availableColors });
-  });
-
-  socket.on('select-color', (data) => {
-    const { colorId } = data;
-    console.log(`🎨 Server: Player ${socket.id} wants to select color ${colorId}`);
-    const result = setPlayerColor(socket.id, colorId);
-    
-    if (result.success) {
-      console.log(`🎨 Server: Color ${colorId} successfully assigned to player ${socket.id}`);
-      socket.emit('color-selected', { colorId: colorId });
-      
-      // Broadcast updated game state to all players
-      broadcastGameState();
-      
-      // Broadcast available colors to all players
-      const availableColors = getAvailableColors();
-      io.emit('available-colors', { colors: availableColors });
-    } else {
-      console.log(`🎨 Server: Color selection failed for player ${socket.id}:`, result.error);
-      socket.emit('color-selection-failed', { error: result.error });
-    }
-  });
+  // ✅ PHASE 3: Auto-Color Assignment - No color selection handlers needed
+  // Colors are assigned automatically based on player index
+  console.log('🎨 Auto-color assignment active - manual color selection disabled');
 
   socket.on('get-chat-history', (data) => {
     const { roomId } = data;
@@ -1389,14 +1365,8 @@ io.on('connection', (socket) => {
       // Remove from chat
       chatManager.leaveChatRoom('main', socket.id);
       
-      // Free up the player's color
-      if (player.selectedColor) {
-        takenColors.delete(player.selectedColor);
-        
-        // Broadcast updated available colors to all players
-        const availableColors = getAvailableColors();
-        io.emit('available-colors', { colors: availableColors });
-      }
+      // ✅ PHASE 3: No color freeing needed - colors are auto-assigned by index
+      // Colors are automatically available for the next player with the same index
       
       // Check if only one player remains
       if (gameState.playerCount === 1) {
@@ -1452,14 +1422,7 @@ io.on('connection', (socket) => {
         }
       });
       
-              // Free up the player's color
-        if (player.selectedColor) {
-          takenColors.delete(player.selectedColor);
-          
-          // Broadcast updated available colors to all players
-          const availableColors = getAvailableColors();
-          io.emit('available-colors', { colors: availableColors });
-        }
+              // ✅ PHASE 3: No color freeing needed - auto-assigned by index
       }
     
     delete gameState.players[socket.id];
@@ -2370,10 +2333,14 @@ function handlePieceSplit(playerId, splitData) {
     kills: 0,
     timeAlive: 0,
     isSplitCopy: true, // Mark this as a split copy
-    // ✅ INHERIT PARENT COLOR: Copy color information from parent piece to ensure split pieces match team colors
+    // ✅ PHASE 4: Copy color information from parent piece to ensure split pieces match team colors
     inheritedColor: player.selectedColor || player.color, // Inherit player's color
     parentPieceId: piece.id // Track which piece this was split from for debugging
   };
+  
+  // Debug: Log the color inheritance for split pieces
+  console.log(`🎨 PHASE 4 - SPLIT COLOR INHERITANCE: Split piece ${splitPieceId} inherits color '${splitPiece.inheritedColor}' from player ${player.name} (selectedColor: '${player.selectedColor}', color: '${player.color}')`);
+  console.log(`🎨 Player ${player.name} color assignment: selectedColor='${player.selectedColor}', color='${player.color}', assignedColorName='${player.assignedColorName}'`);
   
   // Add the split piece to the game
   gameState.pieces[splitPieceId] = splitPiece;
@@ -3538,57 +3505,34 @@ function broadcastPlayerUpdate(playerId, player) {
   io.emit('player-update', { playerId, player });
 }
 
-// Available colors for player selection
-const AVAILABLE_COLORS = [
+// ✅ PHASE 3: Auto-Color Assignment System
+// 8 distinct colors for automatic assignment based on player index
+const AUTO_ASSIGN_COLORS = [
   { id: 'red', name: 'Red', hex: 0xFF0000 },
   { id: 'blue', name: 'Blue', hex: 0x0080FF },
-  { id: 'light_blue', name: 'Light Blue', hex: 0x40C0FF },
   { id: 'green', name: 'Green', hex: 0x00FF00 },
-  { id: 'yellow', name: 'Yellow', hex: 0xFFD700 },
-  { id: 'purple', name: 'Purple', hex: 0x8000FF },
-  { id: 'magenta', name: 'Magenta', hex: 0xFF00FF },
-  { id: 'cyan', name: 'Cyan', hex: 0x00FFFF },
   { id: 'orange', name: 'Orange', hex: 0xFF8000 },
-  { id: 'pink', name: 'Pink', hex: 0xFF69B4 },
-  { id: 'lime', name: 'Lime', hex: 0x00FF80 },
-  { id: 'teal', name: 'Teal', hex: 0x008080 }
+  { id: 'purple', name: 'Purple', hex: 0x8000FF },
+  { id: 'yellow', name: 'Yellow', hex: 0xFFD700 },
+  { id: 'cyan', name: 'Cyan', hex: 0x00FFFF },
+  { id: 'pink', name: 'Pink', hex: 0xFF69B4 }
 ];
 
-// Track taken colors
-const takenColors = new Set();
+// Auto-assign color based on player index (0-7)
+function getPlayerColorById(playerIndex) {
+  const colorIndex = playerIndex % AUTO_ASSIGN_COLORS.length;
+  return AUTO_ASSIGN_COLORS[colorIndex].id;
+}
 
+// Get color name for display
+function getPlayerColorName(playerIndex) {
+  const colorIndex = playerIndex % AUTO_ASSIGN_COLORS.length;
+  return AUTO_ASSIGN_COLORS[colorIndex].name;
+}
+
+// No color availability checking needed - colors assigned automatically
 function getPlayerColor(index) {
-  const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'cyan', 'orange', 'pink'];
-  return colors[index % colors.length];
-}
-
-function getAvailableColors() {
-  return AVAILABLE_COLORS.filter(color => !takenColors.has(color.id));
-}
-
-function isColorAvailable(colorId) {
-  return !takenColors.has(colorId);
-}
-
-function setPlayerColor(playerId, colorId) {
-  const player = gameState.players[playerId];
-  if (!player) return { success: false, error: 'Player not found' };
-  
-  if (!isColorAvailable(colorId)) {
-    return { success: false, error: 'Color not available' };
-  }
-  
-  // Remove old color if player had one
-  if (player.selectedColor) {
-    takenColors.delete(player.selectedColor);
-  }
-  
-  // Set new color
-  player.selectedColor = colorId;
-  player.color = colorId; // Update the color field for compatibility
-  takenColors.add(colorId);
-  
-  return { success: true, color: colorId };
+  return getPlayerColorById(index);
 }
 
 // Tournament match handling

@@ -85,39 +85,8 @@ function initializeAfterDOM() {
 function initMenuSystem() {
   console.log('🎮 Initializing menu system...');
   
-  // Color picker setup for menu
-  const menuColorOptions = document.getElementById('menu-color-options');
-  const colors = [
-    '#00ff00', '#ff0000', '#0088ff', '#ffff00', '#ff00ff', 
-    '#00ffff', '#ff8800', '#ffffff', '#8800ff', '#00ff88'
-  ];
-  
-  colors.forEach(color => {
-    const colorDiv = document.createElement('div');
-    colorDiv.style.width = '30px';
-    colorDiv.style.height = '30px';
-    colorDiv.style.backgroundColor = color;
-    colorDiv.style.border = '2px solid transparent';
-    colorDiv.style.cursor = 'pointer';
-    colorDiv.style.borderRadius = '5px';
-    
-    colorDiv.addEventListener('click', () => {
-      // Remove previous selection
-      menuColorOptions.querySelectorAll('div').forEach(d => {
-        d.style.border = '2px solid transparent';
-      });
-      // Select this color
-      colorDiv.style.border = '2px solid white';
-      menuSelectedColor = color;
-    });
-    
-    // Select first color by default
-    if (color === colors[0]) {
-      colorDiv.style.border = '2px solid white';
-    }
-    
-    menuColorOptions.appendChild(colorDiv);
-  });
+  // Auto-color assignment - no manual color picker needed
+  console.log('🎨 Auto-color assignment system initialized - colors assigned by player index');
   
   // Menu button handlers
   document.getElementById('quick-play-btn').addEventListener('click', () => {
@@ -360,11 +329,10 @@ function setupSocketListeners() {
     // Initialize game components
     initializeGameComponents();
     
-    // Send player info to server
-    const colorToUse = selectedColor || 'magenta'; // Use new color selection system
+    // Send player info to server - colors auto-assigned by Phase 3 system
     socket.emit('player-joined', {
-      name: playerName,
-      color: colorToUse
+      name: playerName
+      // ✅ PHASE 4 FIX: No color sent - server auto-assigns based on player index
     });
     
     // Request AI difficulties for the dropdown
@@ -685,18 +653,8 @@ function setupSocketListeners() {
     updateChatStatus(data.status);
   });
 
-  // Color selection handlers
-  socket.on('color-selected', (data) => {
-    const { playerId, color } = data;
-    console.log(`Player ${playerId} selected color: ${color}`);
-    updateColorSelector();
-  });
-
-  socket.on('available-colors', (data) => {
-    const { colors } = data;
-    console.log('Available colors:', colors);
-    updateColorSelector();
-  });
+  // Auto-color assignment - no color selection needed
+  console.log('🎨 Using auto-color assignment - no manual color selection required');
 
   // Evolution choice handlers
   socket.on('evolution-choice-available', (data) => {
@@ -1941,20 +1899,16 @@ let gameState = {
   gridConfig: { rows: 20, cols: 8 }
 };
 
-// Color mapping from server color IDs to hex values - MOVED HERE TO FIX INITIALIZATION ORDER
+// ✅ PHASE 4: Color mapping synchronized with server auto-assignment system
 const COLOR_MAP = {
-  'red': 0xFF0000,
-  'blue': 0x0080FF,
-  'light_blue': 0x40C0FF,
-  'green': 0x00FF00,
-  'yellow': 0xFFD700,
-  'purple': 0x8000FF,
-  'magenta': 0xFF00FF,
-  'cyan': 0x00FFFF,
-  'orange': 0xFF8000,
-  'pink': 0xFF69B4,
-  'lime': 0x00FF80,
-  'teal': 0x008080
+  'red': 0xFF0000,      // Player 1
+  'blue': 0x0080FF,     // Player 2
+  'green': 0x00FF00,    // Player 3
+  'orange': 0xFF8000,   // Player 4
+  'purple': 0x8000FF,   // Player 5
+  'yellow': 0xFFD700,   // Player 6
+  'cyan': 0x00FFFF,     // Player 7
+  'pink': 0xFF69B4      // Player 8
 };
 
 // Visual elements
@@ -3152,15 +3106,19 @@ async function createPieceMeshOptimized(piece) {
             child.material = child.material.map(mat => {
               const newMat = mat.clone();
               newMat.color.setHex(playerColor);
-              newMat.metalness = 0.4;
-              newMat.roughness = 0.6;
+              // ✅ PHASE 3: Balanced material properties for optimal visual distinction
+              newMat.emissive.setHex(playerColor).multiplyScalar(0.15); // Subtle glow
+              newMat.metalness = 0.3; // Reduced metalness for better color visibility
+              newMat.roughness = 0.6; // Balanced roughness for good lighting response
               return newMat;
             });
           } else {
             child.material = child.material.clone();
             child.material.color.setHex(playerColor);
-            child.material.metalness = 0.4;
-            child.material.roughness = 0.6;
+            // ✅ PHASE 3: Balanced material properties for optimal visual distinction
+            child.material.emissive.setHex(playerColor).multiplyScalar(0.15); // Subtle glow
+            child.material.metalness = 0.3; // Reduced metalness for better color visibility
+            child.material.roughness = 0.6; // Balanced roughness for good lighting response
           }
           
           // Set userData on child meshes for click detection
@@ -3187,10 +3145,12 @@ async function createPieceMeshOptimized(piece) {
     const pieceColor = getPieceColorForPlayer(piece, player, playerIndex);
     console.log(`Applying geometric fallback color ${pieceColor.toString(16)} to ${piece.type} mesh`);
     
+    // ✅ PHASE 3: Balanced material properties for geometric fallbacks
     const material = performanceOptimizer.getCachedMaterial('standard', {
       color: pieceColor,
-      metalness: 0.3,
-      roughness: 0.7
+      emissive: new THREE.Color(pieceColor).multiplyScalar(0.15), // Subtle glow
+      metalness: 0.3, // Balanced metalness
+      roughness: 0.6  // Balanced roughness
     });
     
     mesh.material = material;
@@ -3619,18 +3579,8 @@ function updateUI() {
     }
   }
   
-  // Update selected color display
-  const selectedColorEl = document.getElementById('selected-color');
-  if (selectedColorEl) {
-    const myPlayer = gameState.players[socket.id];
-    if (myPlayer && myPlayer.selectedColor) {
-      selectedColorEl.textContent = `Selected: ${myPlayer.selectedColor}`;
-      selectedColorEl.style.color = myPlayer.selectedColor;
-    } else {
-      selectedColorEl.textContent = menuSelectedColor ? `Selected: ${menuSelectedColor}` : 'None selected';
-      selectedColorEl.style.color = menuSelectedColor || '#aaa';
-    }
-  }
+  // Update auto-assigned color display
+  updatePlayerColorDisplay();
   
   // Add player color indicators
   updatePlayerColorIndicators();
@@ -4686,11 +4636,16 @@ function getPlayerColor(playerId, playerIndex) {
 
 // Enhanced piece color function that prioritizes player identification
 function getPieceColorForPlayer(piece, player, playerIndex) {
-  // ✅ FIXED: Check if piece has inherited color from server (for split pieces)
+  // ✅ PHASE 4: Check if piece has inherited color from server (for split pieces)
   if (piece.inheritedColor && COLOR_MAP[piece.inheritedColor]) {
     const inheritedHexColor = COLOR_MAP[piece.inheritedColor];
-    console.log(`🎨 SPLIT INHERITANCE: Split piece ${piece.id} using server-inherited color ${piece.inheritedColor} (${inheritedHexColor.toString(16)})`);
+    console.log(`🎨 PHASE 4 - SPLIT INHERITANCE SUCCESS: Split piece ${piece.id} using server-inherited color ${piece.inheritedColor} → 0x${inheritedHexColor.toString(16).toUpperCase()}`);
     return inheritedHexColor;
+  }
+  
+  // Debug: Log if inheritedColor exists but not found in COLOR_MAP
+  if (piece.inheritedColor && !COLOR_MAP[piece.inheritedColor]) {
+    console.warn(`🚨 PHASE 4 - COLOR_MAP MISMATCH: Split piece ${piece.id} has inheritedColor '${piece.inheritedColor}' but it's not in COLOR_MAP:`, Object.keys(COLOR_MAP));
   }
   
   // Legacy fallback: Check if this is a split piece that needs to inherit color from existing meshes
@@ -6672,38 +6627,9 @@ setTimeout(() => {
   gameInfoEl.textContent = 'Click on your pieces to select them';
 }, 2000); 
 
-// Color selection system
-let availableColors = [];
-
-// Initialize color selection
-function initializeColorSelection() {
-  socket.emit('get-available-colors');
-}
-
-// Socket handlers for color selection
-socket.on('available-colors', (data) => {
-  availableColors = data.colors;
-  updateColorSelector();
-});
-
-socket.on('color-selected', (data) => {
-  console.log('🎨 Color selected:', data.colorId);
-  selectedColor = data.colorId;
-  updateColorSelector();
-  updateSelectedColorDisplay();
-  
-  // Force piece color update by clearing cache and recreating pieces
-  performanceOptimizer.clearPieceCache();
-  if (gameState && gameState.pieces) {
-    console.log('🔄 Updating piece colors after color selection');
-    updateVisuals();
-  }
-});
-
-socket.on('color-selection-failed', (data) => {
-  console.warn('Color selection failed:', data.error);
-  alert('Color selection failed: ' + data.error);
-});
+// ✅ PHASE 3: Auto-Color Assignment System
+// Colors are now assigned automatically based on player index - no manual selection needed
+console.log('🎨 Auto-color assignment system active - colors assigned by player index');
 
 // AI player event handlers
 socket.on('ai-player-added', (data) => {
@@ -6716,58 +6642,30 @@ socket.on('ai-add-failed', (data) => {
   showNotification('AI Error', data.error, 'error');
 });
 
-// Update color selector UI
-function updateColorSelector() {
-  const colorOptionsEl = document.getElementById('color-options');
-  if (!colorOptionsEl) return;
+// ✅ PHASE 3: Auto-Color Assignment - Display current player's color
+function updatePlayerColorDisplay() {
+  const colorDisplayEl = document.getElementById('player-color-display');
+  if (!colorDisplayEl) return;
   
-  colorOptionsEl.innerHTML = '';
-  
-  availableColors.forEach(color => {
-    const option = document.createElement('div');
-    option.className = 'color-option';
-    option.style.backgroundColor = `#${color.hex.toString(16).padStart(6, '0')}`;
-    option.title = color.name;
-    option.dataset.colorId = color.id;
+  const myPlayer = gameState.players[socket.id];
+  if (myPlayer) {
+    const playerColor = getPlayerColor(myPlayer.id, myPlayer.index);
+    const colorHex = '#' + playerColor.toString(16).padStart(6, '0');
     
-    if (selectedColor === color.id) {
-      option.classList.add('selected');
-      option.textContent = '✓';
-    }
-    
-    option.addEventListener('click', () => {
-      console.log('🎨 User clicked on color:', color.id, color.name);
-      if (selectedColor !== color.id) {
-        console.log('🎨 Sending color selection to server:', color.id);
-        socket.emit('select-color', { colorId: color.id });
-      } else {
-        console.log('🎨 Color already selected, ignoring click');
-      }
-    });
-    
-    colorOptionsEl.appendChild(option);
-  });
-}
-
-// Update selected color display
-function updateSelectedColorDisplay() {
-  const selectedColorEl = document.getElementById('selected-color');
-  if (!selectedColorEl) return;
-  
-  if (selectedColor) {
-    const colorInfo = availableColors.find(c => c.id === selectedColor);
-    if (colorInfo) {
-      selectedColorEl.textContent = `Selected: ${colorInfo.name}`;
-      selectedColorEl.style.color = `#${colorInfo.hex.toString(16).padStart(6, '0')}`;
-    }
+    colorDisplayEl.textContent = `Player ${myPlayer.index + 1} Color`;
+    colorDisplayEl.style.color = colorHex;
+    colorDisplayEl.style.fontWeight = 'bold';
   } else {
-    selectedColorEl.textContent = 'None selected';
-    selectedColorEl.style.color = '#aaa';
+    colorDisplayEl.textContent = 'Auto-assigned on join';
+    colorDisplayEl.style.color = '#888';
   }
 }
 
-// Initialize color selection when page loads
-initializeColorSelection(); 
+// Auto-update color display when game state changes
+socket.on('game-state-update', (data) => {
+  // ... existing game state update logic ...
+  updatePlayerColorDisplay(); // Update color display
+}); 
 
 // Performance Optimization System (duplicate removed)
 
