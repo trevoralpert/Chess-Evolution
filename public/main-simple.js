@@ -3,6 +3,22 @@ console.log('🚀 Starting main-simple.js v15 - ADDING GLTF LOADER 🚀');
 // Import modular components
 import { PerformanceOptimizer } from './modules/PerformanceOptimizer.js';
 import { gridToSpherical, sphericalToCartesian, getWorldPosition } from './modules/GridUtils.js';
+import { 
+  COLOR_MAP, 
+  getColorFromString, 
+  getPlayerColor, 
+  getPieceColorForPlayer, 
+  applyColorToMesh, 
+  updatePlayerColorIndicators,
+  initializeColorSelection,
+  updateColorSelector,
+  updateSelectedColorDisplay,
+  setupColorSocketHandlers,
+  getSelectedColor,
+  setSelectedColor,
+  getAvailableColors,
+  setAvailableColors
+} from './modules/ColorManager.js';
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -54,7 +70,7 @@ function startGameInitialization() {
 let menuScreen, gameUI, gameOverScreen;
 let playerName = '';
 let menuSelectedColor = '#00ff00';
-let selectedColor = null; // Current selected color ID from color picker
+// selectedColor now imported from ColorManager module
 let gameMode = 'quickplay';
 let isInGame = false;
 
@@ -247,6 +263,9 @@ function startGame() {
   
   // Set up all socket event listeners
   setupSocketListeners();
+  
+  // Set up color management socket handlers
+  setupColorSocketHandlers(socket);
 }
 
 // Return to menu
@@ -365,7 +384,7 @@ function setupSocketListeners() {
     initializeGameComponents();
     
     // Send player info to server
-    const colorToUse = selectedColor || 'magenta'; // Use new color selection system
+    const colorToUse = getSelectedColor() || 'magenta'; // Use new color selection system
     socket.emit('player-joined', {
       name: playerName,
       color: colorToUse
@@ -1627,21 +1646,7 @@ let gameState = {
   gridConfig: { rows: 20, cols: 8 }
 };
 
-// Color mapping from server color IDs to hex values - MOVED HERE TO FIX INITIALIZATION ORDER
-const COLOR_MAP = {
-  'red': 0xFF0000,
-  'blue': 0x0080FF,
-  'light_blue': 0x40C0FF,
-  'green': 0x00FF00,
-  'yellow': 0xFFD700,
-  'purple': 0x8000FF,
-  'magenta': 0xFF00FF,
-  'cyan': 0x00FFFF,
-  'orange': 0xFF8000,
-  'pink': 0xFF69B4,
-  'lime': 0x00FF80,
-  'teal': 0x008080
-};
+// COLOR_MAP now imported from ColorManager module
 
 // Visual elements
 const pieceMeshes = {};
@@ -3303,36 +3308,7 @@ function updateUI() {
   updatePlayerColorIndicators();
 }
 
-function updatePlayerColorIndicators() {
-  // Find or create player color indicator div
-  let colorIndicator = document.getElementById('player-color-indicator');
-  if (!colorIndicator) {
-    colorIndicator = document.createElement('div');
-    colorIndicator.id = 'player-color-indicator';
-    colorIndicator.style.cssText = `
-      margin-top: 10px;
-      padding: 8px;
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: 5px;
-      font-size: 12px;
-    `;
-    document.getElementById('ui').appendChild(colorIndicator);
-  }
-  
-  // Clear existing content
-  colorIndicator.innerHTML = '<div style="color: #ccc; margin-bottom: 5px;">Player Colors:</div>';
-  
-  // Add color indicators for each player
-  const currentPlayerId = socket.id;
-  const players = Object.values(gameState.players);
-  
-  players.forEach((player, index) => {
-    const playerColor = getPlayerColor(player.id, player.index) || 0xffffff;
-    const colorHex = '#' + playerColor.toString(16).padStart(6, '0');
-    
-    const playerDiv = document.createElement('div');
-    playerDiv.style.cssText = `
-      display: flex;
+// updatePlayerColorIndicators function now imported from ColorManager module
       align-items: center;
       margin-bottom: 3px;
       ${player.id === currentPlayerId ? 'font-weight: bold; background: rgba(255, 255, 255, 0.1); padding: 2px 4px; border-radius: 3px;' : ''}
@@ -4295,61 +4271,8 @@ function getCurrentlySelectedPieceId() {
 
 
 
-// Helper function to convert color string to hex
-function getColorFromString(colorString) {
-  const colorMap = {
-    'red': 0xff0000,
-    'blue': 0x0000ff,
-    'green': 0x00ff00,
-    'yellow': 0xffff00,
-    'purple': 0xff00ff,
-    'cyan': 0x00ffff,
-    'orange': 0xff8800,
-    'pink': 0xff69b4
-  };
-  return colorMap[colorString] || 0xffffff;
-}
+// Color functions now imported from ColorManager module
 
-// COLOR_MAP moved to top of file to fix initialization order
-
-// Get distinct player color using server-assigned color
-function getPlayerColor(playerId, playerIndex) {
-  const player = gameState.players[playerId];
-  
-  if (player && player.selectedColor && COLOR_MAP[player.selectedColor]) {
-    return COLOR_MAP[player.selectedColor];
-  }
-  
-  // Fallback to index-based colors (more reliable than string-based)
-  const fallbackColors = [
-    0xFF6B6B, // Red-ish
-    0x4ECDC4, // Cyan/Teal
-    0x45B7D1, // Blue
-    0x96CEB4, // Green
-    0xFECE85, // Orange
-    0xF8B500, // Yellow
-    0xC44569, // Pink
-    0x6C5CE7  // Purple
-  ];
-  
-  // Handle missing or invalid playerIndex
-  let colorIndex = 0;
-  if (typeof playerIndex === 'number' && !isNaN(playerIndex)) {
-    colorIndex = playerIndex % fallbackColors.length;
-  } else {
-    // If no valid playerIndex, try to derive from playerId
-    if (gameState && gameState.players) {
-      const playerIds = Object.keys(gameState.players);
-      const foundIndex = playerIds.indexOf(playerId);
-      colorIndex = foundIndex >= 0 ? foundIndex % fallbackColors.length : 0;
-    }
-  }
-  
-  const fallbackColor = fallbackColors[colorIndex];
-  
-  console.log(`🎨 Using fallback color for player ${playerIndex || 'undefined'}: ${fallbackColor.toString(16)}`);
-  return fallbackColor;
-}
 
 // Enhanced piece color function that prioritizes player identification
 function getPieceColorForPlayer(piece, player, playerIndex) {
@@ -6332,37 +6255,10 @@ setTimeout(() => {
 }, 2000); 
 
 // Color selection system
-let availableColors = [];
+// availableColors now managed in ColorManager module
 
-// Initialize color selection
-function initializeColorSelection() {
-  socket.emit('get-available-colors');
-}
-
-// Socket handlers for color selection
-socket.on('available-colors', (data) => {
-  availableColors = data.colors;
-  updateColorSelector();
-});
-
-socket.on('color-selected', (data) => {
-  console.log('🎨 Color selected:', data.colorId);
-  selectedColor = data.colorId;
-  updateColorSelector();
-  updateSelectedColorDisplay();
-  
-  // Force piece color update by clearing cache and recreating pieces
-  performanceOptimizer.clearPieceCache();
-  if (gameState && gameState.pieces) {
-    console.log('🔄 Updating piece colors after color selection');
-    updateVisuals();
-  }
-});
-
-socket.on('color-selection-failed', (data) => {
-  console.warn('Color selection failed:', data.error);
-  alert('Color selection failed: ' + data.error);
-});
+// Color selection functions now imported from ColorManager module
+// Socket handlers set up via setupColorSocketHandlers()
 
 // AI player event handlers
 socket.on('ai-player-added', (data) => {
@@ -6374,56 +6270,6 @@ socket.on('ai-add-failed', (data) => {
   console.error('Failed to add AI player:', data.error);
   showNotification('AI Error', data.error, 'error');
 });
-
-// Update color selector UI
-function updateColorSelector() {
-  const colorOptionsEl = document.getElementById('color-options');
-  if (!colorOptionsEl) return;
-  
-  colorOptionsEl.innerHTML = '';
-  
-  availableColors.forEach(color => {
-    const option = document.createElement('div');
-    option.className = 'color-option';
-    option.style.backgroundColor = `#${color.hex.toString(16).padStart(6, '0')}`;
-    option.title = color.name;
-    option.dataset.colorId = color.id;
-    
-    if (selectedColor === color.id) {
-      option.classList.add('selected');
-      option.textContent = '✓';
-    }
-    
-    option.addEventListener('click', () => {
-      console.log('🎨 User clicked on color:', color.id, color.name);
-      if (selectedColor !== color.id) {
-        console.log('🎨 Sending color selection to server:', color.id);
-        socket.emit('select-color', { colorId: color.id });
-      } else {
-        console.log('🎨 Color already selected, ignoring click');
-      }
-    });
-    
-    colorOptionsEl.appendChild(option);
-  });
-}
-
-// Update selected color display
-function updateSelectedColorDisplay() {
-  const selectedColorEl = document.getElementById('selected-color');
-  if (!selectedColorEl) return;
-  
-  if (selectedColor) {
-    const colorInfo = availableColors.find(c => c.id === selectedColor);
-    if (colorInfo) {
-      selectedColorEl.textContent = `Selected: ${colorInfo.name}`;
-      selectedColorEl.style.color = `#${colorInfo.hex.toString(16).padStart(6, '0')}`;
-    }
-  } else {
-    selectedColorEl.textContent = 'None selected';
-    selectedColorEl.style.color = '#aaa';
-  }
-}
 
 // Initialize color selection when page loads
 initializeColorSelection(); 
