@@ -429,21 +429,58 @@ function setupSocketListeners() {
   });
 
   socket.on('piece-evolution', (data) => {
-    const { pieceId, fromType, toType, playerId } = data;
-    console.log(`Piece evolution: ${fromType} → ${toType} for player ${playerId}`);
+    const { pieceId, oldType, newType, position } = data;
+    console.log(`🔄 Piece evolution: ${oldType} → ${newType} for piece ${pieceId}`);
     
-    // Get the piece position for effects
+    // Get the piece from game state
     const piece = gameState.pieces[pieceId];
     if (piece) {
-      const position = getWorldPosition(piece.row, piece.col);
+      const playerId = piece.playerId;
+      console.log(`🔄 Updating visual mesh for piece evolution: ${pieceId} from ${oldType} to ${newType}`);
       
-      // Create evolution effect
-      visualEffects.createEvolutionEffect(position, fromType, toType);
+      // Update the piece type in game state to match server
+      piece.type = newType;
       
-      // Show notification
-      const player = gameState.players[playerId];
-      const playerName = player ? player.name : 'Unknown Player';
-      showNotification(`${playerName}'s ${fromType} evolved to ${toType}!`, '#00ff00', 3000);
+      // Get the existing mesh
+      const oldMesh = pieceMeshes[pieceId];
+      if (oldMesh) {
+        // Remove old mesh from scene
+        scene.remove(oldMesh);
+        
+        // Dispose of old mesh resources
+        if (oldMesh.geometry) oldMesh.geometry.dispose();
+        if (oldMesh.material) {
+          if (Array.isArray(oldMesh.material)) {
+            oldMesh.material.forEach(mat => mat.dispose());
+          } else {
+            oldMesh.material.dispose();
+          }
+        }
+        
+        // Remove from pieces cache
+        delete pieceMeshes[pieceId];
+        console.log(`🔄 Removed old ${oldType} mesh for piece ${pieceId}`);
+      }
+      
+      // Create new mesh with evolved type
+      createPieceMeshOptimized(piece).then(() => {
+        console.log(`✅ Successfully recreated mesh as ${newType} for piece ${pieceId}`);
+        
+        // Create evolution effect at the piece position
+        const worldPos = getWorldPosition(piece.row, piece.col);
+        if (visualEffects) {
+          visualEffects.createEvolutionEffect(worldPos, oldType, newType);
+        }
+        
+        // Show notification
+        const player = gameState.players[playerId];
+        const playerName = player ? player.name : 'Unknown Player';
+        showNotification(`${playerName}'s ${oldType} evolved to ${newType}!`, '#00ff00', 3000);
+      }).catch(error => {
+        console.error(`❌ Failed to recreate evolved piece mesh:`, error);
+      });
+    } else {
+      console.warn(`⚠️ Piece ${pieceId} not found in game state for evolution`);
     }
   });
 
@@ -530,6 +567,81 @@ function setupSocketListeners() {
     const { colors } = data;
     console.log('Available colors:', colors);
     updateColorSelector();
+  });
+
+  // Evolution choice handlers
+  socket.on('evolution-choice-available', (data) => {
+    console.log('🎯 Evolution choice available:', data);
+    showEvolutionChoice(data);
+    showEvolutionUI(); // Auto-show evolution UI when choice is available
+  });
+
+  socket.on('evolution-choice-success', (data) => {
+    console.log('🎯 Evolution choice success:', data);
+    handleEvolutionCompleted(data);
+  });
+
+  socket.on('evolution-choice-failed', (data) => {
+    console.log('🎯 Evolution choice failed:', data);
+    hideEvolutionChoice();
+    showNotification('Evolution Failed', data.error, 'error');
+  });
+
+  socket.on('evolution-choice-cancelled', (data) => {
+    console.log('🎯 Evolution choice cancelled:', data);
+    hideEvolutionChoice();
+    showNotification('Evolution Cancelled', 'Evolution choice was cancelled', 'info');
+  });
+
+  socket.on('evolution-choice-dialog', (data) => {
+    console.log('🎯 Evolution choice dialog event received:', data);
+    const { pieceId, piece, reason, availablePaths, bankInfo, timeLimit } = data;
+    showEvolutionChoiceDialog(pieceId, piece, reason, availablePaths, bankInfo, timeLimit);
+  });
+
+  socket.on('evolution-completed', (data) => {
+    // Handle evolution completed by other players
+    if (data.playerId !== socket.id) {
+      const playerName = gameState.players[data.playerId]?.name || 'Unknown';
+      showNotification('Player Evolution', 
+        `${playerName}'s ${data.oldType} evolved to ${data.newType}!`, 
+        'info');
+    }
+  });
+
+  socket.on('evolution-point-gained', (data) => {
+    console.log(`🎯 Evolution point gained event:`, data);
+    
+    // Update player's evolution points in game state
+    if (gameState.players[data.playerId]) {
+      gameState.players[data.playerId].evolutionPoints = data.totalPoints || (gameState.players[data.playerId].evolutionPoints || 0) + data.points;
+      console.log(`🎯 Updated player ${data.playerId} evolution points to:`, gameState.players[data.playerId].evolutionPoints);
+    }
+    
+    // Update all floating evolution point labels
+    updateAllEvolutionPointLabels();
+    
+    if (data.playerId === socket.id) {
+      showNotification('Evolution Points', 
+        `+${data.points} points (${data.reason.replace('_', ' ')})`, 
+        'success');
+      
+      // Update evolution bank display if UI is open
+      if (document.getElementById('evolution-ui').style.display === 'block') {
+        refreshEvolutionBank();
+      }
+    }
+  });
+
+  socket.on('evolution-points-banked', (data) => {
+    const { pieceId, playerId, points, totalPoints, reason } = data;
+    
+    if (playerId === socket.id) {
+      gameInfoEl.textContent = `Banked ${points} evolution points! Total: ${totalPoints}`;
+      showNotification('Evolution Points', 
+        `Banked ${points} points. Total: ${totalPoints}`, 
+        'success');
+    }
   });
 }
 
@@ -2989,9 +3101,8 @@ async function createPieceMeshOptimized(piece) {
   scene.add(mesh);
   pieceMeshes[piece.id] = mesh;
   
-  console.log(`🔧 Added piece ${piece.type} to scene - userData:`, mesh.userData);
-  console.log(`🔧 Piece mesh position:`, mesh.position);
-  console.log(`🔧 Scene children count after add:`, scene.children.length);
+  console.log(`✅ Successfully added piece ${piece.type} to scene at position:`, mesh.position);
+  console.log(`📊 Scene now has ${scene.children.length} total objects`);
 }
 
 // Optimized piece update function
@@ -5917,78 +6028,7 @@ socket.on('evolution-bank-info', (data) => {
   updateEvolutionBank(data.bankInfo);
 });
 
-socket.on('evolution-choice-available', (data) => {
-  showEvolutionChoice(data);
-  showEvolutionUI(); // Auto-show evolution UI when choice is available
-});
-
-socket.on('evolution-choice-success', (data) => {
-  handleEvolutionCompleted(data);
-});
-
-socket.on('evolution-choice-failed', (data) => {
-  hideEvolutionChoice();
-  showNotification('Evolution Failed', data.error, 'error');
-});
-
-socket.on('evolution-choice-cancelled', (data) => {
-  hideEvolutionChoice();
-  showNotification('Evolution Cancelled', 'Evolution choice was cancelled', 'info');
-});
-
-socket.on('evolution-completed', (data) => {
-  // Handle evolution completed by other players
-  if (data.playerId !== socket.id) {
-    const playerName = gameState.players[data.playerId]?.name || 'Unknown';
-    showNotification('Player Evolution', 
-      `${playerName}'s ${data.oldType} evolved to ${data.newType}!`, 
-      'info');
-  }
-});
-
-socket.on('evolution-point-gained', (data) => {
-  console.log(`🎯 Evolution point gained event:`, data);
-  
-  // Update player's evolution points in game state
-  if (gameState.players[data.playerId]) {
-    gameState.players[data.playerId].evolutionPoints = data.totalPoints || (gameState.players[data.playerId].evolutionPoints || 0) + data.points;
-    console.log(`🎯 Updated player ${data.playerId} evolution points to:`, gameState.players[data.playerId].evolutionPoints);
-  }
-  
-  // Update all floating evolution point labels
-  updateAllEvolutionPointLabels();
-  
-  if (data.playerId === socket.id) {
-    showNotification('Evolution Points', 
-      `+${data.points} points (${data.reason.replace('_', ' ')})`, 
-      'success');
-    
-    // Update evolution bank display if UI is open
-    if (document.getElementById('evolution-ui').style.display === 'block') {
-      refreshEvolutionBank();
-    }
-  }
-});
-
-// Duplicate evolution-point-award handler removed - already handled above
-
-// Handle evolution choice dialog
-socket.on('evolution-choice-dialog', (data) => {
-  console.log('🎯 Evolution choice dialog event received:', data);
-  const { pieceId, piece, reason, availablePaths, bankInfo, timeLimit } = data;
-  showEvolutionChoiceDialog(pieceId, piece, reason, availablePaths, bankInfo, timeLimit);
-});
-
-socket.on('evolution-points-banked', (data) => {
-  const { pieceId, playerId, points, totalPoints, reason } = data;
-  
-  if (playerId === socket.id) {
-    gameInfoEl.textContent = `Banked ${points} evolution points! Total: ${totalPoints}`;
-    showNotification('Evolution Points', 
-      `Banked ${points} points. Total: ${totalPoints}`, 
-      'success');
-  }
-});
+// Evolution choice handlers moved to setupSocketListeners() function
 
 // Chat system variables
 let chatVisible = true;
