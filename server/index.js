@@ -81,7 +81,7 @@ const chatManager = new ChatManager(io);
 
 // Helper function to start next player's turn
 function startNextPlayerTurn(currentPlayerId) {
-  console.log(`🔄 startNextPlayerTurn called with playerId: ${currentPlayerId}`);
+  // console.log(`🔄 startNextPlayerTurn called with playerId: ${currentPlayerId}`);
   
   try {
     if (!gameState || !gameState.players) {
@@ -89,19 +89,19 @@ function startNextPlayerTurn(currentPlayerId) {
       return;
     }
     
-    console.log(`🔄 Available players:`, Object.keys(gameState.players));
+    // console.log(`🔄 Available players:`, Object.keys(gameState.players));
     
     const activePlayers = Object.keys(gameState.players).filter(id => {
       const player = gameState.players[id];
       const isEliminated = player.eliminated || false;
-      console.log(`🔄 Player ${id}: eliminated=${isEliminated}`);
+      // console.log(`🔄 Player ${id}: eliminated=${isEliminated}`);
       return !isEliminated;
     });
     
-    console.log(`🔄 Active players: ${activePlayers.length}`, activePlayers);
+    // console.log(`🔄 Active players: ${activePlayers.length}`, activePlayers);
     
     if (activePlayers.length < 2) {
-      console.log('🔄 Not enough active players for turn rotation');
+      // console.log('🔄 Not enough active players for turn rotation');
       return;
     }
     
@@ -114,13 +114,13 @@ function startNextPlayerTurn(currentPlayerId) {
     const nextIndex = (currentIndex + 1) % activePlayers.length;
     const nextPlayerId = activePlayers[nextIndex];
     
-    console.log(`🔄 Turn transition: ${currentPlayerId} → ${nextPlayerId}`);
+    console.log(`🔄 Turn: ${gameState.players[currentPlayerId]?.name || currentPlayerId} → ${gameState.players[nextPlayerId]?.name || nextPlayerId}`);
     
     // Set as active player
     gameState.activePlayer = nextPlayerId;
     
     // Start next player's timer
-    console.log(`🔄 Starting timer for next player: ${nextPlayerId}`);
+    // console.log(`🔄 Starting timer for next player: ${nextPlayerId}`);
     timingManager.startPlayerCooldown(nextPlayerId);
     
     // Notify clients about active player change
@@ -177,9 +177,9 @@ timingManager.setMoveExecutor((playerId, moveData) => {
       }
       
       // Start next player's turn after regular move completes
-      console.log('🔄 Setting timeout for regular move turn transition');
+      // console.log('🔄 Setting timeout for regular move turn transition');
       setTimeout(() => {
-        console.log('🔄 Regular move timeout executing - calling startNextPlayerTurn');
+        // console.log('🔄 Regular move timeout executing - calling startNextPlayerTurn');
         startNextPlayerTurn(playerId);
       }, 500); // Small delay to let move complete
     }
@@ -999,9 +999,9 @@ io.on('connection', (socket) => {
     timingManager.resumeAllCooldowns();
     
     // Start next player's turn after evolution completes
-    console.log('🔄 Setting timeout for evolution turn transition');
+    // console.log('🔄 Setting timeout for evolution turn transition');
     setTimeout(() => {
-      console.log('🔄 Evolution timeout executing - calling startNextPlayerTurn');
+      // console.log('🔄 Evolution timeout executing - calling startNextPlayerTurn');
       startNextPlayerTurn(socket.id);
     }, 500); // Small delay to let evolution complete
     
@@ -1113,7 +1113,7 @@ io.on('connection', (socket) => {
       return;
     }
     
-    console.log(`🔧 DEBUG: Evolving ${piece.type} to ${newType}`);
+          // console.log(`🔧 DEBUG: Evolving ${piece.type} to ${newType}`);
     
     // Pause victory checks during debug evolution
     victoryManager.pauseForEvolution();

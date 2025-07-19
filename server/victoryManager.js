@@ -227,7 +227,14 @@ class VictoryManager {
       return validPieceCount > 0;
     });
     
-    console.log(`Victory check: ${alivePlayers.length} alive players out of ${activePlayers.length} active, ${players.length} total`);
+    // console.log(`Victory check: ${alivePlayers.length} alive players out of ${activePlayers.length} active, ${players.length} total`);
+    // Only log victory checks if there's something interesting happening
+    if (alivePlayers.length <= 1 || (alivePlayers.length !== activePlayers.length)) {
+      console.log(`🏆 Victory check: ${alivePlayers.length} alive players out of ${activePlayers.length} active, ${players.length} total`);
+    }
+    
+    // Remove excessive player logging - only log if debugging needed
+    /*
     alivePlayers.forEach(p => {
       const validPieces = p.pieces.filter(pieceId => {
         const piece = this.gameState.pieces[pieceId];
@@ -243,6 +250,7 @@ class VictoryManager {
         }));
       }
     });
+    */
     
     // CRITICAL FIX: Don't declare victory during active gameplay
     // Only check victory conditions if it's been at least 10 minutes since game start

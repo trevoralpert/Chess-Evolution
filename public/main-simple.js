@@ -372,38 +372,43 @@ function setupSocketListeners() {
   });
 
   socket.on('game-state-update', async (newGameState) => {
-    console.log('🔄 Received game state update:', newGameState);
-    console.log('🔄 Players in received state:', Object.keys(newGameState.players || {}));
-    console.log('🔄 Pieces in received state:', Object.keys(newGameState.pieces || {}));
-    console.log('🔄 Number of pieces received:', Object.keys(newGameState.pieces || {}).length);
+    // console.log('🔄 Received game state update:', newGameState);
+    // console.log('🔄 Players in received state:', Object.keys(newGameState.players || {}));
+    // console.log('🔄 Pieces in received state:', Object.keys(newGameState.pieces || {}));
+    // console.log('🔄 Number of pieces received:', Object.keys(newGameState.pieces || {}).length);
     
-    // Process delta updates for performance
-    const delta = performanceOptimizer.processDeltaUpdate(newGameState);
+    // Only log significant state changes
+    const pieceCount = Object.keys(newGameState.pieces || {}).length;
+    const playerCount = Object.keys(newGameState.players || {}).length;
     
-    if (delta.fullUpdate) {
-      // Full update on first load
+    if (!gameState || Object.keys(gameState.pieces || {}).length !== pieceCount) {
+      console.log(`🔄 Game state update: ${playerCount} players, ${pieceCount} pieces`);
+    }
+    
+    if (!gameState) {
       console.log('🔄 Processing full update');
       gameState = newGameState;
       
-      // Evolution points are now included in the game state from the server
-      Object.keys(gameState.players).forEach(playerId => {
-        const evolutionPoints = gameState.players[playerId].evolutionPoints;
-        console.log(`🎯 Player ${playerId} has ${evolutionPoints} evolution points from server`);
-      });
+      // Initialize visual components
+      if (typeof updateVisuals === 'function') {
+        await updateVisuals();
+      }
       
-      await updateVisuals();
-      updateUI();
       console.log('🔄 Full update completed');
     } else {
-      // Delta update - only update changed elements
-      console.log('🔄 Processing delta update');
-      gameState = newGameState;
-      await updateVisualsDelta(delta);
+      // console.log('🔄 Processing delta update');
       
-      // Always call updateUI immediately for player count changes
+      // Calculate delta and update efficiently
+      const delta = calculateGameStateDelta(gameState, newGameState);
+      gameState = newGameState;
+      
+      // Update visuals and UI
+      if (typeof updateVisualsDelta === 'function') {
+        await updateVisualsDelta(delta);
+      }
       updateUI();
       
-      // Update evolution point labels when game state changes
+      // Update evolution point labels
       updateAllEvolutionPointLabels();
       
       // Throttled UI updates for other elements
@@ -1596,7 +1601,7 @@ const poleMarkers = [];
 function createGridOverlay() {
   try {
     console.log('🚨 CREATEGRIDSOVERLAY FUNCTION CALLED - THIS SHOULD DEFINITELY SHOW UP! 🚨');
-    console.log('🔧 Starting grid overlay creation...');
+    // console.log('🔧 Starting grid overlay creation...');
     
     // Use correct grid configuration
     const gridRows = 20;
@@ -3053,15 +3058,15 @@ function showDiceBattleAnimation(battleLog, winner, loser, duration) {
 }
 
 async function updateVisuals() {
-  console.log('🔧 updateVisuals called');
-  console.log('🔧 gameState.pieces:', gameState.pieces);
-  console.log('🔧 Number of pieces in gameState:', Object.keys(gameState.pieces || {}).length);
-  console.log('🔧 Current pieceMeshes:', Object.keys(pieceMeshes));
+  // console.log('🔧 updateVisuals called');
+  // console.log('🔧 gameState.pieces:', gameState.pieces);
+  // console.log('🔧 Number of pieces in gameState:', Object.keys(gameState.pieces || {}).length);
+  // console.log('🔧 Current pieceMeshes:', Object.keys(pieceMeshes));
   
   // Remove pieces that no longer exist
   Object.keys(pieceMeshes).forEach(pieceId => {
     if (!gameState.pieces[pieceId]) {
-      console.log(`🔧 Removing piece ${pieceId} (no longer exists)`);
+      // console.log(`🔧 Removing piece ${pieceId} (no longer exists)`);
       performanceOptimizer.removePieceEfficient(pieceId);
     }
   });
@@ -3069,22 +3074,22 @@ async function updateVisuals() {
   // Add or update pieces
   const piecePromises = Object.values(gameState.pieces).map(async piece => {
     if (!pieceMeshes[piece.id]) {
-      console.log(`🔧 Creating new mesh for piece ${piece.id} (${piece.type})`);
+      // console.log(`🔧 Creating new mesh for piece ${piece.id} (${piece.type})`);
       try {
         await createPieceMeshOptimized(piece);
-        console.log(`🔧 Successfully created mesh for piece ${piece.id}`);
+        // console.log(`🔧 Successfully created mesh for piece ${piece.id}`);
       } catch (error) {
         console.error(`❌ Failed to create mesh for piece ${piece.id}:`, error);
       }
     } else {
-      console.log(`🔧 Updating existing mesh for piece ${piece.id}`);
+      // console.log(`🔧 Updating existing mesh for piece ${piece.id}`);
       updatePieceMeshOptimized(piece);
     }
   });
   
   // Wait for all piece creation to complete
   await Promise.all(piecePromises);
-  console.log('🔧 updateVisuals completed');
+  // console.log('🔧 updateVisuals completed');
 }
 
 // Delta update function for better performance
