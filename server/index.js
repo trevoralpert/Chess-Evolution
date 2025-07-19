@@ -2369,7 +2369,10 @@ function handlePieceSplit(playerId, splitData) {
     col: targetCol,
     kills: 0,
     timeAlive: 0,
-    isSplitCopy: true // Mark this as a split copy
+    isSplitCopy: true, // Mark this as a split copy
+    // ✅ INHERIT PARENT COLOR: Copy color information from parent piece to ensure split pieces match team colors
+    inheritedColor: player.selectedColor || player.color, // Inherit player's color
+    parentPieceId: piece.id // Track which piece this was split from for debugging
   };
   
   // Add the split piece to the game

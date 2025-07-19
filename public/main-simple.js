@@ -4686,8 +4686,16 @@ function getPlayerColor(playerId, playerIndex) {
 
 // Enhanced piece color function that prioritizes player identification
 function getPieceColorForPlayer(piece, player, playerIndex) {
-  // Check if this is a split piece that should inherit parent color
-  if (piece.id && piece.id.includes('-split-')) {
+  // ✅ FIXED: Check if piece has inherited color from server (for split pieces)
+  if (piece.inheritedColor && COLOR_MAP[piece.inheritedColor]) {
+    const inheritedHexColor = COLOR_MAP[piece.inheritedColor];
+    console.log(`🎨 SPLIT INHERITANCE: Split piece ${piece.id} using server-inherited color ${piece.inheritedColor} (${inheritedHexColor.toString(16)})`);
+    return inheritedHexColor;
+  }
+  
+  // Legacy fallback: Check if this is a split piece that needs to inherit color from existing meshes
+  if (piece.id && piece.id.includes('-split-') && !piece.inheritedColor) {
+    console.log(`🎨 SPLIT INHERITANCE: Legacy fallback for split piece ${piece.id} without server color info`);
     // For split pieces, find any existing piece with the same player that has a color we can inherit
     // Look for other pieces from the same player that might have evolved colors
     let parentColor = null;
