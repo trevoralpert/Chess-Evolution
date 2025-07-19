@@ -291,7 +291,7 @@ class TimingManager {
     // Remove from pending moves
     delete this.pendingMoves[playerId];
 
-    // Execute the move directly through the callback
+    // Execute the move directly through the callback (move data already preserves all flags)
     if (this.moveExecutor) {
       this.moveExecutor(playerId, pendingMove.move);
     }
@@ -448,7 +448,8 @@ class TimingManager {
       this.moveExecutor(playerId, {
         pieceId: queuedMove.pieceId,
         targetRow: queuedMove.targetRow,
-        targetCol: queuedMove.targetCol
+        targetCol: queuedMove.targetCol,
+        isSplitAction: queuedMove.isSplitAction // PRESERVE split action flag
       });
     }
 
@@ -471,6 +472,7 @@ class TimingManager {
         pieceId: moveData.pieceId,
         targetRow: moveData.targetRow,
         targetCol: moveData.targetCol,
+        isSplitAction: moveData.isSplitAction, // PRESERVE split action flag
         timestamp: Date.now()
       };
 

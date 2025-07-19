@@ -1299,8 +1299,9 @@ function startTimer(playerId, timeLimit, startTime) {
   timerDuration = timeLimit;
   isTimerPaused = false;
   
-  // Update UI
-  updateTimerDisplay();
+  // Update UI with initial time
+  const initialRemaining = Math.max(0, timerDuration - (Date.now() - timerStartTime));
+  updateTimerDisplay(initialRemaining);
   
   // Start the timer interval
   if (currentTimer) {
@@ -1309,7 +1310,9 @@ function startTimer(playerId, timeLimit, startTime) {
   
   currentTimer = setInterval(() => {
     if (!isTimerPaused) {
-      updateTimerDisplay();
+      const elapsed = Date.now() - timerStartTime;
+      const remaining = Math.max(0, timerDuration - elapsed);
+      updateTimerDisplay(remaining);
     }
   }, 100); // Update every 100ms for smooth animation
   
@@ -1340,41 +1343,7 @@ function resumeTimer() {
   }
 }
 
-function updateTimerDisplay() {
-  const timeRemainingElement = document.getElementById('time-remaining');
-  const timerBarElement = document.getElementById('timer-bar');
-  const timerStatusElement = document.getElementById('timer-status');
-  
-  if (isTimerPaused) {
-    const remainingSeconds = pausedTimeRemaining / 1000;
-    timeRemainingElement.textContent = remainingSeconds.toFixed(1);
-    timerBarElement.style.width = `${(pausedTimeRemaining / 7000) * 100}%`;
-    return;
-  }
-  
-  const elapsed = Date.now() - timerStartTime;
-  const remaining = Math.max(0, timerDuration - elapsed);
-  const remainingSeconds = remaining / 1000;
-  
-  timeRemainingElement.textContent = remainingSeconds.toFixed(1);
-  
-  // Update progress bar
-  const progress = (remaining / timerDuration) * 100;
-  timerBarElement.style.width = `${progress}%`;
-  
-  // Update status
-  if (remaining <= 0) {
-    timerStatusElement.textContent = 'Time expired!';
-    timerStatusElement.style.color = '#ff0000';
-    if (currentTimer) {
-      clearInterval(currentTimer);
-      currentTimer = null;
-    }
-  } else {
-    timerStatusElement.textContent = 'Timer Active';
-    timerStatusElement.style.color = '#ccc';
-  }
-}
+
 
 function updateActivePlayer(playerId, playerName) {
   activePlayerId = playerId;

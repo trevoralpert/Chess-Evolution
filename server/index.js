@@ -3291,9 +3291,16 @@ function getValidMoves(pieceId) {
             attackDirections = [{ row: -1, col: -1 }, { row: -1, col: 1 }];
           }
         } else if (piece.type === 'SPLITTER') {
-          // SPLITTERS CAN ONLY SPLIT, NEVER MOVE! - They have no regular movement options
-          moveDirections = []; // Splitters cannot move - they can only split
-          attackDirections = []; // Splitters have NO attack moves - they only capture by splitting
+          // SPLITTERS ARE ENHANCED PAWNS - They can move forward like pawns AND split sideways
+          if (isNorthPole) {
+            // North pole splitters move toward south (+1 row) like pawns
+            moveDirections = [{ row: 1, col: 0 }]; // Forward movement like pawns
+            attackDirections = [{ row: 1, col: -1 }, { row: 1, col: 1 }]; // Diagonal attacks like pawns
+          } else {
+            // South pole splitters move toward north (-1 row) like pawns  
+            moveDirections = [{ row: -1, col: 0 }]; // Forward movement like pawns
+            attackDirections = [{ row: -1, col: -1 }, { row: -1, col: 1 }]; // Diagonal attacks like pawns
+          }
         }
       }
     }
