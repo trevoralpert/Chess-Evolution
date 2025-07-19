@@ -207,6 +207,13 @@ class TimingManager {
 
   registerMove(playerId, moveData) {
     // Check if we need at least 2 players for game to start
+    if (!this.gameState || !this.gameState.players) {
+      return { 
+        success: false, 
+        error: 'Game not initialized' 
+      };
+    }
+    
     const playerCount = Object.keys(this.gameState.players).length;
     if (playerCount < 2) {
       return { 
@@ -359,18 +366,20 @@ class TimingManager {
     
     console.log(`Player ${playerId} removed from real-time system`);
     
-    // Check if we need to update game start status
-    const playerCount = Object.keys(this.gameState.players).length;
-    if (playerCount < 2) {
-      this.io.emit('waiting-for-players', {
-        message: 'Waiting for players...',
-        playersReady: playerCount,
-        playersNeeded: 2
-      });
+    // Check if we need to update game start status (only if gameState exists)
+    if (this.gameState && this.gameState.players) {
+      const playerCount = Object.keys(this.gameState.players).length;
+      if (playerCount < 2) {
+        this.io.emit('waiting-for-players', {
+          message: 'Waiting for players...',
+          playersReady: playerCount,
+          playersNeeded: 2
+        });
+      }
+      
+      // Broadcast updated player states
+      this.broadcastPlayerStates();
     }
-    
-    // Broadcast updated player states
-    this.broadcastPlayerStates();
   }
 
   getPlayerCooldown(playerId) {
@@ -498,8 +507,9 @@ class TimingManager {
       this.firstMovePlayer = playerId;
       
       // Notify all clients that game has started
+      const playerName = this.gameState?.players?.[playerId]?.name || playerId;
       this.io.emit('game-started-first-move', {
-        message: `Player ${this.gameState.players[playerId]?.name || playerId} has begun moving`,
+        message: `Player ${playerName} has begun moving`,
         startingPlayer: playerId
       });
 

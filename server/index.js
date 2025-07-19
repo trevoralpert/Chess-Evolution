@@ -224,22 +224,27 @@ setTimeout(() => {
   }, 2000); // Check 2 seconds after victory system init
 }, 1000);
 
-io.on('connection', (socket) => {
-  console.log(`New client connected: ${socket.id}`);
+// === GAME MODE HELPER FUNCTIONS ===
+
+function clearGameState() {
+  console.log('🧹 Clearing game state for new game');
+  gameState.players = {};
+  gameState.pieces = {};
+  gameState.grid = {};
+  gameState.playerCount = 0;
+  gameState.pendingBattles = {};
+  gameState.pendingEvolutions = {};
+  gameState.waitingForPlayers = false;
+  gameState.gameEnded = false;
+  gameState.gameStartTime = null;
+  gameState.activePlayer = null;
   
-  // Check if game is full
-  if (gameState.playerCount >= GAME_CONFIG.MAX_PLAYERS) {
-    socket.emit('game-full');
-    socket.disconnect();
-    return;
-  }
-  
-  // Find the next available player slot (reuse slots when players disconnect)
-  let playerIndex = 0;
-  while (playerIndex < GAME_CONFIG.MAX_PLAYERS && 
-         Object.values(gameState.players).some(p => p.index === playerIndex)) {
-    playerIndex++;
-  }
+  // Clear colors
+  takenColors.clear();
+}
+
+function createPlayer(socketId, playerName, playerIndex) {
+  console.log(`👤 Creating player: ${playerName} (index: ${playerIndex})`);
   
   const spawnArea = GAME_CONFIG.SPAWN_AREAS[playerIndex];
   
@@ -248,8 +253,8 @@ io.on('connection', (socket) => {
   const defaultColor = availableColors.length > 0 ? availableColors[0].id : 'red';
   
   const player = {
-    id: socket.id,
-    name: `Player ${playerIndex + 1}`,
+    id: socketId,
+    name: playerName || `Player ${playerIndex + 1}`,
     index: playerIndex,
     color: defaultColor,
     selectedColor: defaultColor,
@@ -266,35 +271,226 @@ io.on('connection', (socket) => {
   // Mark color as taken
   takenColors.add(defaultColor);
   
-  gameState.players[socket.id] = player;
-  gameState.playerCount = Object.keys(gameState.players).length;
-  
   // Initialize evolution bank with starting points
-  evolutionManager.initializePlayerBank(socket.id);
-  evolutionManager.addEvolutionPoints(socket.id, 5, 'game_start'); // Starting with 5 evolution points
-  
-  // Start recording if this is the first player
-  if (gameState.playerCount === 1) {
-    spectatorManager.startRecording('main', gameState);
-    gameState.gameStartTime = Date.now(); // Set game start time
-  }
+  evolutionManager.initializePlayerBank(socketId);
+  evolutionManager.addEvolutionPoints(socketId, 1, 'game_start');
   
   // Create starting pieces for the player
   createStartingPieces(player);
   
   // Add player to timing system
-  timingManager.addPlayer(socket.id);
+  timingManager.addPlayer(socketId);
   
-  // Initialize timing system if this is the first player
-  if (gameState.playerCount === 1) {
-    timingManager.initialize(gameState);
+  return player;
+}
+
+function createAIPlayer(aiPlayerId, difficulty, playerIndex) {
+  console.log(`🤖 Creating AI player: ${difficulty} (index: ${playerIndex})`);
+  
+  const spawnArea = GAME_CONFIG.SPAWN_AREAS[playerIndex];
+  
+  // Assign first available color for AI
+  const availableColors = getAvailableColors();
+  const defaultColor = availableColors.length > 0 ? availableColors[0].id : 'blue';
+  
+  const aiPlayer = {
+    id: aiPlayerId,
+    index: playerIndex,
+    color: defaultColor,
+    selectedColor: defaultColor,
+    spawnArea: spawnArea,
+    pieces: [],
+    isAI: true,
+    aiDifficulty: difficulty,
+    name: `AI ${AI_DIFFICULTY[difficulty].name}`,
+    stats: {
+      piecesLost: 0,
+      piecesEvolved: 0,
+      battlesWon: 0,
+      battlesLost: 0
+    }
+  };
+  
+  // Mark color as taken
+  takenColors.add(defaultColor);
+  
+  // Register with AI manager
+  aiManager.addAIPlayer(aiPlayerId, difficulty, {});
+  
+  // Initialize evolution bank with starting points
+  evolutionManager.initializePlayerBank(aiPlayerId);
+  evolutionManager.addEvolutionPoints(aiPlayerId, 1, 'game_start');
+  
+  // Create starting pieces for AI
+  createStartingPieces(aiPlayer);
+  
+  // Add AI player to timing system
+  timingManager.addPlayer(aiPlayerId);
+  
+  return aiPlayer;
+}
+
+function initializeGameSystems() {
+  console.log('🎮 Initializing game systems');
+  
+  // Start recording for spectators
+  spectatorManager.startRecording('main', gameState);
+  gameState.gameStartTime = Date.now();
+  
+  // Always initialize timing system with the new gameState (even with 0 players)
+  timingManager.initialize(gameState);
+  
+  // Add players to main chat room
+  Object.values(gameState.players).forEach(player => {
+    if (!player.isAI) {
+      chatManager.joinChatRoom('main', player.id, player.name, player.id);
+    }
+  });
+  
+  // Start AI turn cycle if needed
+  setTimeout(() => {
+    const hasAI = Object.values(gameState.players).some(p => p.isAI);
+    if (hasAI) {
+      startAITurnCycle();
+    }
+  }, 1000);
+}
+
+io.on('connection', (socket) => {
+  console.log(`New client connected: ${socket.id}`);
+  
+  // Send connection confirmation (no auto-player creation)
+  socket.emit('connection-established', {
+    socketId: socket.id,
+    availableGameModes: ['create-vs-ai', 'create-vs-human', 'join-human-game', 'spectate']
+  });
+  
+  // Send current game state for spectator preview if game exists
+  if (Object.keys(gameState.players).length > 0) {
+    socket.emit('game-preview', {
+      playersCount: gameState.playerCount,
+      gameInProgress: !gameState.gameEnded,
+      canJoin: gameState.playerCount < GAME_CONFIG.MAX_PLAYERS
+    });
   }
   
-  // Add player to main chat room
-  chatManager.joinChatRoom('main', socket.id, player.name, socket.id);
+  // === NEW GAME MODE HANDLERS ===
   
-  // Broadcast updated game state
-  broadcastGameState();
+  // Quick Play vs AI - Immediate 1v1 game  
+  socket.on('create-vs-ai-game', (data) => {
+    const { playerName, difficulty } = data;
+    console.log(`🤖 Creating vs AI game: ${playerName} vs AI (${difficulty})`);
+    
+    // Clear any existing game
+    clearGameState();
+    
+    // Create human player
+    const humanPlayer = createPlayer(socket.id, playerName, 0);
+    gameState.players[socket.id] = humanPlayer;
+    gameState.playerCount = 1;
+    
+    // Create AI opponent
+    const aiPlayerId = `ai-${Date.now()}`;
+    const aiPlayer = createAIPlayer(aiPlayerId, difficulty || 'MEDIUM', 1);
+    gameState.players[aiPlayerId] = aiPlayer;
+    gameState.playerCount = 2;
+    
+    // Initialize game systems
+    initializeGameSystems();
+    
+    // Start the game immediately
+    socket.emit('game-created', { 
+      gameType: 'vs-ai',
+      players: gameState.players,
+      message: `Game started: ${playerName} vs AI ${difficulty}` 
+    });
+    
+    broadcastGameState();
+  });
+  
+  // Create game vs Human - Wait for another player
+  socket.on('create-vs-human-game', (data) => {
+    const { playerName } = data;
+    console.log(`👥 Creating vs Human game: ${playerName} waiting for opponent`);
+    
+    // Check if there's already a waiting game
+    if (gameState.playerCount > 0) {
+      socket.emit('game-creation-failed', { 
+        error: 'A game is already in progress. Try joining instead.' 
+      });
+      return;
+    }
+    
+    // Clear any existing game
+    clearGameState();
+    
+    // Create human player and wait
+    const humanPlayer = createPlayer(socket.id, playerName, 0);
+    gameState.players[socket.id] = humanPlayer;
+    gameState.playerCount = 1;
+    gameState.waitingForPlayers = true;
+    
+    // Initialize basic systems (no AI)
+    initializeGameSystems();
+    
+    socket.emit('game-created', { 
+      gameType: 'vs-human-waiting',
+      players: gameState.players,
+      message: `Game created: ${playerName} waiting for opponent...` 
+    });
+    
+    // Broadcast that a game is waiting for players
+    io.emit('game-waiting-for-players', {
+      creatorName: playerName,
+      playersNeeded: 1
+    });
+    
+    broadcastGameState();
+  });
+  
+  // Join Human Game - Join existing waiting game  
+  socket.on('join-human-game', (data) => {
+    const { playerName } = data;
+    console.log(`🤝 ${playerName} attempting to join human game`);
+    
+    // Check if there's a waiting game
+    if (gameState.playerCount !== 1 || !gameState.waitingForPlayers) {
+      socket.emit('join-failed', { 
+        error: 'No games available to join. Try creating a new game.' 
+      });
+      return;
+    }
+    
+    // Check if game is full
+    if (gameState.playerCount >= GAME_CONFIG.MAX_PLAYERS) {
+      socket.emit('join-failed', { error: 'Game is full' });
+      return;
+    }
+    
+    // Add as second player
+    const humanPlayer = createPlayer(socket.id, playerName, 1);
+    gameState.players[socket.id] = humanPlayer;
+    gameState.playerCount = 2;
+    gameState.waitingForPlayers = false;
+    
+    // Add player to timing system  
+    timingManager.addPlayer(socket.id);
+    
+    // Start the game now that we have 2 players
+    socket.emit('game-joined', { 
+      gameType: 'vs-human',
+      players: gameState.players,
+      message: `${playerName} joined the game!` 
+    });
+    
+    // Notify other players
+    socket.broadcast.emit('player-joined-game', {
+      playerName: playerName,
+      totalPlayers: gameState.playerCount
+    });
+    
+    broadcastGameState();
+  });
   
   // Handle player information updates
   socket.on('player-joined', (data) => {
@@ -624,7 +820,7 @@ io.on('connection', (socket) => {
     
     // Initialize evolution bank with starting points
     evolutionManager.initializePlayerBank(aiPlayerId);
-    evolutionManager.addEvolutionPoints(aiPlayerId, 5, 'game_start');
+    evolutionManager.addEvolutionPoints(aiPlayerId, 1, 'game_start');
     
     // Create starting pieces for AI
     createStartingPieces(aiPlayer);
@@ -1489,7 +1685,7 @@ function startGameFromLobby(lobbyId) {
     
     // Initialize evolution bank with starting points
     evolutionManager.initializePlayerBank(player.id);
-    evolutionManager.addEvolutionPoints(player.id, 5, 'game_start'); // Starting with 5 evolution points
+    evolutionManager.addEvolutionPoints(player.id, 1, 'game_start'); // Starting with 1 evolution point
   });
   
   // Start recording for spectators
@@ -1934,14 +2130,8 @@ function checkSplitterBalance(piece, playerId) {
     };
   }
   
-  // Check evolution point cost: 1 point required (reduced from 2)
-  const bank = evolutionManager.getPlayerBankInfo(playerId);
-  if (bank.points < 1) {
-    return { 
-      allowed: false, 
-      reason: `Splitter needs 1 evolution point to split (has ${bank.points})` 
-    };
-  }
+  // PHASE 1C: Remove evolution point cost requirement - splitting is inherent to Splitters!
+  // Splitters can split without consuming evolution points
   
   // Population limit removed - unlimited splitters allowed
   return { allowed: true };
@@ -1950,26 +2140,26 @@ function checkSplitterBalance(piece, playerId) {
 function applySplitCosts(piece, playerId) {
   const currentTurn = gameState.currentTurn || 0;
   
-  // Deduct evolution points from bank (reduced from 2 to 1)
+  // PHASE 1C: Splitters should NOT lose points when splitting - splitting is free!
+  // Remove evolution point deduction - splitters maintain their inherent 2-point value
   const bank = evolutionManager.getPlayerBankInfo(playerId);
-  evolutionManager.addEvolutionPoints(playerId, -1, 'splitter_split_cost');
   
-  // Set cooldown
+  // Set cooldown only
   piece.lastSplitTurn = currentTurn;
   
   // Temporary weakening: reduce attack value for 2 turns
   piece.splitWeakened = true;
   piece.weakenedUntilTurn = currentTurn + 2;
   
-  console.log(`Splitter split cost applied: -1 evolution points, cooldown until turn ${currentTurn + 1}`);
+  console.log(`Splitter split executed: NO evolution point cost, cooldown until turn ${currentTurn + 1}`);
   
-  // Broadcast split cost event
-  const updatedBank = evolutionManager.getPlayerBankInfo(playerId);
+  // Broadcast split cost event (no evolution point cost)
   io.emit('split-cost-applied', {
     pieceId: piece.id,
-    evolutionPoints: updatedBank.points,
+    evolutionPoints: bank.points, // No change in points
     cooldownTurns: 1,
-    weakenedTurns: 2
+    weakenedTurns: 2,
+    splitFree: true // Indicate that splitting was free
   });
 }
 
@@ -3101,16 +3291,9 @@ function getValidMoves(pieceId) {
             attackDirections = [{ row: -1, col: -1 }, { row: -1, col: 1 }];
           }
         } else if (piece.type === 'SPLITTER') {
-          // Splitters only move forward (no backward movement)
-          if (isNorthPole) {
-            // North pole splitters move toward south (+1 row) 
-            moveDirections = [{ row: 1, col: 0 }];
-            attackDirections = []; // Splitters have NO attack moves - they only capture by splitting
-          } else {
-            // South pole splitters move toward north (-1 row)
-            moveDirections = [{ row: -1, col: 0 }];
-            attackDirections = []; // Splitters have NO attack moves - they only capture by splitting
-          }
+          // SPLITTERS CAN ONLY SPLIT, NEVER MOVE! - They have no regular movement options
+          moveDirections = []; // Splitters cannot move - they can only split
+          attackDirections = []; // Splitters have NO attack moves - they only capture by splitting
         }
       }
     }
@@ -3462,7 +3645,7 @@ function initializeTournamentPlayers(gameState, player1, player2) {
     
     // Initialize evolution bank with starting points
     evolutionManager.initializePlayerBank(player.id);
-    evolutionManager.addEvolutionPoints(player.id, 5, 'tournament_start');
+    evolutionManager.addEvolutionPoints(player.id, 1, 'tournament_start');
     
     // Create pieces for this player
     const pieceIds = createPiecesForPlayer(gameState, player.id, spawnArea);

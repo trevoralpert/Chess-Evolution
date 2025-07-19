@@ -121,30 +121,30 @@ function initMenuSystem() {
   
   // Menu button handlers
   document.getElementById('quick-play-btn').addEventListener('click', () => {
-    console.log('Starting quick play...');
+    console.log('🚀 Quick Play - Starting vs AI...');
     playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
-    gameMode = 'quickplay';
+    gameMode = 'vs-ai';
     startGame();
   });
   
   document.getElementById('vs-ai-btn').addEventListener('click', () => {
-    console.log('Starting vs AI...');
+    console.log('🤖 Starting vs AI...');
     playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
-    gameMode = 'vsai';
+    gameMode = 'vs-ai';
     startGame();
   });
   
   document.getElementById('create-game-btn').addEventListener('click', () => {
-    console.log('Starting multiplayer game...');
+    console.log('🎯 Creating multiplayer game...');
     playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
-    gameMode = 'multiplayer';
+    gameMode = 'create-vs-human';
     startGame();
   });
   
   document.getElementById('join-game-btn').addEventListener('click', () => {
-    console.log('Joining multiplayer game...');
+    console.log('🤝 Joining multiplayer game...');
     playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
-    gameMode = 'multiplayer';
+    gameMode = 'join-vs-human';
     startGame();
   });
   
@@ -184,9 +184,7 @@ function initMenuSystem() {
 
 // Start the game
 function startGame() {
-  // Get the proper color ID from the new color selection system
-  const colorToUse = selectedColor || 'magenta'; // Default to magenta if none selected
-  console.log('🎮 Starting game with:', { playerName, color: colorToUse, gameMode });
+  console.log('🎮 Starting game with:', { playerName, gameMode });
   
   // Prevent multiple connections
   if (socket && socket.connected) {
@@ -194,29 +192,57 @@ function startGame() {
     return;
   }
   
-  // Hide menu, show game UI and timer
-  menuScreen.style.display = 'none';
-  gameUI.style.display = 'block';
-  const timingUI = document.getElementById('timing-ui');
-  if (timingUI) timingUI.style.display = 'block';
-  isInGame = true;
-  
-  // Initialize the game with player settings
-  window.playerSettings = {
-    name: playerName,
-    color: colorToUse,
-    mode: gameMode
-  };
-  
-  // Initialize socket connection
+  // Initialize socket connection first
   socket = io();
   window.globalSocket = socket;
-  console.log('Socket.io initialized for game');
+  console.log('Socket.io initialized, waiting for connection...');
+  
+  // Wait for connection, then send appropriate game mode request
+  socket.on('connection-established', (data) => {
+    console.log('✅ Connected to server:', data);
+    
+    // Hide menu, show game UI and timer
+    menuScreen.style.display = 'none';
+    gameUI.style.display = 'block';
+    const timingUI = document.getElementById('timing-ui');
+    if (timingUI) timingUI.style.display = 'block';
+    isInGame = true;
+    
+    // Send the appropriate game creation request based on mode
+    switch (gameMode) {
+      case 'vs-ai':
+        console.log('🤖 Requesting vs AI game...');
+        socket.emit('create-vs-ai-game', {
+          playerName: playerName,
+          difficulty: 'MEDIUM' // Can be made configurable later
+        });
+        break;
+        
+      case 'create-vs-human':
+        console.log('🎯 Requesting create vs human game...');
+        socket.emit('create-vs-human-game', {
+          playerName: playerName
+        });
+        break;
+        
+      case 'join-vs-human':
+        console.log('🤝 Requesting join human game...');
+        socket.emit('join-human-game', {
+          playerName: playerName
+        });
+        break;
+        
+      default:
+        console.error('Unknown game mode:', gameMode);
+        socket.emit('create-vs-ai-game', {
+          playerName: playerName,
+          difficulty: 'MEDIUM'
+        });
+    }
+  });
   
   // Set up all socket event listeners
   setupSocketListeners();
-  
-  // Continue with normal game initialization after socket is ready
 }
 
 // Return to menu
@@ -377,6 +403,10 @@ function setupSocketListeners() {
     console.log('🔄 Pieces in received state:', Object.keys(newGameState.pieces || {}));
     console.log('🔄 Number of pieces received:', Object.keys(newGameState.pieces || {}).length);
     
+    // PHASE 1D DEBUG: Force rendering in all game modes, including waiting
+    console.log('🎮 EMPTY BOARD DEBUG: Current game mode:', gameMode);
+    console.log('🎮 EMPTY BOARD DEBUG: Pieces to render:', Object.values(newGameState.pieces || {}).map(p => `${p.type}@(${p.row},${p.col})`));
+    
     // Process delta updates for performance
     const delta = performanceOptimizer.processDeltaUpdate(newGameState);
     
@@ -391,7 +421,9 @@ function setupSocketListeners() {
         console.log(`🎯 Player ${playerId} has ${evolutionPoints} evolution points from server`);
       });
       
+      console.log('🎮 EMPTY BOARD DEBUG: About to call updateVisuals() with pieces:', Object.keys(gameState.pieces || {}));
       await updateVisuals();
+      console.log('🎮 EMPTY BOARD DEBUG: updateVisuals() completed, rendered meshes:', Object.keys(pieceMeshes));
       updateUI();
       console.log('🔄 Full update completed');
     } else {
@@ -3347,27 +3379,11 @@ function createCachedTextLabel(symbol) {
   return texture;
 }
 
-// Get evolution points for a piece from the server's player data
+// Get evolution points for a piece - PHASE 1C: Display piece BASE VALUES, not player evolution bank
 function getEvolutionPointsForPiece(piece) {
   // Debug logging to see what data we have
   console.log('🔍 Getting evolution points for piece:', piece.id, 'type:', piece.type);
   console.log('🔍 Piece player ID:', piece.playerId);
-  console.log('🔍 GameState players:', gameState.players);
-  
-  const player = gameState.players[piece.playerId];
-  console.log('🔍 Found player:', player);
-  
-  // For player evolution points (shared across all pieces), check player object
-  if (player && player.evolutionPoints !== undefined) {
-    console.log('🔍 Player evolution points found:', player.evolutionPoints);
-    return player.evolutionPoints;
-  }
-  
-  // For individual piece evolution points, check piece object
-  if (piece.evolutionPoints !== undefined) {
-    console.log('🔍 Piece evolution points found:', piece.evolutionPoints);
-    return piece.evolutionPoints;
-  }
   
   // King pieces don't have evolution points - hide their labels
   if (piece.type === 'KING') {
@@ -3375,9 +3391,10 @@ function getEvolutionPointsForPiece(piece) {
     return 0;
   }
   
-  // Default piece values based on piece type (when no player-wide evolution points are available)
-  const defaultValues = {
-    'PAWN': 1,
+  // PHASE 1C: Always display piece BASE VALUES (intrinsic to piece type)
+  // These are the inherent point values of pieces, NOT the player's evolution bank
+  const pieceBaseValues = {
+    'PAWN': 1,        // ✅ Pawns always show 1 point (their base value)
     'ROOK': 5,
     'KNIGHT': 3,
     'BISHOP': 3,
@@ -3385,14 +3402,14 @@ function getEvolutionPointsForPiece(piece) {
     'JUMPER': 3,
     'SUPER_JUMPER': 5,
     'HYPER_JUMPER': 7,
-    'SPLITTER': 4,
+    'SPLITTER': 2,    // ✅ Splitters always show 2 points (their base value)
     'HYBRID_QUEEN': 12,
     'MISTRESS_JUMPER': 8
   };
   
-  const defaultValue = defaultValues[piece.type] || 1;
-  console.log('🔍 No evolution points found, using default for', piece.type, ':', defaultValue);
-  return defaultValue;
+  const baseValue = pieceBaseValues[piece.type] || 1;
+  console.log('🔍 Using piece base value for', piece.type, ':', baseValue);
+  return baseValue;
 }
 
 // Create evolution points label with team color styling
@@ -4499,36 +4516,18 @@ function highlightValidMoves() {
     positionMoveTypes[key].push(move);
   });
   
-  // Add new highlights
-  const processedPositions = new Set();
-  
+  // Add new highlights - create separate highlight for each move type
   validMoves.forEach(move => {
-    const posKey = `${move.row},${move.col}`;
-    
-    // Skip if we already processed this position
-    if (processedPositions.has(posKey)) return;
-    processedPositions.add(posKey);
-    
     const position = getWorldPosition(move.row, move.col);
-    const movesAtPosition = positionMoveTypes[posKey];
     
     // Different colors and shapes for different move types
     let highlightColor, highlightGeometry;
     
-    // Check if this position has multiple move types (specifically move + split)
-    const hasMultipleTypes = movesAtPosition.length > 1 && 
-                           movesAtPosition.some(m => m.type === 'split') && 
-                           movesAtPosition.some(m => m.type === 'move');
-    
-    if (hasMultipleTypes) {
-      // Special highlight for positions with multiple options
-      highlightColor = 0xffff00; // Yellow for multi-option
-      highlightGeometry = new THREE.TorusGeometry(0.2, 0.05, 8, 16); // Ring shape
-    } else if (move.type === 'attack') {
+    if (move.type === 'attack') {
       highlightColor = 0xff4444; // Red for attack
       highlightGeometry = new THREE.SphereGeometry(0.15, 8, 8);
     } else if (move.type === 'split') {
-      highlightColor = 0x44ff44; // Green for split (same as regular move)
+      highlightColor = 0xffff00; // BRIGHT YELLOW for split moves - visually distinct from regular moves
       // Create a torus (3D ring) for split moves - more clickable than flat ring
       highlightGeometry = new THREE.TorusGeometry(0.4, 0.05, 8, 32);
     } else if (move.type === 'jump-capture') {
@@ -4562,7 +4561,7 @@ function highlightValidMoves() {
     highlight.userData = { isValidMoveHighlight: true, move: move };
     
     // Make sure the highlight is above the globe surface
-    const heightAdjustment = 0.05;
+    const heightAdjustment = move.type === 'split' ? 0.08 : 0.05; // Split highlights slightly higher
     const normalizedPos = highlight.position.clone().normalize();
     highlight.position.addScaledVector(normalizedPos, heightAdjustment);
     
@@ -6125,6 +6124,71 @@ socket.on('ready-toggled', (data) => {
 
 socket.on('ready-toggle-failed', (data) => {
   alert('Failed to toggle ready status: ' + data.error);
+});
+
+// === NEW GAME MODE EVENT HANDLERS ===
+
+socket.on('game-created', (data) => {
+  console.log('🎉 Game created successfully!', data);
+  console.log('🎮 EMPTY BOARD DEBUG: game-created event received, gameType:', data.gameType);
+  console.log('🎮 EMPTY BOARD DEBUG: players in created game:', data.players);
+  showNotification('Game Created!', data.message);
+  
+  if (data.gameType === 'vs-human-waiting') {
+    console.log('🎮 EMPTY BOARD DEBUG: Human vs human waiting mode - forcing visual update');
+    showNotification('Waiting for Opponent', 'Game created! Waiting for another player to join...');
+    
+    // Force visual update to ensure pieces are shown even while waiting
+    if (data.players && Object.keys(data.players).length > 0) {
+      console.log('🎮 EMPTY BOARD DEBUG: Found players in game-created, calling updateVisuals');
+      // Trigger piece rendering even in waiting mode
+      setTimeout(() => updateVisuals(), 500);
+    }
+  }
+});
+
+socket.on('game-joined', (data) => {
+  console.log('🎉 Successfully joined game!', data);
+  showNotification('Game Joined!', data.message);
+});
+
+socket.on('game-creation-failed', (data) => {
+  console.error('❌ Game creation failed:', data.error);
+  showNotification('Failed to Create Game', data.error);
+  returnToMenu();
+});
+
+socket.on('join-failed', (data) => {
+  console.error('❌ Failed to join game:', data.error);
+  showNotification('Failed to Join Game', data.error);
+  returnToMenu();
+});
+
+socket.on('game-waiting-for-players', (data) => {
+  console.log('🕐 Game waiting for players:', data);
+  if (!isInGame) {
+    showNotification('Game Available!', `${data.creatorName} is waiting for an opponent. Click "Join Game" to play!`);
+  }
+});
+
+socket.on('player-joined-game', (data) => {
+  console.log('👥 Player joined the game:', data);
+  showNotification('Player Joined!', `${data.playerName} joined the game! (${data.totalPlayers} players total)`);
+});
+
+socket.on('game-preview', (data) => {
+  console.log('👀 Game preview:', data);
+  // Update join button status based on whether game can be joined
+  const joinBtn = document.getElementById('join-game-btn');
+  if (joinBtn) {
+    if (data.canJoin && !data.gameInProgress) {
+      joinBtn.disabled = false;
+      joinBtn.textContent = `JOIN GAME (${data.playersCount}/4)`;
+    } else {
+      joinBtn.disabled = true;
+      joinBtn.textContent = data.gameInProgress ? 'GAME IN PROGRESS' : 'GAME FULL';
+    }
+  }
 });
 
 socket.on('game-starting', (data) => {
