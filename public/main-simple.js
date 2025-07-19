@@ -252,6 +252,32 @@ import {
   getBattleStats,
   createBattleContestButton
 } from './modules/BattleManager.js';
+import {
+  showLobbyUI,
+  hideLobbyUI,
+  showLobbyCreation,
+  hideLobbyCreation,
+  showLobbyRoom,
+  updateLobbyRoomDisplay,
+  createLobby,
+  joinLobby,
+  leaveLobby,
+  toggleReady,
+  refreshLobbies,
+  updateLobbyList,
+  getCurrentLobby,
+  getLobbies,
+  setLobbies,
+  clearCurrentLobby,
+  handleLobbyJoined,
+  handleLobbyLeft,
+  handleLobbyUpdated,
+  handleLobbyCreated,
+  handleGameStartFromLobby,
+  setupLobbySocketHandlers,
+  initializeLobbySystem,
+  getLobbyStats
+} from './modules/LobbyManager.js';
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -871,128 +897,7 @@ function updatePieceMesh(piece) {
   console.log(`Highlighted ${filteredMoves.length} moves for ${mode} mode`);
 }
 
-// Lobby management
-let lobbies = [];
-
-function showLobbyUI() {
-  document.getElementById('lobby-ui').style.display = 'block';
-  refreshLobbies();
-}
-
-function hideLobbyUI() {
-  document.getElementById('lobby-ui').style.display = 'none';
-  document.getElementById('lobby-browser').style.display = 'block';
-  document.getElementById('lobby-creation').style.display = 'none';
-  document.getElementById('lobby-room').style.display = 'none';
-}
-
-function showLobbyCreation() {
-  document.getElementById('lobby-browser').style.display = 'none';
-  document.getElementById('lobby-creation').style.display = 'block';
-  document.getElementById('lobby-room').style.display = 'none';
-  
-  // Set default lobby name
-  document.getElementById('lobby-name').value = `${getPlayerName()}'s Lobby`;
-}
-
-function hideLobbyCreation() {
-  document.getElementById('lobby-browser').style.display = 'block';
-  document.getElementById('lobby-creation').style.display = 'none';
-  document.getElementById('lobby-room').style.display = 'none';
-}
-
-function showLobbyRoom(lobby) {
-  document.getElementById('lobby-browser').style.display = 'none';
-  document.getElementById('lobby-creation').style.display = 'none';
-  document.getElementById('lobby-room').style.display = 'block';
-  
-  updateLobbyRoomDisplay(lobby);
-}
-
-function updateLobbyRoomDisplay(lobby) {
-  document.getElementById('lobby-room-name').textContent = lobby.name;
-  
-  // Update players list
-  const playersHtml = lobby.players.map(p => 
-    `<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-      <span>${p.name}${p.isCreator ? ' (Creator)' : ''}</span>
-      <span style="color: ${p.ready ? '#00ff00' : '#ff6600'};">${p.ready ? 'Ready' : 'Not Ready'}</span>
-    </div>`
-  ).join('');
-  document.getElementById('lobby-players-list').innerHTML = playersHtml;
-  
-  // Update settings display
-  const settingsHtml = `
-    <div>Max Players: ${lobby.settings.maxPlayers}</div>
-    <div>Game Mode: ${lobby.settings.gameMode}</div>
-    <div>Time Limit: ${lobby.settings.timeLimit}s</div>
-    <div>Evolution Mode: ${lobby.settings.evolutionMode}</div>
-  `;
-  document.getElementById('lobby-settings-display').innerHTML = settingsHtml;
-  
-  // Update ready button and status
-  const currentPlayer = lobby.players.find(p => p.id === socket.id);
-  if (currentPlayer) {
-    const readyBtn = document.getElementById('ready-toggle-btn');
-    const readyStatus = document.getElementById('ready-status');
-    
-    if (currentPlayer.ready) {
-      readyBtn.textContent = 'Not Ready';
-      readyBtn.style.background = '#cc0000';
-      readyStatus.textContent = 'Ready';
-      readyStatus.style.color = '#00ff00';
-    } else {
-      readyBtn.textContent = 'Ready';
-      readyBtn.style.background = '#00cc00';
-      readyStatus.textContent = 'Not Ready';
-      readyStatus.style.color = '#ff6600';
-    }
-  }
-}
-
-function createLobby() {
-  const name = document.getElementById('lobby-name').value.trim();
-  const maxPlayers = parseInt(document.getElementById('lobby-max-players').value);
-  const gameMode = document.getElementById('lobby-game-mode').value;
-  const timeLimit = parseInt(document.getElementById('lobby-time-limit').value);
-  
-  if (!name) {
-    alert('Please enter a lobby name');
-    return;
-  }
-  
-  const settings = {
-    name: name,
-    maxPlayers: maxPlayers,
-    gameMode: gameMode,
-    timeLimit: timeLimit,
-    evolutionMode: 'standard'
-  };
-  
-  socket.emit('create-lobby', { name, settings });
-}
-
-function joinLobby(lobbyId) {
-  socket.emit('join-lobby', { lobbyId });
-}
-
-function leaveLobby() {
-  if (currentLobby) {
-    socket.emit('leave-lobby', { lobbyId: currentLobby.id });
-  }
-}
-
-function toggleReady() {
-  if (currentLobby) {
-    socket.emit('toggle-ready', { lobbyId: currentLobby.id });
-  }
-}
-
-function refreshLobbies() {
-  socket.emit('get-lobbies');
-}
-
-// updateLobbyList function now imported from UIManager module
+// Lobby functions now handled by LobbyManager
 
 // getPlayerName function now handled by GameLogicManager
 // Statistics management functions
@@ -1177,6 +1082,9 @@ if (!visualEffects) {
 
 // Initialize battle system
 initializeBattleSystem();
+
+// Initialize lobby system
+initializeLobbySystem();
 
 // Update particle system in animation loop
 const originalAnimate = window.animate;
