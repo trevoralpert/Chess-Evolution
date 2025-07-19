@@ -669,7 +669,8 @@ function setupSocketListeners() {
   // Evolution choice handlers
   socket.on('evolution-choice-available', (data) => {
     console.log('🎯 Evolution choice available:', data);
-    showEvolutionChoice(data);
+    // Use the working dialog system instead of the broken panel system
+    showEvolutionChoiceDialog(data.pieceId, data.piece, 'player_request', data.availablePaths, data.bankInfo, data.timeLeft || 30);
     showEvolutionUI(); // Auto-show evolution UI when choice is available
   });
 
@@ -3170,7 +3171,9 @@ async function createPieceMeshOptimized(piece) {
       
       // Scale the model appropriately for the sphere
       const modelScale = getModelScale(piece.type);
+      console.log(`🔧 Scaling ${piece.type} to ${modelScale}`);
       mesh.scale.set(modelScale, modelScale, modelScale);
+      console.log(`🔧 Final ${piece.type} scale:`, mesh.scale);
       
     } else {
       throw new Error(`Failed to load GLB model for ${piece.type}`);
@@ -4220,82 +4223,12 @@ function updateEvolutionBank(bankInfo) {
   document.getElementById('evolution-total-earned').textContent = bankInfo.totalEarned;
 }
 
+// OLD BROKEN FUNCTION - NOW USING showEvolutionChoiceDialog() INSTEAD
+// This function was trying to show 'evolution-choice-panel' which doesn't exist in the DOM
 function showEvolutionChoice(data) {
-  currentEvolutionChoice = data;
-  
-  // Show evolution choice panel
-  document.getElementById('evolution-choice-panel').style.display = 'block';
-  
-  // Update piece info
-  document.getElementById('evolution-piece-name').textContent = `${data.piece.type} (${data.piece.symbol})`;
-  document.getElementById('evolution-piece-age').textContent = `Age: ${Math.floor(data.availablePaths[0]?.currentAliveTime || 0)}s`;
-  
-  // Display available paths
-  const pathsContainer = document.getElementById('evolution-paths');
-  pathsContainer.innerHTML = '';
-  
-  data.availablePaths.forEach(path => {
-    const pathDiv = document.createElement('div');
-    pathDiv.style.cssText = `
-      margin-bottom: 5px; 
-      padding: 8px; 
-      background: rgba(0, 0, 0, 0.2); 
-      border-radius: 3px; 
-      border: 1px solid ${path.canAfford && path.meetsRequirements ? '#00aa00' : '#666'};
-      cursor: ${path.canAfford && path.meetsRequirements ? 'pointer' : 'default'};
-    `;
-    
-    const rarityColors = {
-      'common': '#ffffff',
-      'uncommon': '#1eff00',
-      'rare': '#0070dd',
-      'epic': '#a335ee',
-      'legendary': '#ff8000'
-    };
-    
-    pathDiv.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div style="display: flex; align-items: center;">
-          <span style="font-size: 16px; margin-right: 8px;">${path.icon}</span>
-          <div>
-            <div style="color: ${rarityColors[path.rarity]}; font-weight: bold; font-size: 12px;">${path.name}</div>
-            <div style="color: #ccc; font-size: 10px;">${path.description}</div>
-          </div>
-        </div>
-        <div style="text-align: right;">
-          <div style="color: #ffd700; font-size: 12px; font-weight: bold;">Cost: ${path.cost}</div>
-          <div style="color: #888; font-size: 10px;">
-            ${path.timeRequirement > 0 ? `Time: ${Math.floor(path.timeRequirement)}s` : 'No time req'}
-          </div>
-          ${!path.canAfford ? '<div style="color: #ff0000; font-size: 10px;">Not enough points</div>' : ''}
-          ${!path.meetsRequirements ? '<div style="color: #ff0000; font-size: 10px;">Requirements not met</div>' : ''}
-        </div>
-      </div>
-    `;
-    
-    if (path.canAfford && path.meetsRequirements) {
-      pathDiv.addEventListener('click', () => {
-        socket.emit('make-evolution-choice', { 
-          pieceId: data.pieceId, 
-          pathId: path.id 
-        });
-      });
-    }
-    
-    pathsContainer.appendChild(pathDiv);
-  });
-  
-  // Start timer
-  let timeLeft = data.timeLeft || 30;
-  evolutionTimer = setInterval(() => {
-    timeLeft--;
-    document.getElementById('evolution-timer').textContent = `Time left: ${timeLeft}s`;
-    
-    if (timeLeft <= 0) {
-      clearInterval(evolutionTimer);
-      hideEvolutionChoice();
-    }
-  }, 1000);
+  console.log('⚠️ showEvolutionChoice called - this function is deprecated, should use showEvolutionChoiceDialog instead');
+  // Redirect to working dialog system
+  showEvolutionChoiceDialog(data.pieceId, data.piece, 'fallback', data.availablePaths, data.bankInfo, data.timeLeft || 30);
 }
 
 function hideEvolutionChoice() {
@@ -4830,11 +4763,13 @@ function onRightClick(event) {
       // Check if this is our piece
       if (piece.playerId === socket.id) {
         console.log('🖱️ Requesting evolution choice for our piece');
+        console.log('🖱️ Piece details:', { id: piece.id, type: piece.type, playerId: piece.playerId });
         
         // Request evolution choice from server
         socket.emit('request-evolution-choice', {
           pieceId: piece.id
         });
+        console.log('🖱️ Evolution choice request sent to server');
         
         return true; // Click handled
       } else {
@@ -6779,6 +6714,14 @@ setTimeout(() => {
 
 function showEvolutionChoiceDialog(pieceId, piece, reason, availablePaths, bankInfo, timeLimit) {
   console.log('🎯 showEvolutionChoiceDialog called with:', { pieceId, piece, reason, availablePaths, bankInfo, timeLimit });
+  
+  // Validate data structure
+  if (!Array.isArray(availablePaths)) {
+    console.error('🎯 availablePaths is not an array:', availablePaths);
+    availablePaths = [];
+  }
+  console.log('🎯 Evolution paths count:', availablePaths.length);
+  availablePaths.forEach((path, i) => console.log(`🎯 Path ${i}:`, path));
   
   // Create dialog HTML with inline styles
   const dialogHtml = `
