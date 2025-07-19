@@ -1,8 +1,8 @@
 # EvoChess MASTER CHECKLIST - Early Submission July 18, 2025
 **Submission Deadline**: 8:00 PM (~3 hours remaining)
 **Current Time**: ~5:00 PM
-**Project Status**: ~96% Complete (Updated: Evolution Points System FULLY FIXED!)
-**Current Task**: ✅ Evolution Points & Equator Bonus Working | Next: Evolution Menu System
+**Project Status**: ~85% Complete (Updated: 3 Critical Issues Discovered!)
+**Current Task**: 🚨 CRITICAL FIXES - Color System & Multiplayer Issues
 
 ## 🎯 SUBMISSION GOAL
 Create a fully playable, polished version of EvoChess that demonstrates core gameplay mechanics without game-breaking bugs.
@@ -24,11 +24,12 @@ Create a fully playable, polished version of EvoChess that demonstrates core gam
 - [x] Basic capture mechanics (any piece can capture any piece)
 - [x] Pawn promotion to Queen at opposite pole
 - [x] Evolution system backend infrastructure
-- [x] SPLITTER functionality - FULLY WORKING!
+- [x] SPLITTER functionality - PARTIALLY WORKING!
   - [x] Unlimited splitting (no max count restriction)
   - [x] Splits onto enemy pieces to capture
   - [x] Proper evolution paths (Bishop/Knight at 3 points)
   - [x] Turn counter properly increments during splits
+  - [ ] **❌ BROKEN: Split pieces don't inherit correct team colors**
 
 ### Battle System
 - [x] Direct capture system (attacker always wins)
@@ -36,10 +37,12 @@ Create a fully playable, polished version of EvoChess that demonstrates core gam
 - [x] No value-based restrictions
 
 ### UI/UX Features  
-- [x] **MENU SYSTEM - FULLY IMPLEMENTED!**
+- [x] **MENU SYSTEM - PARTIALLY IMPLEMENTED!**
   - [x] Beautiful main menu with EvoChess branding
-  - [x] Player name input and color selection
-  - [x] Quick Play and VS AI modes
+  - [x] Player name input system
+  - [ ] **❌ BROKEN: Color selection doesn't work - pieces don't get chosen colors**
+  - [ ] **❌ MISSING: Player count control (always adds extra players)**
+  - [x] Quick Play and VS AI modes (but broken due to player count issues)
   - [x] Placeholder for future modes (Create Game, Join Game, Tournament, Spectate)
   - [x] Evolution Guide button with basic info
 - [x] **GAME OVER SCREEN - IMPLEMENTED!**
@@ -78,77 +81,121 @@ Create a fully playable, polished version of EvoChess that demonstrates core gam
 
 ---
 
-## ❌ MISSING/BROKEN FEATURES (Discovered During Testing)
+## 🚨 CRITICAL ISSUES (Must Fix Before Submission)
 
-### Critical UX Issues
-- [x] **Floating Piece Values** ✅ COMPLETED - Evolution points now visible above each piece
+### **Priority 1: Core Functionality Broken**
+- [ ] **Color Selection System BROKEN** 
+  - Problem: Players can't pick colors from menu; chosen colors don't apply to pieces
+  - Impact: Players can't distinguish teams properly
+  - Estimate: 30 minutes
+  
+- [ ] **Split Pieces Color Inheritance BROKEN**
+  - Problem: New Splitter pieces don't inherit parent team colors
+  - Impact: Split pieces appear in wrong colors, confusing gameplay
+  - Estimate: 20 minutes
+
+- [ ] **Multiplayer Player Count Control BROKEN**
+  - Problem: Always adds 2 extra players when someone joins
+  - Problem: No way to control game size (1v1, vs AI, etc.)
+  - Impact: Cannot create simple games, too many players
+  - Estimate: 45 minutes
+
+### **Priority 2: UX Issues**
 - [ ] **Evolution Menu System** - Currently uses disruptive dialog boxes  
 - [ ] **Victory Check Spam** - Excessive console logging affecting performance
 
-### Gameplay Features
+### **Priority 3: Missing Features**
 - [ ] **Complex Piece Captures** - Vaultbound, Vaultseer, Vaultarcher, Vaultmistress, Covenant Queen mechanics not implemented
 - [ ] **Battle Feedback System** - No visual feedback for battles
 - [ ] **Move Timer System** - Timer bugs and synchronization issues
 - [ ] **Polar Movement Rules** - King vulnerability at poles
 
-### Polish Features
+### **Priority 4: Polish Features**
 - [ ] **Sound Effects** - No audio feedback
 - [ ] **Animations** - No smooth piece movement animations
 - [ ] **Tutorial/Help System** - No onboarding for new players
 
 ---
 
-## 🚀 OPTIMIZED PRIORITY ORDER (3 hours remaining)
+## 🚀 REORDERED PRIORITY SEQUENCE (Optimal Workflow)
 
-### Phase 2: Floating Piece Values ✅ COMPLETED!
-- [x] Display point values above pieces
-- [x] Style values based on team color (red/blue team colors)
-- [x] Update values in real-time
-**Impact**: Critical gameplay visibility - COMPLETED
+### **Phase 1: Performance & Console Cleanup (15 minutes) - QUICK WIN START**
+- [ ] Fix victory check console spam
+- [ ] Optimize performance bottlenecks
+- [ ] Clean up debugging environment
+**Impact**: MEDIUM - Better performance + cleaner debugging environment
+**Dependencies**: None - standalone cleanup
+**Risk**: Very Low - just removing debug logs
+**Why First**: Quick confidence booster, cleaner environment for subsequent debugging
 
-### Phase 3: Evolution Menu System (45 minutes) - NEXT
-- [ ] Right-click context menu
-- [ ] Evolution tree visualization
-- [ ] Remove auto-evolution dialogs
-**Impact**: Major UX improvement
+### **Phase 2: Color System Fix (30 minutes) - FOUNDATION**
+- [ ] Fix menu color selection → piece color application
+- [ ] Test color selection works end-to-end
+**Impact**: CRITICAL - Players need to see their chosen colors
+**Dependencies**: None (Phase 1 just helps with debugging)
+**Risk**: Low - isolated to color system
 
-### Phase 4: Victory Check Optimization (15 minutes)
-- [ ] Fix spam in console
-- [ ] Optimize performance
-**Impact**: Performance and stability
+### **Phase 3: Split Color Inheritance (20 minutes) - BUILD ON FOUNDATION** 
+- [ ] Fix split pieces to inherit parent team colors
+- [ ] Test Splitter → split piece color consistency
+**Impact**: CRITICAL - Split pieces must match team colors  
+**Dependencies**: Phase 2 (color system must work first)
+**Risk**: Low - isolated to split piece creation
 
-### Phase 5: Basic Testing (30 minutes)
-- [ ] Test all new features
-- [ ] Verify no regressions
-**Impact**: Ensure stability
+### **Phase 4: Multiplayer Player Control (45 minutes) - CORE FUNCTIONALITY**
+- [ ] Fix "2 extra players" bug when joining games
+- [ ] Add player count control to menu (1v1, 1vAI, etc.)
+- [ ] Test different game configurations
+**Impact**: CRITICAL - Game must support proper player counts
+**Dependencies**: Phases 2-3 (players need proper colors to test properly)
+**Risk**: Medium - touches multiplayer core systems
 
-### Phase 6: Documentation (30 minutes)
-- [ ] Update README
-- [ ] Add screenshots
-- [ ] Known issues list
-**Impact**: Professional submission
+### **Phase 5: Front Menu Page Backend & Frontend Tune-up (40 minutes) - POLISH ENTRY POINT**
+- [ ] Polish menu UI/UX design and responsiveness
+- [ ] Improve menu backend logic and validation
+- [ ] Add better error handling and user feedback
+- [ ] Enhance menu navigation and flow
+- [ ] Test menu functionality across different scenarios
+**Impact**: HIGH - Professional first impression and user experience
+**Dependencies**: Phases 2-4 (core functionality must work first)
+**Risk**: Low-Medium - UI/UX improvements with backend validation
+
+### **Phase 6: Evolution Menu Polish (30 minutes) - FINAL UX POLISH**
+- [ ] Replace dialog boxes with right-click context menu
+- [ ] Test evolution UI workflow
+**Impact**: High UX improvement
+**Dependencies**: Phases 2-5 (core game and menu must work first)
+**Risk**: Low - UI enhancement only
+
+### **Phase 7: Testing & Documentation (45 minutes) - FINAL**
+- [ ] Comprehensive testing of all fixes
+- [ ] Update README with current features
+- [ ] Document known limitations
+**Impact**: Professional submission quality
+**Dependencies**: All previous phases
+**Risk**: Low - documentation only
 
 ---
 
-## 📊 CURRENT STATUS BREAKDOWN
+## 📊 REVISED STATUS BREAKDOWN
 
-**Working Systems**: 88%
-- Core game: 100%
-- Multiplayer: 100%
+**Working Systems**: 75% (down from 88% due to discovered issues)
+- Core game: 95% (color issues affect core gameplay)
+- Multiplayer: 70% (player count control broken)
 - Basic mechanics: 100%
-- Evolution backend: 100%
-- UI/UX: 85% (needs piece values & evolution menu)
+- Evolution backend: 95% (split color inheritance broken)
+- UI/UX: 70% (color selection & player control broken)
 
-**Polish Level**: 75%
+**Polish Level**: 65%
 - Visual feedback: 60%
-- User experience: 80%
+- User experience: 60% (major UX issues discovered)
 - Performance: 80%
 - Documentation: 40%
 
-**Submission Readiness**: 85%
-- Playable: YES ✅
+**Submission Readiness**: 70% (down from 85% due to critical issues)
+- Playable: PARTIALLY ⚠️ (color/multiplayer issues affect gameplay)
 - Stable: YES ✅
-- Polished: GOOD ✅
+- Polished: NEEDS WORK ⚠️ 
 - Professional: GOOD ✅
 
 ---
@@ -163,18 +210,31 @@ These features would be nice but aren't critical for submission:
 - Tournament mode full implementation
 - Replay system
 - Spectator mode refinements
+- Move timer system improvements
+- Polar movement rules refinement
 
 ---
 
-## 📝 SUBMISSION CHECKLIST
+## 📝 REVISED SUBMISSION CHECKLIST
 
 Before 8:00 PM submission:
-- [x] Menu screen implemented ✅
-- [ ] Piece values visible
-- [ ] Evolution menu working
-- [ ] Performance optimized
+- [ ] **QUICK WIN: Performance cleanup & console spam fix**
+- [ ] **CRITICAL: Fix color selection system**
+- [ ] **CRITICAL: Fix split piece colors**  
+- [ ] **CRITICAL: Fix multiplayer player count**
+- [ ] **HIGH PRIORITY: Front menu page backend & frontend tune-up**
+- [ ] Evolution menu improvement (if time allows)
 - [ ] README updated
 - [ ] Screenshots captured
 - [ ] Known issues documented
-- [ ] Repository cleaned up
 - [ ] Final testing complete 
+
+## 🎯 **Critical Path Analysis:**
+- **Quick Win Start**: 15 minutes (Phase 1 - Performance cleanup)
+- **Critical Core Fixes**: 95 minutes (Phases 2-4 - Color, Split Colors, Multiplayer)
+- **Menu Polish**: 40 minutes (Phase 5 - Frontend/Backend tune-up)
+- **Total Critical Work**: 150 minutes (Phases 1-5)
+- **Remaining Time**: ~3 hours = 180 minutes
+- **Buffer Time**: 30 minutes for evolution menu, testing, and documentation
+- **Success Probability**: **Very High** ✅
+- **Workflow Benefits**: Clean debugging environment from start, logical dependency chain 
