@@ -50,6 +50,7 @@ function startGameInitialization() {
 let menuScreen, gameUI, gameOverScreen;
 let playerName = '';
 let menuSelectedColor = '#00ff00';
+let selectedColor = null; // Current selected color ID from color picker
 let gameMode = 'quickplay';
 let isInGame = false;
 
@@ -71,6 +72,10 @@ function initializeAfterDOM() {
   }
   
   console.log('UI elements found successfully');
+  
+  // Hide timing UI initially (only show during gameplay)
+  const timingUI = document.getElementById('timing-ui');
+  if (timingUI) timingUI.style.display = 'none';
   
   // Initialize menu system
   initMenuSystem();
@@ -179,7 +184,9 @@ function initMenuSystem() {
 
 // Start the game
 function startGame() {
-  console.log('🎮 Starting game with:', { playerName, color: menuSelectedColor, gameMode });
+  // Get the proper color ID from the new color selection system
+  const colorToUse = selectedColor || 'magenta'; // Default to magenta if none selected
+  console.log('🎮 Starting game with:', { playerName, color: colorToUse, gameMode });
   
   // Prevent multiple connections
   if (socket && socket.connected) {
@@ -187,15 +194,17 @@ function startGame() {
     return;
   }
   
-  // Hide menu, show game UI
+  // Hide menu, show game UI and timer
   menuScreen.style.display = 'none';
   gameUI.style.display = 'block';
+  const timingUI = document.getElementById('timing-ui');
+  if (timingUI) timingUI.style.display = 'block';
   isInGame = true;
   
   // Initialize the game with player settings
   window.playerSettings = {
     name: playerName,
-    color: menuSelectedColor,
+    color: colorToUse,
     mode: gameMode
   };
   
@@ -214,9 +223,17 @@ function startGame() {
 function returnToMenu() {
   console.log('🏠 Returning to menu...');
   
-  // Hide game screens
+  // Clear any running timers
+  if (typeof currentTimer !== 'undefined' && currentTimer) {
+    clearInterval(currentTimer);
+    currentTimer = null;
+  }
+  
+  // Hide game screens and timer
   gameUI.style.display = 'none';
   gameOverScreen.style.display = 'none';
+  const timingUI = document.getElementById('timing-ui');
+  if (timingUI) timingUI.style.display = 'none';
   
   // Show menu
   menuScreen.style.display = 'flex';
@@ -233,8 +250,16 @@ function returnToMenu() {
 function showGameOver(winner, stats) {
   console.log('🏁 Game Over!', winner, stats);
   
-  // Hide game UI
+  // Clear any running timers
+  if (typeof currentTimer !== 'undefined' && currentTimer) {
+    clearInterval(currentTimer);
+    currentTimer = null;
+  }
+  
+  // Hide game UI and timer
   gameUI.style.display = 'none';
+  const timingUI = document.getElementById('timing-ui');
+  if (timingUI) timingUI.style.display = 'none';
   
   // Update game over screen
   const titleEl = document.getElementById('game-over-title');
@@ -310,9 +335,10 @@ function setupSocketListeners() {
     initializeGameComponents();
     
     // Send player info to server
+    const colorToUse = selectedColor || 'magenta'; // Use new color selection system
     socket.emit('player-joined', {
       name: playerName,
-      color: menuSelectedColor
+      color: colorToUse
     });
     
     // Request AI difficulties for the dropdown
@@ -438,11 +464,46 @@ function setupSocketListeners() {
       const playerId = piece.playerId;
       console.log(`🔄 Updating visual mesh for piece evolution: ${pieceId} from ${oldType} to ${newType}`);
       
+      // PRESERVE ORIGINAL COLOR: Store the color from the old mesh before removing it
+      let originalColor = null;
+      const oldMesh = pieceMeshes[pieceId];
+      if (oldMesh) {
+        console.log(`🔍 Old mesh found:`, oldMesh);
+        console.log(`🔍 Old mesh material:`, oldMesh.material);
+        console.log(`🔍 Old mesh children:`, oldMesh.children);
+        
+        // Try to get color from the mesh or its children
+        if (oldMesh.material) {
+          if (Array.isArray(oldMesh.material)) {
+            originalColor = oldMesh.material[0].color.clone();
+          } else {
+            originalColor = oldMesh.material.color.clone();
+          }
+          console.log(`🎨 Preserved original color from mesh: ${originalColor.getHexString()}`);
+        } else if (oldMesh.children && oldMesh.children.length > 0) {
+          // Look for color in child meshes (GLB models often have children)
+          for (let child of oldMesh.children) {
+            if (child.material) {
+              if (Array.isArray(child.material)) {
+                originalColor = child.material[0].color.clone();
+              } else {
+                originalColor = child.material.color.clone();
+              }
+              console.log(`🎨 Preserved original color from child: ${originalColor.getHexString()}`);
+              break;
+            }
+          }
+        }
+        
+        if (!originalColor) {
+          console.log(`⚠️ Could not find original color, will use default player color`);
+        }
+      }
+      
       // Update the piece type in game state to match server
       piece.type = newType;
       
-      // Get the existing mesh
-      const oldMesh = pieceMeshes[pieceId];
+      // Remove old mesh
       if (oldMesh) {
         // Remove old mesh from scene
         scene.remove(oldMesh);
@@ -465,6 +526,42 @@ function setupSocketListeners() {
       // Create new mesh with evolved type
       createPieceMeshOptimized(piece).then(() => {
         console.log(`✅ Successfully recreated mesh as ${newType} for piece ${pieceId}`);
+        
+        // APPLY PRESERVED COLOR: Set the new mesh to use the original color
+        if (pieceMeshes[pieceId]) {
+          const newMesh = pieceMeshes[pieceId];
+          
+          // If we preserved a color, use it; otherwise get the proper player color
+          let colorToApply = originalColor;
+          if (!colorToApply) {
+            // Get the proper player color
+            const player = gameState.players[playerId];
+            const playerIndex = Object.keys(gameState.players).indexOf(playerId);
+            const playerColor = getPlayerColor(playerId, playerIndex);
+            colorToApply = new THREE.Color(playerColor);
+            console.log(`🎨 Using player color ${colorToApply.getHexString()} for new ${newType} mesh`);
+          }
+          
+          // Apply color to mesh and all children
+          function applyColorToMesh(mesh, color) {
+            if (mesh.material) {
+              if (Array.isArray(mesh.material)) {
+                mesh.material.forEach(mat => {
+                  if (mat.color) mat.color.copy(color);
+                });
+              } else {
+                if (mesh.material.color) mesh.material.color.copy(color);
+              }
+            }
+            // Apply to children too
+            if (mesh.children) {
+              mesh.children.forEach(child => applyColorToMesh(child, color));
+            }
+          }
+          
+          applyColorToMesh(newMesh, colorToApply);
+          console.log(`🎨 Applied color ${colorToApply.getHexString()} to new ${newType} mesh and all children`);
+        }
         
         // Create evolution effect at the piece position
         const worldPos = getWorldPosition(piece.row, piece.col);
@@ -641,6 +738,63 @@ function setupSocketListeners() {
       showNotification('Evolution Points', 
         `Banked ${points} points. Total: ${totalPoints}`, 
         'success');
+    }
+  });
+
+  // Timer system handlers
+  socket.on('player-timer-started', (data) => {
+    console.log('🕒 Player timer started:', data);
+    if (data.playerId === socket.id) {
+      // Start visual timer countdown for this player
+      startRealTimeTimer(data.timerDuration);
+    }
+  });
+
+  socket.on('player-timer-update', (data) => {
+    console.log('🕒 Player timer update:', data);
+    if (data.playerId === socket.id) {
+      // Stop client-side timer when server updates start
+      if (currentTimer) {
+        clearInterval(currentTimer);
+        currentTimer = null;
+        console.log('🕒 Stopped client-side timer, using server updates');
+      }
+      updateTimerDisplay(data.timeRemaining);
+    }
+  });
+
+  socket.on('player-timer-zero', (data) => {
+    console.log('🕒 Player timer at zero:', data);
+    if (data.playerId === socket.id) {
+      // Timer is at 0, player can move
+      const statusEl = document.getElementById('timer-status');
+      if (statusEl) {
+        statusEl.textContent = 'Ready to move';
+        statusEl.style.color = '#00ff00';
+      }
+    }
+  });
+
+  socket.on('game-started-first-move', (data) => {
+    console.log('🎮 Game started:', data);
+    const statusEl = document.getElementById('timer-status');
+    if (statusEl) {
+      statusEl.textContent = 'Game Active';
+      statusEl.style.color = '#00ff00';
+    }
+    showNotification('Game Started!', data.message, 'success');
+  });
+
+  socket.on('active-player-changed', (data) => {
+    console.log('🔄 Active player changed:', data);
+    const activePlayerNameEl = document.getElementById('active-player-name');
+    if (activePlayerNameEl) {
+      activePlayerNameEl.textContent = data.playerName || 'Unknown';
+    }
+    
+    // Show notification if it's your turn
+    if (data.playerId === socket.id) {
+      showNotification('Your Turn!', 'Make your move', 'info');
     }
   });
 }
@@ -1251,10 +1405,20 @@ function updateTimerDisplay(timeRemaining) {
   const timerBarElement = document.getElementById('timer-bar');
   const timerStatusElement = document.getElementById('timer-status');
   
-  if (!timeRemainingElement || !timerBarElement || !timerStatusElement) return;
+  console.log('🕒 updateTimerDisplay called with:', timeRemaining, 'Elements found:', {
+    timeRemaining: !!timeRemainingElement,
+    timerBar: !!timerBarElement, 
+    timerStatus: !!timerStatusElement
+  });
+  
+  if (!timeRemainingElement || !timerBarElement || !timerStatusElement) {
+    console.log('⚠️ Timer elements not found in DOM');
+    return;
+  }
   
   const remainingSeconds = timeRemaining / 1000;
   timeRemainingElement.textContent = remainingSeconds.toFixed(1);
+  console.log('🕒 Updated timer display to:', remainingSeconds.toFixed(1));
   
   // Update progress bar
   const progress = (timeRemaining / timerDuration) * 100;
@@ -4521,35 +4685,100 @@ function getPlayerColor(playerId, playerIndex) {
     return COLOR_MAP[player.selectedColor];
   }
   
-  // Fallback to color generation from string
-  return getColorFromString(playerId);
+  // Fallback to index-based colors (more reliable than string-based)
+  const fallbackColors = [
+    0xFF6B6B, // Red-ish
+    0x4ECDC4, // Cyan/Teal
+    0x45B7D1, // Blue
+    0x96CEB4, // Green
+    0xFECE85, // Orange
+    0xF8B500, // Yellow
+    0xC44569, // Pink
+    0x6C5CE7  // Purple
+  ];
+  
+  // Handle missing or invalid playerIndex
+  let colorIndex = 0;
+  if (typeof playerIndex === 'number' && !isNaN(playerIndex)) {
+    colorIndex = playerIndex % fallbackColors.length;
+  } else {
+    // If no valid playerIndex, try to derive from playerId
+    if (gameState && gameState.players) {
+      const playerIds = Object.keys(gameState.players);
+      const foundIndex = playerIds.indexOf(playerId);
+      colorIndex = foundIndex >= 0 ? foundIndex % fallbackColors.length : 0;
+    }
+  }
+  
+  const fallbackColor = fallbackColors[colorIndex];
+  
+  console.log(`🎨 Using fallback color for player ${playerIndex || 'undefined'}: ${fallbackColor.toString(16)}`);
+  return fallbackColor;
 }
 
 // Enhanced piece color function that prioritizes player identification
 function getPieceColorForPlayer(piece, player, playerIndex) {
+  // Check if this is a split piece that should inherit parent color
+  if (piece.id && piece.id.includes('-split-')) {
+    // For split pieces, find any existing piece with the same player that has a color we can inherit
+    // Look for other pieces from the same player that might have evolved colors
+    let parentColor = null;
+    
+    // Search through all existing pieces for the same player to find a color to inherit
+    for (const existingPieceId in pieceMeshes) {
+      const existingMesh = pieceMeshes[existingPieceId];
+      if (existingMesh && existingMesh.userData && existingMesh.userData.piece) {
+        const existingPiece = existingMesh.userData.piece;
+        
+        // If this is the same player and has the same type (SPLITTER), inherit its color
+        if (existingPiece.playerId === piece.playerId && 
+            existingPiece.type === piece.type &&
+            existingPieceId !== piece.id) { // Don't inherit from self
+          
+          // Try to extract color from this mesh
+          if (existingMesh.material) {
+            if (Array.isArray(existingMesh.material)) {
+              parentColor = existingMesh.material[0].color.clone();
+            } else {
+              parentColor = existingMesh.material.color.clone();
+            }
+          }
+          
+          // If no material on main mesh, check children
+          if (!parentColor && existingMesh.children && existingMesh.children.length > 0) {
+            for (const child of existingMesh.children) {
+              if (child.material && child.material.color) {
+                if (Array.isArray(child.material)) {
+                  parentColor = child.material[0].color.clone();
+                } else {
+                  parentColor = child.material.color.clone();
+                }
+                break;
+              }
+            }
+          }
+          
+          if (parentColor) {
+            console.log(`🎨 SPLIT INHERITANCE: Split piece ${piece.id} inheriting color ${parentColor.getHexString()} from existing ${existingPiece.type} ${existingPieceId}`);
+            return parentColor;
+          }
+        }
+      }
+    }
+    
+    console.log(`🎨 SPLIT INHERITANCE: Could not find suitable parent color for ${piece.id}, using fallback`);
+  }
+  
   // Use the player's selected color from the server
   const basePlayerColor = getPlayerColor(piece.playerId, playerIndex);
   
   console.log(`getPieceColorForPlayer: piece=${piece.type}, playerId=${piece.playerId}, baseColor=${basePlayerColor.toString(16)}`);
   
-  // Apply consistent brightness boost to all pieces for better visibility
-  // but keep the same base color for team consistency
-  const universalBrightness = 1.2; // Slight brightness boost for all pieces
+  // Return the exact player color without modification for consistency
+  // This ensures all pieces for a player have the same color
+  console.log(`Final color for ${piece.type}: ${basePlayerColor.toString(16)}`);
   
-  // Apply brightness to player color using HSL for better color preservation
-  const color = new THREE.Color(basePlayerColor);
-  const hsl = {};
-  color.getHSL(hsl);
-  
-  // Apply universal brightness modifier in HSL space
-  hsl.l = Math.min(1.0, hsl.l * universalBrightness); // Clamp to max 1.0
-  
-  color.setHSL(hsl.h, hsl.s, hsl.l);
-  
-  const finalColor = color.getHex();
-  console.log(`Final color for ${piece.type}: ${finalColor.toString(16)}`);
-  
-  return finalColor;
+  return basePlayerColor;
 }
 
 // Handle right-click for evolution menu
@@ -4884,13 +5113,6 @@ function onMouseClick(event) {
           }
         }
         if (move.type === 'split') {
-          // Check if there's enough time left to make a move (at least 2 seconds)
-          if (currentTimer && currentTimer.timeLeft < 2000) {
-            gameInfoEl.textContent = `Not enough time left to make a move!`;
-            console.log('Move blocked - less than 2 seconds remaining');
-            return;
-          }
-
           // Send split command to server
           console.log(`🔄 SPLIT MOVE DETECTED - Sending split-piece event for ${currentSelectedPieceId} to (${move.row}, ${move.col})`);
           window.globalSocket.emit('split-piece', {
@@ -4904,13 +5126,6 @@ function onMouseClick(event) {
           console.log(`Splitting piece ${currentSelectedPieceId} to (${move.row}, ${move.col})`);
 
         } else {
-          // Check if there's enough time left to make a move (at least 2 seconds)
-          if (currentTimer && currentTimer.timeLeft < 2000) {
-            gameInfoEl.textContent = `Not enough time left to make a move!`;
-            console.log('Move blocked - less than 2 seconds remaining');
-            return;
-          }
-
           // Send regular move command to server
           console.log('🚀 MOVE DEBUG - Sending move command:');
           console.log('  pieceId:', currentSelectedPieceId);
@@ -6238,42 +6453,6 @@ socket.on('waiting-for-players', (data) => {
   }
 });
 
-socket.on('game-started-first-move', (data) => {
-  console.log('Game started:', data);
-  const statusEl = document.getElementById('timer-status');
-  if (statusEl) {
-    statusEl.textContent = 'Game Active';
-    statusEl.style.color = '#00ff00';
-  }
-  showNotification('Game Started!', data.message, 'success');
-});
-
-socket.on('player-timer-started', (data) => {
-  console.log('Player timer started:', data);
-  if (data.playerId === socket.id) {
-    // Start visual timer countdown for this player
-    startRealTimeTimer(data.timerDuration);
-  }
-});
-
-socket.on('player-timer-update', (data) => {
-  if (data.playerId === socket.id) {
-    updateTimerDisplay(data.timeRemaining);
-  }
-});
-
-socket.on('player-timer-zero', (data) => {
-  console.log('Player timer at zero:', data);
-  if (data.playerId === socket.id) {
-    // Timer is at 0, player can move
-    const statusEl = document.getElementById('timer-status');
-    if (statusEl) {
-      statusEl.textContent = 'Ready to move';
-      statusEl.style.color = '#00ff00';
-    }
-  }
-});
-
 socket.on('move-queued', (data) => {
   console.log('Move queued:', data);
   showNotification('Move Queued', data.message, 'info');
@@ -6454,7 +6633,6 @@ setTimeout(() => {
 
 // Color selection system
 let availableColors = [];
-let selectedColor = null;
 
 // Initialize color selection
 function initializeColorSelection() {

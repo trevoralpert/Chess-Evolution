@@ -79,33 +79,109 @@ const victoryManager = new VictoryManager(io, gameState, timingManager);
 // Chat and communication management
 const chatManager = new ChatManager(io);
 
-// Set up move executor for timing manager
-timingManager.setMoveExecutor((playerId, moveData) => {
-  const result = handlePieceMove(playerId, moveData);
-  if (result) {
-    // Record the move
-    spectatorManager.recordMove('main', {
-      type: 'move',
-      playerId: playerId,
-      pieceId: moveData.pieceId,
-      fromPosition: { row: result.fromRow, col: result.fromCol },
-      toPosition: { row: moveData.targetRow, col: moveData.targetCol },
-      moveType: result.moveType || 'normal',
-      captures: result.captures || []
+// Helper function to start next player's turn
+function startNextPlayerTurn(currentPlayerId) {
+  console.log(`🔄 startNextPlayerTurn called with playerId: ${currentPlayerId}`);
+  
+  try {
+    if (!gameState || !gameState.players) {
+      console.error('❌ gameState or gameState.players is undefined');
+      return;
+    }
+    
+    console.log(`🔄 Available players:`, Object.keys(gameState.players));
+    
+    const activePlayers = Object.keys(gameState.players).filter(id => {
+      const player = gameState.players[id];
+      const isEliminated = player.eliminated || false;
+      console.log(`🔄 Player ${id}: eliminated=${isEliminated}`);
+      return !isEliminated;
     });
     
-    // Send confirmation back to the client
-    io.emit('move-result', { success: true, message: result.message, playerId: playerId });
+    console.log(`🔄 Active players: ${activePlayers.length}`, activePlayers);
     
-    // Send game event to chat
-    const player = gameState.players[playerId];
-    if (player) {
-      chatManager.sendGameEvent('main', 'piece_moved', {
-        playerName: player.name,
-        piece: gameState.pieces[moveData.pieceId]?.symbol || 'piece',
-        row: moveData.targetRow,
-        col: moveData.targetCol
+    if (activePlayers.length < 2) {
+      console.log('🔄 Not enough active players for turn rotation');
+      return;
+    }
+    
+    const currentIndex = activePlayers.indexOf(currentPlayerId);
+    if (currentIndex === -1) {
+      console.error(`❌ Current player ${currentPlayerId} not found in active players`);
+      return;
+    }
+    
+    const nextIndex = (currentIndex + 1) % activePlayers.length;
+    const nextPlayerId = activePlayers[nextIndex];
+    
+    console.log(`🔄 Turn transition: ${currentPlayerId} → ${nextPlayerId}`);
+    
+    // Set as active player
+    gameState.activePlayer = nextPlayerId;
+    
+    // Start next player's timer
+    console.log(`🔄 Starting timer for next player: ${nextPlayerId}`);
+    timingManager.startPlayerCooldown(nextPlayerId);
+    
+    // Notify clients about active player change
+    io.emit('active-player-changed', {
+      playerId: nextPlayerId,
+      playerName: gameState.players[nextPlayerId].name
+    });
+  } catch (error) {
+    console.error('❌ Error in startNextPlayerTurn:', error);
+  }
+}
+
+// Set up move executor for timing manager
+timingManager.setMoveExecutor((playerId, moveData) => {
+  let result;
+  
+  // Check if this is a split action by checking if it came from split-piece event
+  if (moveData.isSplitAction) {
+    console.log(`⏰ Executing queued split for player ${playerId}:`, moveData);
+    result = handlePieceSplit(playerId, moveData);
+    if (result) {
+      // Send split confirmation back to the client
+      io.emit('split-result', { success: true, message: result.message, playerId: playerId });
+      
+      // Note: Turn transition handled by move executor since splits go through timing system
+    }
+  } else {
+    console.log(`⏰ Executing queued move for player ${playerId}:`, moveData);
+    result = handlePieceMove(playerId, moveData);
+    if (result) {
+      // Record the move
+      spectatorManager.recordMove('main', {
+        type: 'move',
+        playerId: playerId,
+        pieceId: moveData.pieceId,
+        fromPosition: { row: result.fromRow, col: result.fromCol },
+        toPosition: { row: moveData.targetRow, col: moveData.targetCol },
+        moveType: result.moveType || 'normal',
+        captures: result.captures || []
       });
+      
+      // Send confirmation back to the client
+      io.emit('move-result', { success: true, message: result.message, playerId: playerId });
+      
+      // Send game event to chat
+      const player = gameState.players[playerId];
+      if (player) {
+        chatManager.sendGameEvent('main', 'piece_moved', {
+          playerName: player.name,
+          piece: gameState.pieces[moveData.pieceId]?.symbol || 'piece',
+          row: moveData.targetRow,
+          col: moveData.targetCol
+        });
+      }
+      
+      // Start next player's turn after regular move completes
+      console.log('🔄 Setting timeout for regular move turn transition');
+      setTimeout(() => {
+        console.log('🔄 Regular move timeout executing - calling startNextPlayerTurn');
+        startNextPlayerTurn(playerId);
+      }, 500); // Small delay to let move complete
     }
   }
 });
@@ -283,10 +359,41 @@ io.on('connection', (socket) => {
   });
   
   socket.on('split-piece', (data) => {
-    const result = handlePieceSplit(socket.id, data);
-    if (result) {
-      // Send confirmation back to the client
-      socket.emit('split-result', { success: true, message: result.message });
+    // Mark this as a split action for the move executor
+    data.isSplitAction = true;
+    
+    // Check timing system for turn validation and collision detection
+    const timingResult = timingManager.registerMove(socket.id, data);
+    
+    if (!timingResult.success) {
+      if (timingResult.collision) {
+        // Handle collision - trigger battle (splits can also collide)
+        socket.emit('move-collision', {
+          message: 'Split collision detected! Resolving battle...',
+          conflictingMove: timingResult.conflictingMove
+        });
+        
+        // Trigger battle between pieces
+        handleMoveCollision(socket.id, data, timingResult.conflictingMove);
+      } else {
+        socket.emit('split-result', { success: false, message: timingResult.error });
+      }
+      return;
+    }
+    
+    if (timingResult.queued) {
+      // Split is queued, will be executed when timer reaches 0
+      socket.emit('move-queued', { 
+        message: `Split queued: ${timingResult.message}`,
+        queued: true,
+        timeRemaining: timingResult.timeRemaining
+      });
+    } else {
+      // Split is pending, will be executed after collision window
+      socket.emit('move-pending', { 
+        message: 'Split registered, checking for conflicts...',
+        pending: true 
+      });
     }
   });
   
@@ -890,6 +997,13 @@ io.on('connection', (socket) => {
     
     // Resume cooldowns after evolution choice is complete
     timingManager.resumeAllCooldowns();
+    
+    // Start next player's turn after evolution completes
+    console.log('🔄 Setting timeout for evolution turn transition');
+    setTimeout(() => {
+      console.log('🔄 Evolution timeout executing - calling startNextPlayerTurn');
+      startNextPlayerTurn(socket.id);
+    }, 500); // Small delay to let evolution complete
     
     // Victory checks will be resumed after evolution-completed is broadcast
   });
@@ -2113,6 +2227,7 @@ function handlePieceSplit(playerId, splitData) {
   
   broadcastGameState();
   
+  // Note: Turn transition is now handled by move executor since splits go through timing system
   return { success: true, message: successMsg };
 }
 
