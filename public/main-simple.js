@@ -89,6 +89,26 @@ import {
   getMenuElements,
   updateSelectedColorDisplay
 } from './modules/MenuManager.js';
+import {
+  updateUI,
+  updatePlayerNameDisplay,
+  updateSelectedColorDisplay as updateUISelectedColorDisplay,
+  updateLobbyList,
+  updateAIPlayersList,
+  updateSpectatorGamesList,
+  updateReplaysList,
+  updateReplayUI,
+  updateStatsButtonStyles,
+  updateSpectatorUI,
+  toggleUISection,
+  updateGameVisualization,
+  formatTime,
+  updatePlayerList,
+  updateGameBoardInfo,
+  updateScoreboard,
+  updateErrorDisplay,
+  updateLoadingDisplay
+} from './modules/UIManager.js';
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -2780,74 +2800,10 @@ function updatePieceMesh(piece) {
 
 // getWorldPosition function - Now imported from ./modules/GridUtils.js
 
-function updateUI() {
-  const playerCount = Object.keys(gameState.players).length;
-  playerCountEl.textContent = `Players: ${playerCount}`;
-  
-  const pieceCount = Object.keys(gameState.pieces).length;
-  
-  // Update game info based on player count
-  if (playerCount >= 2) {
-    gameInfoEl.textContent = `Game ready! ${pieceCount} pieces on board. Click your pieces to move.`;
-    gameInfoEl.style.color = '#00ff00';
-  } else if (playerCount === 1) {
-    gameInfoEl.textContent = 'Waiting for opponent... Click "Add AI Player" to start!';
-    gameInfoEl.style.color = '#ffaa00';
-  } else {
-    gameInfoEl.textContent = 'Waiting for players to join...';
-    gameInfoEl.style.color = '#ffffff';
-  }
-  
-  // Update player name display
-  const activePlayerNameEl = document.getElementById('active-player-name');
-  if (activePlayerNameEl) {
-    const myPlayer = gameState.players[socket.id];
-    if (myPlayer) {
-          activePlayerNameEl.textContent = myPlayer.name || getPlayerName() || 'Unknown Player';
-  } else {
-    activePlayerNameEl.textContent = getPlayerName() || 'Connecting...';
-    }
-  }
-  
-  // Update selected color display
-  const selectedColorEl = document.getElementById('selected-color');
-  if (selectedColorEl) {
-    const myPlayer = gameState.players[socket.id];
-    if (myPlayer && myPlayer.selectedColor) {
-      selectedColorEl.textContent = `Selected: ${myPlayer.selectedColor}`;
-      selectedColorEl.style.color = myPlayer.selectedColor;
-    } else {
-        updateSelectedColorDisplay();
-    }
-  }
-  
-  // Add player color indicators
-  updatePlayerColorIndicators();
-}
+// updateUI function now imported from UIManager module
 
 // updatePlayerColorIndicators function now imported from ColorManager module
-      align-items: center;
-      margin-bottom: 3px;
-      ${player.id === currentPlayerId ? 'font-weight: bold; background: rgba(255, 255, 255, 0.1); padding: 2px 4px; border-radius: 3px;' : ''}
-    `;
-    
-    const colorSwatch = document.createElement('div');
-    colorSwatch.style.cssText = `
-      width: 16px;
-      height: 16px;
-      background-color: ${colorHex};
-      border-radius: 2px;
-      margin-right: 8px;
-      border: 1px solid #666;
-    `;
-    
-    const playerName = document.createElement('span');
-    playerName.textContent = `${player.name}${player.id === currentPlayerId ? ' (You)' : ''}`;
-    playerName.style.color = '#fff';
-    
-    playerDiv.appendChild(colorSwatch);
-    playerDiv.appendChild(playerName);
-    colorIndicator.appendChild(playerDiv);
+
   });
 }
 
@@ -3086,26 +3042,7 @@ function refreshLobbies() {
   socket.emit('get-lobbies');
 }
 
-function updateLobbyList(lobbies) {
-  const lobbyList = document.getElementById('lobby-list');
-  
-  if (lobbies.length === 0) {
-    lobbyList.innerHTML = '<div style="color: #888; font-size: 12px;">No lobbies available</div>';
-    return;
-  }
-  
-  const lobbiesHtml = lobbies.map(lobby => 
-    `<div style="display: flex; justify-content: space-between; align-items: center; padding: 5px; margin-bottom: 5px; background: rgba(255, 255, 255, 0.1); border-radius: 3px;">
-      <div>
-        <div style="font-weight: bold; color: #00aaff;">${lobby.name}</div>
-        <div style="font-size: 10px; color: #ccc;">by ${lobby.creator} • ${lobby.playerCount}/${lobby.maxPlayers} players • ${lobby.gameMode}</div>
-      </div>
-      <button onclick="joinLobby('${lobby.id}')" style="padding: 3px 8px; background: #00aaff; color: #fff; border: none; border-radius: 3px; cursor: pointer; font-size: 10px;">Join</button>
-    </div>`
-  ).join('');
-  
-  lobbyList.innerHTML = lobbiesHtml;
-}
+// updateLobbyList function now imported from UIManager module
 
 function getPlayerName() {
   // Try to get player name from game state or use default
@@ -3180,17 +3117,7 @@ function showGlobalStats() {
   socket.emit('get-global-stats');
 }
 
-function updateStatsButtonStyles(activeButtonId) {
-  const buttons = ['show-personal-stats', 'show-leaderboard', 'show-achievements', 'show-global-stats'];
-  buttons.forEach(buttonId => {
-    const button = document.getElementById(buttonId);
-    if (buttonId === activeButtonId) {
-      button.style.background = '#cc00cc';
-    } else {
-      button.style.background = '#6600aa';
-    }
-  });
-}
+// updateStatsButtonStyles function now imported from UIManager module
 
 function refreshLeaderboard() {
   const category = document.getElementById('leaderboard-category').value;
@@ -4221,31 +4148,7 @@ function seekReplayToPosition(position) {
   });
 }
 
-function updateReplayUI() {
-  if (!currentReplay) return;
-  
-  document.getElementById('replay-current-move').textContent = replayCurrentMove;
-  document.getElementById('replay-total-moves').textContent = currentReplay.moves.length;
-  
-  const currentTime = currentReplay.moves[replayCurrentMove - 1]?.timestamp || 0;
-  const totalTime = currentReplay.duration || 0;
-  
-  document.getElementById('replay-current-time').textContent = formatTime(currentTime);
-  document.getElementById('replay-total-time').textContent = formatTime(totalTime);
-  
-  document.getElementById('replay-timeline').value = (replayCurrentMove / currentReplay.moves.length) * 100;
-  
-  document.getElementById('replay-game-id').textContent = currentReplay.gameId;
-  document.getElementById('replay-players').textContent = currentReplay.players.join(', ');
-  document.getElementById('replay-duration').textContent = formatTime(totalTime);
-}
-
-function formatTime(milliseconds) {
-  const seconds = Math.floor(milliseconds / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-}
+// updateReplayUI and formatTime functions now imported from UIManager module
 
 // Socket event handlers for spectator mode
 socket.on('spectator-joined', (data) => {
@@ -4294,52 +4197,15 @@ socket.on('replay-state', (data) => {
   }
 });
 
-function updateSpectatorGamesList(games) {
-  const gamesList = document.getElementById('spectator-games-list');
-  if (games.length === 0) {
-    gamesList.innerHTML = '<div style="color: #888; font-size: 12px;">No games available to spectate</div>';
-    return;
-  }
-  
-  gamesList.innerHTML = games.map(game => `
-    <div style="padding: 5px; margin: 2px 0; background: rgba(255, 255, 255, 0.1); border-radius: 3px; cursor: pointer;" 
-         onclick="joinSpectatorGame('${game.gameId}')">
-      <div style="font-weight: bold;">Game: ${game.gameId}</div>
-      <div style="font-size: 11px; color: #ccc;">Spectators: ${game.spectatorCount}</div>
-    </div>
-  `).join('');
-}
+// updateSpectatorGamesList function now imported from UIManager module
 
-function updateReplaysList(replays) {
-  const replaysList = document.getElementById('replay-list');
-  if (replays.length === 0) {
-    replaysList.innerHTML = '<div style="color: #888; font-size: 12px;">No replays available</div>';
-    return;
-  }
-  
-  replaysList.innerHTML = replays.map(replay => `
-    <div style="padding: 5px; margin: 2px 0; background: rgba(255, 255, 255, 0.1); border-radius: 3px; cursor: pointer;" 
-         onclick="playReplay('${replay.gameId}')">
-      <div style="font-weight: bold;">Game: ${replay.gameId}</div>
-      <div style="font-size: 11px; color: #ccc;">
-        Players: ${replay.players.join(', ')} | Duration: ${formatTime(replay.duration)} | Moves: ${replay.moveCount}
-      </div>
-      <div style="font-size: 10px; color: #888;">
-        Played: ${new Date(replay.metadata.created).toLocaleString()}
-      </div>
-    </div>
-  `).join('');
-}
+// updateReplaysList function now imported from UIManager module
 
 function joinSpectatorGame(gameId) {
   socket.emit('join-spectator', { gameId });
 }
 
-function updateGameVisualization(gameState, moves) {
-  // Update the 3D visualization with replay data
-  // This would integrate with the existing game state update logic
-  console.log('Updating game visualization with replay state:', gameState, moves);
-}
+// updateGameVisualization function now imported from UIManager module
 
 // AI opponent functionality
 let currentAIPlayers = [];
@@ -4486,27 +4352,7 @@ function getAIPersonality(personalityType) {
   return personalities[personalityType] || personalities.balanced;
 }
 
-function updateAIPlayersList() {
-  const aiList = document.getElementById('ai-players-list');
-  
-  if (currentAIPlayers.length === 0) {
-    aiList.innerHTML = '<div style="color: #888; font-size: 12px;">No AI players active</div>';
-    return;
-  }
-  
-  aiList.innerHTML = currentAIPlayers.map(aiPlayer => `
-    <div style="padding: 5px; margin: 2px 0; background: rgba(255, 255, 255, 0.1); border-radius: 3px; display: flex; justify-content: space-between; align-items: center;">
-      <div>
-        <div style="font-weight: bold; color: ${aiPlayer.color};">🤖 ${aiPlayer.name}</div>
-        <div style="font-size: 11px; color: #ccc;">${aiPlayer.aiDifficulty} | ${aiPlayer.pieces.length} pieces</div>
-      </div>
-      <div style="display: flex; gap: 5px;">
-        <button onclick="showAIStats('${aiPlayer.id}')" style="padding: 2px 5px; background: #555; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 10px;">Stats</button>
-        <button onclick="removeAIPlayer('${aiPlayer.id}')" style="padding: 2px 5px; background: #cc0000; color: #fff; border: none; border-radius: 2px; cursor: pointer; font-size: 10px;">Remove</button>
-      </div>
-    </div>
-  `).join('');
-}
+// updateAIPlayersList function now imported from UIManager module
 
 function removeAIPlayer(aiPlayerId) {
   socket.emit('remove-ai-player', { aiPlayerId });
