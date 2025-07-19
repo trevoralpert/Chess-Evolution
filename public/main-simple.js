@@ -116,6 +116,27 @@ import {
   fadeOut,
   slideIn
 } from './modules/VisualEffectsManager.js';
+import {
+  getEvolutionPointsForPiece,
+  createEvolutionPointsLabel,
+  updateAllEvolutionPointLabels,
+  updateEvolutionPointsLabel,
+  showEvolutionUI,
+  hideEvolutionUI,
+  refreshEvolutionBank,
+  updateEvolutionBank,
+  showEvolutionChoice,
+  hideEvolutionChoice,
+  handleEvolutionCompleted,
+  showEvolutionChoiceDialog,
+  chooseEvolution,
+  bankEvolutionPoints,
+  closeEvolutionChoiceDialog,
+  setupEvolutionSocketHandlers,
+  getCurrentEvolutionChoice,
+  getPlayerEvolutionBank,
+  setPlayerEvolutionBank
+} from './modules/EvolutionManager.js';
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -174,6 +195,9 @@ function startGameInitialization() {
   
   // Set up timer management socket handlers
   setupTimerSocketHandlers(socket);
+  
+  // Set up evolution socket handlers
+  setupEvolutionSocketHandlers(socket);
 }
 
 // Return to menu
@@ -481,24 +505,7 @@ function setupSocketListeners() {
     }
   });
 
-  socket.on('evolution-point-award', (data) => {
-    const { playerId, amount, reason } = data;
-    console.log(`Evolution points awarded: ${amount} to ${playerId} for ${reason}`);
-    
-    // Update player's evolution points in game state
-    if (gameState.players[playerId]) {
-      gameState.players[playerId].evolutionPoints = (gameState.players[playerId].evolutionPoints || 0) + amount;
-      console.log(`🎯 Updated player ${playerId} evolution points to:`, gameState.players[playerId].evolutionPoints);
-    }
-    
-    // Update all floating evolution point labels
-    updateAllEvolutionPointLabels();
-    
-    // Update evolution bank display if this is our player
-    if (socket.id === playerId) {
-      refreshEvolutionBank();
-    }
-  });
+  // evolution-point-award handler now in setupEvolutionSocketHandlers
 
   socket.on('player-eliminated', (data) => {
     const { playerId, playerName, reason } = data;
@@ -564,72 +571,7 @@ function setupSocketListeners() {
   });
 
   // Evolution choice handlers
-  socket.on('evolution-choice-available', (data) => {
-    console.log('🎯 Evolution choice available:', data);
-    showEvolutionChoice(data);
-    showEvolutionUI(); // Auto-show evolution UI when choice is available
-  });
-
-  socket.on('evolution-choice-success', (data) => {
-    console.log('🎯 Evolution choice success:', data);
-    handleEvolutionCompleted(data);
-  });
-
-  socket.on('evolution-choice-failed', (data) => {
-    console.log('🎯 Evolution choice failed:', data);
-    hideEvolutionChoice();
-    showNotification('Evolution Failed', data.error, 'error');
-  });
-
-  socket.on('evolution-choice-cancelled', (data) => {
-    console.log('🎯 Evolution choice cancelled:', data);
-    hideEvolutionChoice();
-    showNotification('Evolution Cancelled', 'Evolution choice was cancelled', 'info');
-  });
-
-  socket.on('evolution-choice-dialog', (data) => {
-    console.log('🎯 Evolution choice dialog event received:', data);
-    const { pieceId, piece, reason, availablePaths, bankInfo, timeLimit } = data;
-    showEvolutionChoiceDialog(pieceId, piece, reason, availablePaths, bankInfo, timeLimit);
-  });
-
-  socket.on('evolution-completed', (data) => {
-    // Handle evolution completed by other players
-    if (data.playerId !== socket.id) {
-      const playerName = gameState.players[data.playerId]?.name || 'Unknown';
-      showNotification('Player Evolution', 
-        `${playerName}'s ${data.oldType} evolved to ${data.newType}!`, 
-        'info');
-    }
-  });
-
-  socket.on('evolution-point-gained', (data) => {
-    console.log(`🎯 Evolution point gained event:`, data);
-    
-    // Update player's evolution points in game state
-    if (gameState.players[data.playerId]) {
-      gameState.players[data.playerId].evolutionPoints = data.totalPoints || (gameState.players[data.playerId].evolutionPoints || 0) + data.points;
-      console.log(`🎯 Updated player ${data.playerId} evolution points to:`, gameState.players[data.playerId].evolutionPoints);
-    }
-    
-    // Update all floating evolution point labels
-    updateAllEvolutionPointLabels();
-    
-    if (data.playerId === socket.id) {
-      showNotification('Evolution Points', 
-        `+${data.points} points (${data.reason.replace('_', ' ')})`, 
-        'success');
-      
-      // Update evolution bank display if UI is open
-      if (document.getElementById('evolution-ui').style.display === 'block') {
-        refreshEvolutionBank();
-      }
-    }
-  });
-
-  socket.on('evolution-points-banked', (data) => {
-    const { pieceId, playerId, points, totalPoints, reason } = data;
-    
+  // Evolution socket handlers now in setupEvolutionSocketHandlers
     if (playerId === socket.id) {
       gameInfoEl.textContent = `Banked ${points} evolution points! Total: ${totalPoints}`;
       showNotification('Evolution Points', 
@@ -2026,14 +1968,7 @@ function updateEvolutionPointsLabel(mesh, piece) {
   }
 }
 
-// Update all evolution point labels (call this when player evolution points change)
-function updateAllEvolutionPointLabels() {
-    Object.values(pieceMeshes).forEach(mesh => {
-    if (mesh.userData && mesh.userData.piece && mesh.userData.piece.type !== 'KING') {
-      updateEvolutionPointsLabel(mesh, mesh.userData.piece);
-    }
-  });
-}
+// updateAllEvolutionPointLabels function now imported from EvolutionManager module
 
 // Cached text label creation - textLabelCache moved to top of file to fix initialization order
 
@@ -2058,93 +1993,7 @@ function createCachedTextLabel(symbol) {
   return texture;
 }
 
-// Get evolution points for a piece - PHASE 1C: Display piece BASE VALUES, not player evolution bank
-function getEvolutionPointsForPiece(piece) {
-  // Debug logging to see what data we have
-  console.log('🔍 Getting evolution points for piece:', piece.id, 'type:', piece.type);
-  console.log('🔍 Piece player ID:', piece.playerId);
-  
-  // King pieces don't have evolution points - hide their labels
-  if (piece.type === 'KING') {
-    console.log('🔍 King pieces do not have evolution points');
-    return 0;
-  }
-  
-  // PHASE 1C: Always display piece BASE VALUES (intrinsic to piece type)
-  // These are the inherent point values of pieces, NOT the player's evolution bank
-  const pieceBaseValues = {
-    'PAWN': 1,        // ✅ Pawns always show 1 point (their base value)
-    'ROOK': 5,
-    'KNIGHT': 3,
-    'BISHOP': 3,
-    'QUEEN': 9,
-    'JUMPER': 3,
-    'SUPER_JUMPER': 5,
-    'HYPER_JUMPER': 7,
-    'SPLITTER': 2,    // ✅ Splitters always show 2 points (their base value)
-    'HYBRID_QUEEN': 12,
-    'MISTRESS_JUMPER': 8
-  };
-  
-  const baseValue = pieceBaseValues[piece.type] || 1;
-  console.log('🔍 Using piece base value for', piece.type, ':', baseValue);
-  return baseValue;
-}
-
-// Create evolution points label with team color styling
-function createEvolutionPointsLabel(evolutionPoints, playerId) {
-  console.log('🎨 Creating evolution points label with points:', evolutionPoints, 'for player:', playerId);
-  
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
-  canvas.width = 128; // Double the width for better quality
-  canvas.height = 64; // Double the height for better quality
-  
-  // Get player color for styling
-  const player = gameState.players[playerId];
-  const playerIndex = player?.index !== undefined ? player.index : 
-                     Object.keys(gameState.players).indexOf(playerId);
-  
-  console.log('🎨 Player index:', playerIndex, 'Player object:', player);
-  
-  // Determine text color based on player
-  let textColor = '#FFD700'; // Gold default
-  if (playerIndex === 0) {
-    textColor = '#FF6B6B'; // Red team
-  } else if (playerIndex === 1) {
-    textColor = '#4ECDC4'; // Blue team
-  }
-  
-  console.log('🎨 Using text color:', textColor);
-  
-  // Create background with subtle glow
-  context.fillStyle = 'rgba(0, 0, 0, 0.6)';
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  
-  // Add text
-  context.fillStyle = textColor;
-  context.font = 'bold 20px Arial';
-  context.textAlign = 'center';
-  context.fillText(`${evolutionPoints}`, 32, 22);
-  
-  // Add small "pts" text
-  context.fillStyle = 'rgba(255, 255, 255, 0.7)';
-  context.font = '12px Arial';
-  context.fillText('pts', 32, 30);
-  
-  console.log('🎨 Canvas texture created successfully');
-  return new THREE.CanvasTexture(canvas);
-}
-
-// Helper function to get appropriate scale for GLB models
-function getModelScale(pieceType) {
-  const scaleMap = {
-    'KING': 0.5,
-    'QUEEN': 0.45,
-    'ROOK': 0.4,
-    'KNIGHT': 0.4,
-    'BISHOP': 0.4,
-    'PAWN': 0.3,
+// getEvolutionPointsForPiece and createEvolutionPointsLabel functions now imported from EvolutionManager module
     'SPLITTER': 0.35,
     'JUMPER': 0.4,
     'SUPER_JUMPER': 0.45,
@@ -2754,129 +2603,10 @@ function displayGlobalStats(stats) {
   document.getElementById('global-stats-content').innerHTML = html;
 }
 
-// Evolution system functions
-function showEvolutionUI() {
-  document.getElementById('evolution-ui').style.display = 'block';
-  refreshEvolutionBank();
-}
-
-function hideEvolutionUI() {
-  document.getElementById('evolution-ui').style.display = 'none';
-}
-
-function refreshEvolutionBank() {
-  socket.emit('get-evolution-bank');
-}
-
-function updateEvolutionBank(bankInfo) {
-  playerEvolutionBank = bankInfo;
-  document.getElementById('evolution-points').textContent = bankInfo.points;
-  document.getElementById('evolution-total-earned').textContent = bankInfo.totalEarned;
-}
+// Evolution system functions now imported from EvolutionManager module
 
 function showEvolutionChoice(data) {
-  currentEvolutionChoice = data;
-  
-  // Show evolution choice panel
-  document.getElementById('evolution-choice-panel').style.display = 'block';
-  
-  // Update piece info
-  document.getElementById('evolution-piece-name').textContent = `${data.piece.type} (${data.piece.symbol})`;
-  document.getElementById('evolution-piece-age').textContent = `Age: ${Math.floor(data.availablePaths[0]?.currentAliveTime || 0)}s`;
-  
-  // Display available paths
-  const pathsContainer = document.getElementById('evolution-paths');
-  pathsContainer.innerHTML = '';
-  
-  data.availablePaths.forEach(path => {
-    const pathDiv = document.createElement('div');
-    pathDiv.style.cssText = `
-      margin-bottom: 5px; 
-      padding: 8px; 
-      background: rgba(0, 0, 0, 0.2); 
-      border-radius: 3px; 
-      border: 1px solid ${path.canAfford && path.meetsRequirements ? '#00aa00' : '#666'};
-      cursor: ${path.canAfford && path.meetsRequirements ? 'pointer' : 'default'};
-    `;
-    
-    const rarityColors = {
-      'common': '#ffffff',
-      'uncommon': '#1eff00',
-      'rare': '#0070dd',
-      'epic': '#a335ee',
-      'legendary': '#ff8000'
-    };
-    
-    pathDiv.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div style="display: flex; align-items: center;">
-          <span style="font-size: 16px; margin-right: 8px;">${path.icon}</span>
-          <div>
-            <div style="color: ${rarityColors[path.rarity]}; font-weight: bold; font-size: 12px;">${path.name}</div>
-            <div style="color: #ccc; font-size: 10px;">${path.description}</div>
-          </div>
-        </div>
-        <div style="text-align: right;">
-          <div style="color: #ffd700; font-size: 12px; font-weight: bold;">Cost: ${path.cost}</div>
-          <div style="color: #888; font-size: 10px;">
-            ${path.timeRequirement > 0 ? `Time: ${Math.floor(path.timeRequirement)}s` : 'No time req'}
-          </div>
-          ${!path.canAfford ? '<div style="color: #ff0000; font-size: 10px;">Not enough points</div>' : ''}
-          ${!path.meetsRequirements ? '<div style="color: #ff0000; font-size: 10px;">Requirements not met</div>' : ''}
-        </div>
-      </div>
-    `;
-    
-    if (path.canAfford && path.meetsRequirements) {
-      pathDiv.addEventListener('click', () => {
-        socket.emit('make-evolution-choice', { 
-          pieceId: data.pieceId, 
-          pathId: path.id 
-        });
-      });
-    }
-    
-    pathsContainer.appendChild(pathDiv);
-  });
-  
-  // Start timer using TimerManager
-  const timeLeft = data.timeLeft || 30;
-  startEvolutionTimer(timeLeft);
-}
-
-function hideEvolutionChoice() {
-  document.getElementById('evolution-choice-panel').style.display = 'none';
-  clearEvolutionTimer();
-  currentEvolutionChoice = null;
-}
-
-function handleEvolutionCompleted(data) {
-  // Hide choice panel
-  hideEvolutionChoice();
-  
-  // Show evolution notification
-  showNotification('Evolution Complete!', 
-    `${data.oldType} evolved to ${data.newType} for ${data.cost} points!`, 
-    'success');
-  
-  // Update bank
-  updateEvolutionBank({ 
-    points: data.newPoints, 
-    totalEarned: playerEvolutionBank.totalEarned 
-  });
-  
-  // Update game state if needed
-  if (gameState.pieces[data.pieceId]) {
-    gameState.pieces[data.pieceId].type = data.newType;
-  }
-}
-
-// startGameCountdown function now imported from MenuManager module
-
-// Tournament management
-let currentTournament = null;
-let tournaments = [];
-
+// Evolution choice functions now imported from EvolutionManager module
 function showTournamentUI() {
   document.getElementById('tournament-ui').style.display = 'block';
   socket.emit('get-tournaments');
