@@ -48,6 +48,9 @@ function startGameInitialization() {
 
 // Menu System Variables (declare at module level)
 let menuScreen, gameUI, gameOverScreen;
+
+// ✅ PHASE 5 FIX: Use var instead of let to avoid temporal dead zone issues
+var lastRightClickEvent = null; // Store right-click position for context menu
 let playerName = '';
 let menuSelectedColor = '#00ff00';
 let selectedColor = null; // Current selected color ID from color picker
@@ -582,12 +585,13 @@ function setupSocketListeners() {
   });
 
   socket.on('evolution-point-award', (data) => {
-    const { playerId, amount, reason } = data;
-    console.log(`Evolution points awarded: ${amount} to ${playerId} for ${reason}`);
+    // ✅ PHASE 6 BUG FIX: Server sends 'points', not 'amount'
+    const { playerId, points, reason } = data;
+    console.log(`Evolution points awarded: ${points} to ${playerId} for ${reason}`);
     
     // Update player's evolution points in game state
     if (gameState.players[playerId]) {
-      gameState.players[playerId].evolutionPoints = (gameState.players[playerId].evolutionPoints || 0) + amount;
+      gameState.players[playerId].evolutionPoints = (gameState.players[playerId].evolutionPoints || 0) + points;
       console.log(`🎯 Updated player ${playerId} evolution points to:`, gameState.players[playerId].evolutionPoints);
     }
     
@@ -683,7 +687,8 @@ function setupSocketListeners() {
   socket.on('evolution-choice-dialog', (data) => {
     console.log('🎯 Evolution choice dialog event received:', data);
     const { pieceId, piece, reason, availablePaths, bankInfo, timeLimit } = data;
-    showEvolutionChoiceDialog(pieceId, piece, reason, availablePaths, bankInfo, timeLimit);
+    // ✅ PHASE 5: Use context menu instead of popup dialog
+    showEvolutionContextMenu(data, lastRightClickEvent);
   });
 
   socket.on('evolution-completed', (data) => {
@@ -4716,6 +4721,14 @@ function getPieceColorForPlayer(piece, player, playerIndex) {
 function onRightClick(event) {
   console.log('🖱️ Right-click event triggered - onRightClick called');
   
+  // ✅ PHASE 5: Store right-click position for context menu
+  lastRightClickEvent = {
+    clientX: event.clientX,
+    clientY: event.clientY,
+    pageX: event.pageX,
+    pageY: event.pageY
+  };
+  
   // Calculate mouse position
   const rect = renderer.domElement.getBoundingClientRect();
   mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -5335,6 +5348,7 @@ document.getElementById('ready-toggle-btn').addEventListener('click', () => {
 let currentEvolutionChoice = null;
 let evolutionTimer = null;
 let playerEvolutionBank = { points: 0, totalEarned: 0 };
+// ✅ PHASE 6 BUG FIX: lastRightClickEvent now declared at top of file
 
 // Evolution event handlers
 document.getElementById('evolution-toggle').addEventListener('click', () => {
@@ -6716,7 +6730,16 @@ setTimeout(() => {
 
 // ... existing code ...
 
+// ✅ PHASE 5: Legacy dialog system - replaced by context menu
+// function showEvolutionChoiceDialog(pieceId, piece, reason, availablePaths, bankInfo, timeLimit) {
+//   console.log('🎯 showEvolutionChoiceDialog called with:', { pieceId, piece, reason, availablePaths, bankInfo, timeLimit });
+
 function showEvolutionChoiceDialog(pieceId, piece, reason, availablePaths, bankInfo, timeLimit) {
+  console.log('🎯 PHASE 5: Legacy showEvolutionChoiceDialog - redirecting to context menu');
+  // Fallback to context menu if called directly
+  showEvolutionContextMenu({pieceId, piece, reason, availablePaths, bankInfo, timeLimit}, lastRightClickEvent || {clientX: window.innerWidth/2, clientY: window.innerHeight/2});
+  return; // Skip the old dialog code below
+  
   console.log('🎯 showEvolutionChoiceDialog called with:', { pieceId, piece, reason, availablePaths, bankInfo, timeLimit });
   
   // Create dialog HTML with inline styles
@@ -7036,5 +7059,207 @@ function closeEvolutionDialog() {
   if (window.evolutionCountdown) {
     clearInterval(window.evolutionCountdown);
     window.evolutionCountdown = null;
+  }
+}
+
+// ✅ PHASE 5: Evolution Context Menu System
+function showEvolutionContextMenu(data, mouseEvent) {
+  console.log('🎯 PHASE 5: showEvolutionContextMenu called with:', data);
+  
+  // Remove any existing context menu
+  hideEvolutionContextMenu();
+  
+  if (!mouseEvent) {
+    console.warn('⚠️ No mouse event provided for context menu position');
+    return;
+  }
+  
+  const { pieceId, piece, reason, availablePaths, bankInfo, timeLimit } = data;
+  
+  // Create context menu at mouse position
+  const contextMenu = document.createElement('div');
+  contextMenu.id = 'evolution-context-menu';
+  contextMenu.style.cssText = `
+    position: fixed;
+    left: ${mouseEvent.clientX}px;
+    top: ${mouseEvent.clientY}px;
+    background: #2a2a2a;
+    color: white;
+    border: 2px solid #4CAF50;
+    border-radius: 8px;
+    padding: 8px 0;
+    z-index: 10000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    min-width: 200px;
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    animation: contextMenuFadeIn 0.2s ease-out;
+  `;
+  
+  // Add CSS animation for smooth appearance
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes contextMenuFadeIn {
+      from { opacity: 0; transform: scale(0.9); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .context-menu-item {
+      padding: 10px 15px;
+      cursor: pointer;
+      border-bottom: 1px solid #444;
+      transition: background-color 0.2s ease;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .context-menu-item:last-child {
+      border-bottom: none;
+    }
+    .context-menu-item:hover {
+      background-color: #4CAF50;
+      color: white;
+    }
+    .context-menu-item.disabled {
+      color: #666;
+      cursor: not-allowed;
+    }
+    .context-menu-item.disabled:hover {
+      background-color: transparent;
+      color: #666;
+    }
+    .context-menu-header {
+      padding: 8px 15px;
+      background: #4CAF50;
+      color: white;
+      font-weight: bold;
+      font-size: 12px;
+      text-align: center;
+    }
+    .context-menu-cost {
+      color: #ffd700;
+      font-size: 12px;
+      font-weight: bold;
+    }
+  `;
+  
+  if (!document.getElementById('context-menu-styles')) {
+    style.id = 'context-menu-styles';
+    document.head.appendChild(style);
+  }
+  
+  // Create menu content
+  let menuHTML = `
+    <div class="context-menu-header">
+      ${piece.symbol} ${piece.type} Evolution
+      <div style="font-size: 10px; font-weight: normal; margin-top: 2px;">
+        Points: ${bankInfo.points} | Time: <span id="context-timer">${timeLimit}s</span>
+      </div>
+    </div>
+  `;
+  
+  // Add evolution paths
+  availablePaths.forEach(path => {
+    const canAfford = bankInfo.points >= path.cost;
+    const itemClass = canAfford ? 'context-menu-item' : 'context-menu-item disabled';
+    
+    menuHTML += `
+      <div class="${itemClass}" data-action="evolve" data-piece-id="${pieceId}" data-path='${JSON.stringify(path)}'>
+        <div>
+          <div>🔄 → ${path.targetType}</div>
+          <div style="font-size: 11px; color: #ccc;">${path.description}</div>
+        </div>
+        <div class="context-menu-cost">${path.cost}pts</div>
+      </div>
+    `;
+  });
+  
+  // Add bank option
+  menuHTML += `
+    <div class="context-menu-item" data-action="bank" data-piece-id="${pieceId}">
+      <div>
+        <div>💰 Bank Points</div>
+        <div style="font-size: 11px; color: #ccc;">Save for later</div>
+      </div>
+      <div class="context-menu-cost">+${bankInfo.points}</div>
+    </div>
+  `;
+  
+  contextMenu.innerHTML = menuHTML;
+  document.body.appendChild(contextMenu);
+  
+  // Position adjustment to keep menu on screen
+  const menuRect = contextMenu.getBoundingClientRect();
+  const windowWidth = window.innerWidth;
+  const windowHeight = window.innerHeight;
+  
+  if (menuRect.right > windowWidth) {
+    contextMenu.style.left = (mouseEvent.clientX - menuRect.width) + 'px';
+  }
+  if (menuRect.bottom > windowHeight) {
+    contextMenu.style.top = (mouseEvent.clientY - menuRect.height) + 'px';
+  }
+  
+  // Add click handlers
+  contextMenu.addEventListener('click', (e) => {
+    const item = e.target.closest('.context-menu-item');
+    if (!item || item.classList.contains('disabled')) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const action = item.getAttribute('data-action');
+    const pieceId = item.getAttribute('data-piece-id');
+    
+    if (action === 'evolve') {
+      const path = JSON.parse(item.getAttribute('data-path'));
+      console.log('🎯 PHASE 5: Context menu evolution chosen:', path);
+      chooseEvolution(pieceId, path);
+    } else if (action === 'bank') {
+      console.log('🎯 PHASE 5: Context menu bank chosen');
+      bankEvolutionPoints(pieceId);
+    }
+    
+    hideEvolutionContextMenu();
+  });
+  
+  // Start countdown timer
+  let timeLeft = timeLimit;
+  const timerElement = document.getElementById('context-timer');
+  
+  const countdown = setInterval(() => {
+    timeLeft--;
+    if (timerElement) {
+      timerElement.textContent = timeLeft + 's';
+    }
+    
+    if (timeLeft <= 0) {
+      clearInterval(countdown);
+      console.log('🎯 PHASE 5: Context menu timeout, auto-banking');
+      bankEvolutionPoints(pieceId);
+      hideEvolutionContextMenu();
+    }
+  }, 1000);
+  
+  // Store countdown reference for cleanup
+  window.evolutionContextCountdown = countdown;
+  
+  // Hide menu when clicking elsewhere
+  setTimeout(() => {
+    document.addEventListener('click', hideEvolutionContextMenu, { once: true });
+  }, 100);
+  
+  console.log('🎯 PHASE 5: Evolution context menu displayed successfully');
+}
+
+function hideEvolutionContextMenu() {
+  const contextMenu = document.getElementById('evolution-context-menu');
+  if (contextMenu) {
+    contextMenu.remove();
+  }
+  
+  // Clear countdown timer
+  if (window.evolutionContextCountdown) {
+    clearInterval(window.evolutionContextCountdown);
+    window.evolutionContextCountdown = null;
   }
 } 
