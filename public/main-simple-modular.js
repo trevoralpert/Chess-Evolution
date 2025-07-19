@@ -8,6 +8,7 @@ import { GameStateManager } from './modules/gameStateManager.js';
 import { MouseInteraction } from './modules/mouseInteraction.js';
 import { PieceMeshManager } from './modules/pieceMeshManager.js';
 import { VisualEffects } from './modules/visualEffects.js';
+import { UIManager } from './modules/uiManager.js';
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -24,6 +25,7 @@ let gameStateManager;
 let mouseInteraction;
 let pieceMeshManager;
 let visualEffects;
+let uiManager;
 
 // Initialize the game
 async function initializeGame() {
@@ -38,6 +40,7 @@ async function initializeGame() {
     mouseInteraction = new MouseInteraction();
     pieceMeshManager = new PieceMeshManager();
     visualEffects = new VisualEffects();
+    uiManager = new UIManager();
     
     // Make modules globally accessible for cross-module communication
     window.gameInit = gameInit;
@@ -47,6 +50,7 @@ async function initializeGame() {
     window.mouseInteraction = mouseInteraction;
     window.pieceMeshManager = pieceMeshManager;
     window.visualEffects = visualEffects;
+    window.uiManager = uiManager;
     
     // Initialize modules in order
     await gameInit.initializeGame();
@@ -56,6 +60,7 @@ async function initializeGame() {
     mouseInteraction.initialize();
     pieceMeshManager.initialize();
     visualEffects.initialize();
+    uiManager.initialize();
     
     // Set up inter-module event listeners
     setupInterModuleEvents();
@@ -102,7 +107,7 @@ function setupInterModuleEvents() {
   // Notification events
   document.addEventListener('showNotification', (event) => {
     const { message, color, duration } = event.detail;
-    showNotification(message, color, duration);
+    uiManager.showNotification(message, color, duration);
   });
   
   // Move choice dialog events
@@ -115,37 +120,6 @@ function setupInterModuleEvents() {
 }
 
 // Utility functions that are still needed globally
-function showNotification(message, color, duration = 3000) {
-  console.log('📢 Notification:', message);
-  
-  // Create notification element
-  const notification = document.createElement('div');
-  notification.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: rgba(0, 0, 0, 0.8);
-    color: ${color};
-    padding: 10px 20px;
-    border-radius: 5px;
-    border: 1px solid ${color};
-    z-index: 10000;
-    font-size: 14px;
-    font-weight: bold;
-    max-width: 300px;
-    word-wrap: break-word;
-  `;
-  notification.textContent = message;
-  
-  document.body.appendChild(notification);
-  
-  // Remove after duration
-  setTimeout(() => {
-    if (notification.parentNode) {
-      notification.parentNode.removeChild(notification);
-    }
-  }, duration);
-}
 
 // Move choice dialog for splitters
 function showMoveChoiceDialog(pieceId, targetRow, targetCol, moveOptions) {
