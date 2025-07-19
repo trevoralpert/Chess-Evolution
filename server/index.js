@@ -1070,10 +1070,14 @@ io.on('connection', (socket) => {
   socket.on('select-color', (data) => {
     const { colorId } = data;
     console.log(`🎨 Server: Player ${socket.id} wants to select color ${colorId}`);
+    console.log(`🎨 Server DEBUG: Current takenColors:`, Array.from(takenColors));
+    console.log(`🎨 Server DEBUG: Available colors:`, getAvailableColors().map(c => c.id));
+    
     const result = setPlayerColor(socket.id, colorId);
     
     if (result.success) {
       console.log(`🎨 Server: Color ${colorId} successfully assigned to player ${socket.id}`);
+      console.log(`🎨 Server DEBUG: takenColors after assignment:`, Array.from(takenColors));
       socket.emit('color-selected', { colorId: colorId });
       
       // Broadcast updated game state to all players
@@ -1084,6 +1088,7 @@ io.on('connection', (socket) => {
       io.emit('available-colors', { colors: availableColors });
     } else {
       console.log(`🎨 Server: Color selection failed for player ${socket.id}:`, result.error);
+      console.log(`🎨 Server DEBUG: Failed assignment - takenColors:`, Array.from(takenColors));
       socket.emit('color-selection-failed', { error: result.error });
     }
   });
@@ -3364,6 +3369,15 @@ const AVAILABLE_COLORS = [
 // Track taken colors
 const takenColors = new Set();
 
+// DEBUG: Add function to reset colors for testing
+function resetTakenColors() {
+  console.log('🎨 RESET: Clearing all taken colors');
+  takenColors.clear();
+  const availableColors = getAvailableColors();
+  io.emit('available-colors', { colors: availableColors });
+  console.log('🎨 RESET: All colors now available:', availableColors.map(c => c.id));
+}
+
 function getPlayerColor(index) {
   const colors = ['red', 'blue', 'green', 'yellow', 'purple', 'cyan', 'orange', 'pink'];
   return colors[index % colors.length];
@@ -3381,19 +3395,27 @@ function setPlayerColor(playerId, colorId) {
   const player = gameState.players[playerId];
   if (!player) return { success: false, error: 'Player not found' };
   
-  if (!isColorAvailable(colorId)) {
+  // If player already has this color, just return success
+  if (player.selectedColor === colorId) {
+    return { success: true, color: colorId };
+  }
+  
+  // Check if the desired color is available (but ignore if it's the player's current color)
+  if (!isColorAvailable(colorId) && player.selectedColor !== colorId) {
     return { success: false, error: 'Color not available' };
   }
   
   // Remove old color if player had one
   if (player.selectedColor) {
     takenColors.delete(player.selectedColor);
+    console.log(`🎨 Server: Freed up color ${player.selectedColor} from player ${playerId}`);
   }
   
   // Set new color
   player.selectedColor = colorId;
   player.color = colorId; // Update the color field for compatibility
   takenColors.add(colorId);
+  console.log(`🎨 Server: Assigned color ${colorId} to player ${playerId}`);
   
   return { success: true, color: colorId };
 }
@@ -3525,4 +3547,8 @@ server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`Grid system: ${GAME_CONFIG.GRID_ROWS}x${GAME_CONFIG.GRID_COLS}`);
   console.log(`Max players: ${GAME_CONFIG.MAX_PLAYERS}`);
+  
+  // Make reset function available globally for debugging
+  global.resetTakenColors = resetTakenColors;
+  console.log('🎨 DEBUG: Use resetTakenColors() in console to clear all taken colors');
 });

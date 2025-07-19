@@ -396,16 +396,19 @@ function setupSocketListeners() {
       
       console.log('🔄 Full update completed');
     } else {
-      // console.log('🔄 Processing delta update');
+      // 🚨 EMERGENCY FIX: Delta update was causing crashes, using full update instead
+      console.log('🔄 Using full update (delta disabled for stability)');
       
-      // Calculate delta and update efficiently
-      const delta = calculateGameStateDelta(gameState, newGameState);
+      // 🚨 COMMENTED OUT BROKEN CODE:
+      // const delta = calculateGameStateDelta(gameState, newGameState);
+      // gameState = newGameState;
+      // if (typeof updateVisualsDelta === 'function') {
+      //   await updateVisualsDelta(delta);
+      // }
+      
+      // 🚨 EMERGENCY: Use working full update path instead
       gameState = newGameState;
-      
-      // Update visuals and UI
-      if (typeof updateVisualsDelta === 'function') {
-        await updateVisualsDelta(delta);
-      }
+      await updateVisuals();
       updateUI();
       
       // Update evolution point labels
@@ -3058,10 +3061,10 @@ function showDiceBattleAnimation(battleLog, winner, loser, duration) {
 }
 
 async function updateVisuals() {
-  // console.log('🔧 updateVisuals called');
-  // console.log('🔧 gameState.pieces:', gameState.pieces);
-  // console.log('🔧 Number of pieces in gameState:', Object.keys(gameState.pieces || {}).length);
-  // console.log('🔧 Current pieceMeshes:', Object.keys(pieceMeshes));
+  console.log('🔧 updateVisuals called');
+  console.log('🔧 gameState.pieces:', gameState.pieces);
+  console.log('🔧 Number of pieces in gameState:', Object.keys(gameState.pieces || {}).length);
+  console.log('🔧 Current pieceMeshes:', Object.keys(pieceMeshes));
   
   // Remove pieces that no longer exist
   Object.keys(pieceMeshes).forEach(pieceId => {
@@ -3074,22 +3077,22 @@ async function updateVisuals() {
   // Add or update pieces
   const piecePromises = Object.values(gameState.pieces).map(async piece => {
     if (!pieceMeshes[piece.id]) {
-      // console.log(`🔧 Creating new mesh for piece ${piece.id} (${piece.type})`);
+      console.log(`🔧 Creating new mesh for piece ${piece.id} (${piece.type}) at (${piece.x}, ${piece.y})`);
       try {
         await createPieceMeshOptimized(piece);
-        // console.log(`🔧 Successfully created mesh for piece ${piece.id}`);
+        console.log(`🔧 Successfully created mesh for piece ${piece.id}`);
       } catch (error) {
         console.error(`❌ Failed to create mesh for piece ${piece.id}:`, error);
       }
     } else {
-      // console.log(`🔧 Updating existing mesh for piece ${piece.id}`);
+      console.log(`🔧 Updating existing mesh for piece ${piece.id}`);
       updatePieceMeshOptimized(piece);
     }
   });
   
   // Wait for all piece creation to complete
   await Promise.all(piecePromises);
-  // console.log('🔧 updateVisuals completed');
+  console.log('🔧 updateVisuals completed');
 }
 
 // Delta update function for better performance
