@@ -2,6 +2,7 @@ console.log('🚀 Starting main-simple.js v15 - ADDING GLTF LOADER 🚀');
 
 // Import modular components
 import { PerformanceOptimizer } from './modules/PerformanceOptimizer.js';
+import { gridToSpherical, sphericalToCartesian, getWorldPosition } from './modules/GridUtils.js';
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -834,25 +835,7 @@ function setupSocketListeners() {
   });
 }
 
-// Grid utility functions (copied from gridToSphere.js)
-function gridToSpherical(rows, cols, row, col) {
-  // phi: 0° = north pole, 180° = south pole
-  const phi = (row / (rows - 1)) * 180;
-  // theta: 0° = 0°, 360° = 360° (longitude)
-  const theta = (col / cols) * 360;
-  return { phi, theta };
-}
-
-function sphericalToCartesian(r, phi, theta) {
-  const phiRad = THREE.MathUtils.degToRad(phi);
-  const thetaRad = THREE.MathUtils.degToRad(theta);
-  
-  return {
-    x: r * Math.sin(phiRad) * Math.cos(thetaRad),
-    y: r * Math.cos(phiRad),
-    z: r * Math.sin(phiRad) * Math.sin(thetaRad),
-  };
-}
+// Grid utility functions - Now imported from ./modules/GridUtils.js
 
 // Socket.io connection - will be initialized when game starts
 let socket = null;
@@ -3272,26 +3255,7 @@ function updatePieceMesh(piece) {
   }
 }
 
-function getWorldPosition(row, col) {
-  console.log('🌍 getWorldPosition called with:', {
-    row, col,
-    gridRows: gameState.gridConfig.rows,
-    gridCols: gameState.gridConfig.cols
-  });
-  
-  // Keep original piece positioning - pieces are at grid intersections/vertices
-  const { phi, theta } = gridToSpherical(
-    gameState.gridConfig.rows,
-    gameState.gridConfig.cols,
-    row,
-    col
-  );
-  
-  const position = sphericalToCartesian(globeRadius + 0.35, phi, theta); // Positioned just above grid surface
-  console.log('🌍 Calculated position:', { phi, theta, position });
-  
-  return position;
-}
+// getWorldPosition function - Now imported from ./modules/GridUtils.js
 
 function updateUI() {
   const playerCount = Object.keys(gameState.players).length;
