@@ -1105,21 +1105,21 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // Get bank info
-    const bankInfo = evolutionManager.getPlayerBankInfo(socket.id);
-    console.log(`🎯 PHASE 5 DEBUG: Bank info - points: ${bankInfo.points}`);
+    // ✅ PHASE 7: Use piece's evolution points instead of player bank
+    const piecePoints = piece.evolutionPoints || PIECE_TYPES[piece.type].points;
+    console.log(`🎯 PHASE 7 DEBUG: Piece has ${piecePoints} evolution points`);
     
     // Pause cooldowns during evolution choice
     timingManager.pauseAllCooldowns();
     
-    // ✅ PHASE 6 BUG FIX: Send evolution-choice-dialog to match Phase 5 context menu system
+    // ✅ PHASE 7: Send piece points instead of bank info
     console.log(`🎯 PHASE 5 DEBUG: Emitting evolution-choice-dialog to client`);
     socket.emit('evolution-choice-dialog', {
       pieceId: pieceId,
       piece: piece,
       reason: 'right_click', // Indicate this was requested via right-click
       availablePaths: availablePaths,
-      bankInfo: bankInfo,
+      piecePoints: piecePoints,  // Send piece's evolution points
       timeLimit: 30 // 30 seconds to make choice
     });
   });
@@ -1708,7 +1708,9 @@ function createStartingPieces(player) {
     row: kingRow,
     col: kingCol,
     kills: 0,
-    timeAlive: 0
+    timeAlive: 0,
+    moveCount: 0,  // ✅ PHASE 7: Track move count for evolution bonuses
+    evolutionPoints: PIECE_TYPES.KING.points  // ✅ PHASE 7: Track piece's individual evolution points
   };
   
   gameState.pieces[king.id] = king;
@@ -1737,7 +1739,9 @@ function createStartingPieces(player) {
       row: pawnRow,
       col: pawnCol,
       kills: 0,
-      timeAlive: 0
+      timeAlive: 0,
+      moveCount: 0,  // ✅ PHASE 7: Track move count for evolution bonuses
+      evolutionPoints: PIECE_TYPES.PAWN.points  // ✅ PHASE 7: Pawns start with 1 evolution point
     };
     
     gameState.pieces[pawn.id] = pawn;
@@ -2056,16 +2060,19 @@ function handlePieceMove(playerId, moveData) {
   piece.col = targetCol;
   gameState.grid[targetPosKey] = pieceId;
   
-  // Check for circumnavigation bonus (pawns and splitters reaching opposite pole)
-  if (piece.type === 'PAWN' || piece.type === 'SPLITTER') {
-    const circumnavigatedPlayer = checkCircumnavigation(piece);
-    if (circumnavigatedPlayer) {
-      awardCircumnavigationBonus(circumnavigatedPlayer, piece);
-    }
+  // ✅ PHASE 7: Increment move count
+  piece.moveCount = (piece.moveCount || 0) + 1;
+  console.log(`🎯 PHASE 7: ${piece.type} moved - moveCount: ${piece.moveCount}`);
+  
+  // ✅ PHASE 7: Check move-based bonuses for pawns
+  if (piece.type === 'PAWN') {
+    checkMoveBasedBonuses(piece);
   }
   
-  // Check equator bonus for pawns
-  checkEquatorBonus(piece);
+  // ✅ PHASE 7: Check position-based bonus for splitters
+  if (piece.type === 'SPLITTER') {
+    checkSplitterPositionBonus(piece);
+  }
   
   const successMsg = `Piece ${piece.symbol} moved to (${targetRow}, ${targetCol})`;
   console.log(successMsg);
@@ -2144,19 +2151,20 @@ function cleanupWeakeningEffects() {
   });
 }
 
-function checkEquatorBonus(piece) {
-  // Only apply equator bonus to pawns
+// ✅ PHASE 7: Move-based evolution point system
+function checkMoveBasedBonuses(piece) {
+  // Only apply move-based bonuses to pawns
   if (piece.type !== 'PAWN') return;
   
-  // Check if pawn is on the equator (row 10 in 0-19 grid)
-  const isOnEquator = (piece.row === 10);
+  const moveCount = piece.moveCount || 0;
   
-  // Check if this is the first time reaching the equator
-  if (isOnEquator && !piece.hasReachedEquator) {
-    piece.hasReachedEquator = true;
-    const bank = evolutionManager.addEvolutionPoints(piece.playerId, 1, 'equator_bonus');
+  // Check for equator bonus at 9 moves
+  if (moveCount === 9 && !piece.hasEquatorBonus) {
+    piece.hasEquatorBonus = true;
+    // ✅ PHASE 7: Add evolution point to the piece itself
+    piece.evolutionPoints = (piece.evolutionPoints || 1) + 1;
     
-    console.log(`${piece.symbol} reached the equator! +1 evolution point (${bank.points} total)`);
+    console.log(`🎯 PHASE 7: ${piece.symbol} crossed equator (9 moves)! Now has ${piece.evolutionPoints} evolution points`);
     
     // Broadcast equator bonus event
     io.emit('equator-bonus', {
@@ -2164,22 +2172,64 @@ function checkEquatorBonus(piece) {
       pieceType: piece.type,
       playerId: piece.playerId,
       points: 1,
-      totalPoints: bank.points,
+      piecePoints: piece.evolutionPoints,  // Send the piece's total points
+      moveCount: moveCount,
       position: { row: piece.row, col: piece.col }
     });
     
-    // Offer evolution choice dialog to human players
-    const player = gameState.players[piece.playerId];
-    console.log(`🎯 EVOLUTION DEBUG - Player:`, player);
-    console.log(`🎯 EVOLUTION DEBUG - isAI:`, player?.isAI);
-    console.log(`🎯 EVOLUTION DEBUG - bank points:`, bank.points);
+    // Broadcast game state to update floating numbers
+    broadcastGameState();
+  }
+  
+  // Check for circumnavigation bonus at 18 moves
+  if (moveCount === 18 && !piece.hasCircumnavigationBonus) {
+    piece.hasCircumnavigationBonus = true;
+    // ✅ PHASE 7: Add evolution points to the piece itself
+    piece.evolutionPoints = (piece.evolutionPoints || 1) + 8;
     
-    if (player && !player.isAI && bank.points > 0) {
-      console.log(`🎯 EVOLUTION DEBUG - Offering evolution choice to ${piece.playerId} for piece ${piece.id}`);
-      offerEvolutionChoice(piece.playerId, piece.id, 'equator_bonus');
-    } else {
-      console.log(`🎯 EVOLUTION DEBUG - Not offering evolution choice. Reason: player=${!!player}, isAI=${player?.isAI}, bankPoints=${bank.points}`);
-    }
+    console.log(`🎯 PHASE 7: ${piece.symbol} completed circumnavigation (18 moves)! Now has ${piece.evolutionPoints} evolution points`);
+    
+    // Broadcast circumnavigation bonus event
+    io.emit('circumnavigation-bonus', {
+      pieceId: piece.id,
+      pieceType: piece.type,
+      playerId: piece.playerId,
+      points: 8,
+      piecePoints: piece.evolutionPoints,  // Send the piece's total points
+      moveCount: moveCount,
+      position: { row: piece.row, col: piece.col }
+    });
+    
+    // Broadcast game state to update floating numbers
+    broadcastGameState();
+  }
+}
+
+// ✅ PHASE 7: Position-based bonus for splitters
+function checkSplitterPositionBonus(piece) {
+  // Only apply to splitters
+  if (piece.type !== 'SPLITTER') return;
+  
+  // Check if splitter is at row 0 or 19 (poles)
+  if ((piece.row === 0 || piece.row === 19) && !piece.hasCircumnavigationBonus) {
+    piece.hasCircumnavigationBonus = true;
+    // ✅ PHASE 7: Add evolution points to the piece itself
+    piece.evolutionPoints = (piece.evolutionPoints || 2) + 8;
+    
+    console.log(`🎯 PHASE 7: ${piece.symbol} reached pole! Now has ${piece.evolutionPoints} evolution points`);
+    
+    // Broadcast pole bonus event
+    io.emit('pole-bonus', {
+      pieceId: piece.id,
+      pieceType: piece.type,
+      playerId: piece.playerId,
+      points: 8,
+      piecePoints: piece.evolutionPoints,  // Send the piece's total points
+      position: { row: piece.row, col: piece.col }
+    });
+    
+    // Broadcast game state to update floating numbers
+    broadcastGameState();
   }
 }
 
@@ -2370,6 +2420,8 @@ function handlePieceSplit(playerId, splitData) {
     col: targetCol,
     kills: 0,
     timeAlive: 0,
+    moveCount: 0, // ✅ PHASE 7: New split pieces start with 0 moves
+    evolutionPoints: piece.evolutionPoints || PIECE_TYPES.SPLITTER.points, // ✅ PHASE 7: Inherit parent's evolution points
     isSplitCopy: true, // Mark this as a split copy
     // ✅ PHASE 4: Copy color information from parent piece to ensure split pieces match team colors
     inheritedColor: player.selectedColor || player.color, // Inherit player's color
@@ -2685,20 +2737,20 @@ function completeBattleResolution(winner, loser) {
   // Increment winner's kill count
   winner.kills = (winner.kills || 0) + 1;
   
-  // Award evolution points for attacking splitters
-  if (loser.type === 'SPLITTER') {
-    const bank = evolutionManager.addEvolutionPoints(winner.playerId, 1, 'defeated_splitter');
-    console.log(`${winner.symbol} gains evolution point for defeating Splitter! (${bank.points} total)`);
-    
-    // Broadcast evolution point gain
-    io.emit('evolution-point-gained', {
-      winnerId: winner.id,
-      playerId: winner.playerId,
-      points: 1,
-      totalPoints: bank.points,
-      reason: 'defeated_splitter'
-    });
-  }
+  // ✅ PHASE 7: Award evolution point to the winning piece
+  winner.evolutionPoints = (winner.evolutionPoints || PIECE_TYPES[winner.type].points) + 1;
+  console.log(`🎯 PHASE 7: ${winner.symbol} captured ${loser.symbol}! Now has ${winner.evolutionPoints} evolution points`);
+  
+  // Broadcast evolution point gain
+  io.emit('piece-evolution-point-gained', {
+    pieceId: winner.id,
+    pieceType: winner.type,
+    playerId: winner.playerId,
+    points: 1,
+    piecePoints: winner.evolutionPoints,  // Send the piece's total points
+    reason: 'capture',
+    position: { row: winner.row, col: winner.col }
+  });
   
   // Remove loser from game
   const loserPosKey = GridUtils.getPositionKey(loser.row, loser.col);
@@ -2987,9 +3039,9 @@ function handleEvolutionChoiceResponse(playerId, pieceId, choice) {
     const bankInfo = evolutionManager.getPlayerBankInfo(playerId);
     
     // Check if player has enough points
-    if (bankInfo.points >= evolutionPath.cost) {
-      // Deduct evolution points
-      evolutionManager.addEvolutionPoints(playerId, -evolutionPath.cost, `evolution_${evolutionPath.id}`);
+    if (piece.evolutionPoints >= evolutionPath.cost) {
+      // ✅ PHASE 7: Use piece's own evolution points instead of player bank
+      // No deduction needed - piece keeps its points through evolution
       
       // Perform evolution
       const oldType = piece.type;
@@ -3001,6 +3053,8 @@ function handleEvolutionChoiceResponse(playerId, pieceId, choice) {
         piece.type = newType;
         piece.symbol = newPieceData.symbol;
         piece.value = newPieceData.points;
+        // ✅ PHASE 7: Preserve the piece's accumulated evolution points
+        // evolutionPoints stays the same - only the type changes
         
         // Update game state
         gameState.pieces[pieceId] = piece;
@@ -3512,9 +3566,19 @@ function broadcastGameState() {
     };
   });
   
+  // ✅ PHASE 7: Ensure pieces include evolutionPoints field
+  const piecesWithEvolutionPoints = {};
+  Object.keys(gameState.pieces).forEach(pieceId => {
+    const piece = gameState.pieces[pieceId];
+    piecesWithEvolutionPoints[pieceId] = {
+      ...piece,
+      evolutionPoints: piece.evolutionPoints || PIECE_TYPES[piece.type].points
+    };
+  });
+  
   const clientGameState = {
     players: playersWithEvolutionPoints,
-    pieces: gameState.pieces,
+    pieces: piecesWithEvolutionPoints,
     gridConfig: {
       rows: GAME_CONFIG.GRID_ROWS,
       cols: GAME_CONFIG.GRID_COLS

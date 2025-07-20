@@ -400,6 +400,13 @@ function setupSocketListeners() {
     } else {
       // Delta update - only update changed elements
       console.log('🔄 Processing delta update');
+      
+      // ✅ PHASE 7: Debug piece evolution points
+      const pawnPiece = Object.values(newGameState.pieces).find(p => p.type === 'PAWN' && p.row === 9);
+      if (pawnPiece) {
+        console.log(`🎯 PHASE 7: Pawn at row 9 data:`, pawnPiece);
+      }
+      
       gameState = newGameState;
       await updateVisualsDelta(delta);
       
@@ -687,11 +694,11 @@ function setupSocketListeners() {
 
   socket.on('evolution-choice-dialog', (data) => {
     console.log('🎯 Evolution choice dialog event received:', data);
-    console.log('🎯 PHASE 5 DEBUG: Available paths:', data.availablePaths);
-    console.log('🎯 PHASE 5 DEBUG: Bank info:', data.bankInfo);
+    console.log('🎯 PHASE 7 DEBUG: Available paths:', data.availablePaths);
+    console.log('🎯 PHASE 7 DEBUG: Piece points:', data.piecePoints);
     console.log('🎯 PHASE 5 DEBUG: lastRightClickEvent:', lastRightClickEvent);
     
-    const { pieceId, piece, reason, availablePaths, bankInfo, timeLimit } = data;
+    const { pieceId, piece, reason, availablePaths, piecePoints, timeLimit } = data;
     // ✅ PHASE 5: Use context menu instead of popup dialog
     showEvolutionContextMenu(data, lastRightClickEvent);
   });
@@ -727,6 +734,79 @@ function setupSocketListeners() {
       if (document.getElementById('evolution-ui').style.display === 'block') {
         refreshEvolutionBank();
       }
+    }
+  });
+  
+  // ✅ PHASE 7: Handle equator bonus event
+  socket.on('equator-bonus', (data) => {
+    console.log('🎯 PHASE 7: Equator bonus event:', data);
+    
+    // Update the piece's evolution points
+    if (gameState.pieces && gameState.pieces[data.pieceId]) {
+      gameState.pieces[data.pieceId].evolutionPoints = data.piecePoints;
+      console.log(`🎯 PHASE 7: Updated piece ${data.pieceId} to ${data.piecePoints} evolution points`);
+    }
+    
+    updateAllEvolutionPointLabels();
+    
+    if (data.playerId === socket.id) {
+      showNotification('Equator Crossed!', 
+        `+1 evolution point (${data.moveCount} moves)`, 
+        'success');
+    }
+  });
+  
+  // ✅ PHASE 7: Handle circumnavigation bonus event
+  socket.on('circumnavigation-bonus', (data) => {
+    console.log('🎯 PHASE 7: Circumnavigation bonus event:', data);
+    
+    // Update the piece's evolution points
+    if (gameState.pieces && gameState.pieces[data.pieceId]) {
+      gameState.pieces[data.pieceId].evolutionPoints = data.piecePoints;
+    }
+    
+    updateAllEvolutionPointLabels();
+    
+    if (data.playerId === socket.id) {
+      showNotification('Circumnavigation Complete!', 
+        `+8 evolution points (${data.moveCount} moves)`, 
+        'success');
+    }
+  });
+  
+  // ✅ PHASE 7: Handle pole bonus event for splitters
+  socket.on('pole-bonus', (data) => {
+    console.log('🎯 PHASE 7: Pole bonus event:', data);
+    
+    // Update the piece's evolution points
+    if (gameState.pieces && gameState.pieces[data.pieceId]) {
+      gameState.pieces[data.pieceId].evolutionPoints = data.piecePoints;
+    }
+    
+    updateAllEvolutionPointLabels();
+    
+    if (data.playerId === socket.id) {
+      showNotification('Pole Reached!', 
+        `Splitter gained +8 evolution points`, 
+        'success');
+    }
+  });
+  
+  // ✅ PHASE 7: Handle piece capturing another piece
+  socket.on('piece-evolution-point-gained', (data) => {
+    console.log('🎯 PHASE 7: Piece gained evolution point from capture:', data);
+    
+    // Update the piece's evolution points
+    if (gameState.pieces && gameState.pieces[data.pieceId]) {
+      gameState.pieces[data.pieceId].evolutionPoints = data.piecePoints;
+    }
+    
+    updateAllEvolutionPointLabels();
+    
+    if (data.playerId === socket.id) {
+      showNotification('Capture Bonus!', 
+        `+1 evolution point from capture`, 
+        'success');
     }
   });
 
@@ -1687,6 +1767,35 @@ function createGridOverlay() {
         }
       }
       
+      // ✅ PHASE 7: Add yellow equator line between rows 9 and 10
+      if (row === 9) {
+        const equatorGeometry = new THREE.SphereGeometry(
+          globeRadius + 0.08, // slightly larger radius for visibility
+          64, // width segments for smooth line
+          2, // thin height
+          0, // full rotation
+          Math.PI * 2, // full circle
+          ringPhi + ringThickness / 2, // at edge of row 9
+          0.008 // slightly thicker than normal borders
+        );
+        
+        const equatorMaterial = new THREE.MeshBasicMaterial({
+          color: 0xFFFF00, // Bright yellow
+          transparent: true,
+          opacity: 0.8,
+          emissive: 0xFFFF00,
+          emissiveIntensity: 0.3
+        });
+        
+        const equatorLine = new THREE.Mesh(equatorGeometry, equatorMaterial);
+        equatorLine.position.set(0, 0, 0);
+        equatorLine.userData = { isEquator: true };
+        scene.add(equatorLine);
+        gridSquares.push(equatorLine);
+        
+        console.log('🎯 PHASE 7: Added yellow equator line between rows 9 and 10');
+      }
+      
       // Add horizontal ring border after each ring (except last)
       if (row < gridRows - 1) {
         const ringBorderGeometry = new THREE.SphereGeometry(
@@ -1774,20 +1883,27 @@ function initializeGLTFLoader() {
 const hasGLTFLoader = initializeGLTFLoader();
 
 // Model file mappings - using finalized GLB files from Final pieces folder
-const MODEL_PATHS = {
-  'KING': './chess piece models/Final pieces/KING.glb',
-  'QUEEN': './chess piece models/Final pieces/QUEEN.glb',
-  'ROOK': './chess piece models/Final pieces/ROOK.glb',
-  'KNIGHT': './chess piece models/Final pieces/KNIGHT.glb',
-  'BISHOP': './chess piece models/Final pieces/BISHOP.glb',
-  'PAWN': './chess piece models/Final pieces/PAWN.glb',
-  'SPLITTER': './chess piece models/Final pieces/SPLITTER.glb',
-  'JUMPER': './chess piece models/Final pieces/JUMPER.glb',
-  'SUPER_JUMPER': './chess piece models/Final pieces/SUPER_JUMPER.glb',
-  'HYPER_JUMPER': './chess piece models/Final pieces/HYPER_JUMPER.glb',
-  'MISTRESS_JUMPER': './chess piece models/Final pieces/MISTRESS_JUMPER.glb',
-  'HYBRID_QUEEN': './chess piece models/Final pieces/HYBRID_QUEEN.glb'
-};
+  const MODEL_PATHS = {
+    'KING': './chess piece models/Final pieces/KING.glb',
+    'QUEEN': './chess piece models/Final pieces/QUEEN.glb',
+    'ROOK': './chess piece models/Final pieces/ROOK.glb',
+    'KNIGHT': './chess piece models/Final pieces/KNIGHT.glb',
+    'BISHOP': './chess piece models/Final pieces/BISHOP.glb',
+    'PAWN': './chess piece models/Final pieces/PAWN.glb',
+    'SPLITTER': './chess piece models/Final pieces/SPLITTER.glb',
+    // ✅ PHASE 6: Updated with new piece names
+    'VAULTBOUND': './chess piece models/Final pieces/VAULTBOUND.glb',
+    'VAULTSEER': './chess piece models/Final pieces/VAULTSEER.glb',
+    'VAULTARCHER': './chess piece models/Final pieces/VAULTARCHER.glb',
+    'VAULTMISTRESS': './chess piece models/Final pieces/VAULTMISTRESS.glb',
+    'COVENANT_QUEEN': './chess piece models/Final pieces/COVENANT_QUEEN.glb',
+    // Keep old names for backward compatibility
+    'JUMPER': './chess piece models/Final pieces/VAULTBOUND.glb',
+    'SUPER_JUMPER': './chess piece models/Final pieces/VAULTSEER.glb',
+    'HYPER_JUMPER': './chess piece models/Final pieces/VAULTARCHER.glb',
+    'MISTRESS_JUMPER': './chess piece models/Final pieces/VAULTMISTRESS.glb',
+    'HYBRID_QUEEN': './chess piece models/Final pieces/COVENANT_QUEEN.glb'
+  };
 
 // Load a 3D model with caching
 async function loadModel(pieceType) {
@@ -3320,34 +3436,35 @@ function createCachedTextLabel(symbol) {
 
 // Get evolution points for a piece - PHASE 1C: Display piece BASE VALUES, not player evolution bank
 function getEvolutionPointsForPiece(piece) {
-  // Debug logging to see what data we have
-  console.log('🔍 Getting evolution points for piece:', piece.id, 'type:', piece.type);
-  console.log('🔍 Piece player ID:', piece.playerId);
-  
   // King pieces don't have evolution points - hide their labels
   if (piece.type === 'KING') {
-    console.log('🔍 King pieces do not have evolution points');
     return 0;
   }
   
-  // PHASE 1C: Always display piece BASE VALUES (intrinsic to piece type)
-  // These are the inherent point values of pieces, NOT the player's evolution bank
+  // ✅ PHASE 7: Use the piece's own accumulated evolution points
+  // If not set, fall back to the piece type's base value
+  if (piece.evolutionPoints !== undefined) {
+    console.log(`🎯 PHASE 7: ${piece.type} has ${piece.evolutionPoints} evolution points`);
+    return piece.evolutionPoints;
+  }
+  
+  // Fallback to piece type base values if evolutionPoints not set
   const pieceBaseValues = {
-    'PAWN': 1,        // ✅ Pawns always show 1 point (their base value)
+    'PAWN': 1,
     'ROOK': 5,
     'KNIGHT': 3,
     'BISHOP': 3,
     'QUEEN': 9,
-    'JUMPER': 3,
-    'SUPER_JUMPER': 5,
-    'HYPER_JUMPER': 7,
-    'SPLITTER': 2,    // ✅ Splitters always show 2 points (their base value)
-    'HYBRID_QUEEN': 12,
-    'MISTRESS_JUMPER': 8
+    'VAULTBOUND': 4,      // Jumper
+    'VAULTSEER': 7,       // Super Jumper  
+    'VAULTARCHER': 9,     // Hyper Jumper
+    'SPLITTER': 2,
+    'VAULTMISTRESS': 10,  // Mistress Jumper
+    'COVENANT_QUEEN': 12  // Hybrid Queen
   };
   
   const baseValue = pieceBaseValues[piece.type] || 1;
-  console.log('🔍 Using piece base value for', piece.type, ':', baseValue);
+  console.log(`🎯 PHASE 7: ${piece.type} using base value: ${baseValue} (no evolutionPoints field)`);
   return baseValue;
 }
 
@@ -7086,7 +7203,7 @@ function showEvolutionContextMenu(data, mouseEvent) {
     return;
   }
   
-  const { pieceId, piece, reason, availablePaths, bankInfo, timeLimit } = data;
+  const { pieceId, piece, reason, availablePaths, piecePoints, timeLimit } = data;
   
   // Create context menu at mouse position
   const contextMenu = document.createElement('div');
@@ -7164,37 +7281,51 @@ function showEvolutionContextMenu(data, mouseEvent) {
     <div class="context-menu-header">
       ${piece.symbol} ${piece.type} Evolution
       <div style="font-size: 10px; font-weight: normal; margin-top: 2px;">
-        Points: ${bankInfo.points} | Time: <span id="context-timer">${timeLimit}s</span>
+        Points: ${piecePoints} | Time: <span id="context-timer">${timeLimit}s</span>
       </div>
     </div>
   `;
   
-  // Add evolution paths
+  // ✅ PHASE 6: Group evolution paths by cost
+  const pathsByPointCost = {};
   availablePaths.forEach(path => {
-    const canAfford = bankInfo.points >= path.cost;
-    const itemClass = canAfford ? 'context-menu-item' : 'context-menu-item disabled';
-    
-    menuHTML += `
-      <div class="${itemClass}" data-action="evolve" data-piece-id="${pieceId}" data-path='${JSON.stringify(path)}'>
-        <div>
-          <div>🔄 → ${path.targetType}</div>
-          <div style="font-size: 11px; color: #ccc;">${path.description}</div>
-        </div>
-        <div class="context-menu-cost">${path.cost}pts</div>
-      </div>
-    `;
+    if (!pathsByPointCost[path.cost]) {
+      pathsByPointCost[path.cost] = [];
+    }
+    pathsByPointCost[path.cost].push(path);
   });
   
-  // Add bank option
-  menuHTML += `
-    <div class="context-menu-item" data-action="bank" data-piece-id="${pieceId}">
-      <div>
-        <div>💰 Bank Points</div>
-        <div style="font-size: 11px; color: #ccc;">Save for later</div>
-      </div>
-      <div class="context-menu-cost">+${bankInfo.points}</div>
-    </div>
-  `;
+  // Sort point costs
+  const sortedCosts = Object.keys(pathsByPointCost).map(Number).sort((a, b) => a - b);
+  
+  // Add evolution paths grouped by cost
+  sortedCosts.forEach(cost => {
+    // Add section header for each point value
+    if (pathsByPointCost[cost].length > 0) {
+      menuHTML += `
+        <div style="padding: 5px 15px; font-size: 11px; color: #888; background: #1a1a1a; font-weight: bold;">
+          ${cost} POINT${cost > 1 ? 'S' : ''}
+        </div>
+      `;
+      
+      pathsByPointCost[cost].forEach(path => {
+        const canAfford = piecePoints >= path.cost;
+        const itemClass = canAfford ? 'context-menu-item' : 'context-menu-item disabled';
+        
+        menuHTML += `
+          <div class="${itemClass}" data-action="evolve" data-piece-id="${pieceId}" data-path='${JSON.stringify(path)}'>
+            <div>
+              <div>${path.icon} ${path.name}</div>
+              <div style="font-size: 11px; color: #ccc;">${path.description}</div>
+            </div>
+            <div class="context-menu-cost">${path.cost}pts</div>
+          </div>
+        `;
+      });
+    }
+  });
+  
+  // ✅ PHASE 6: Removed bank option - point-based system doesn't need banking
   
   contextMenu.innerHTML = menuHTML;
   document.body.appendChild(contextMenu);
@@ -7224,11 +7355,8 @@ function showEvolutionContextMenu(data, mouseEvent) {
     
     if (action === 'evolve') {
       const path = JSON.parse(item.getAttribute('data-path'));
-      console.log('🎯 PHASE 5: Context menu evolution chosen:', path);
+      console.log('🎯 PHASE 6: Context menu evolution chosen:', path);
       chooseEvolution(pieceId, path);
-    } else if (action === 'bank') {
-      console.log('🎯 PHASE 5: Context menu bank chosen');
-      bankEvolutionPoints(pieceId);
     }
     
     hideEvolutionContextMenu();
@@ -7246,8 +7374,8 @@ function showEvolutionContextMenu(data, mouseEvent) {
     
     if (timeLeft <= 0) {
       clearInterval(countdown);
-      console.log('🎯 PHASE 5: Context menu timeout, auto-banking');
-      bankEvolutionPoints(pieceId);
+      console.log('🎯 PHASE 6: Context menu timeout, closing menu');
+      // ✅ PHASE 6: Just close the menu on timeout - no auto-banking
       hideEvolutionContextMenu();
     }
   }, 1000);

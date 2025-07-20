@@ -12,176 +12,168 @@ class EvolutionManager {
 
     // Initialize evolution paths for all piece types
     initializeEvolutionPaths() {
+        // ✅ PHASE 6: Point-based evolution system
+        // Players can evolve to ANY piece that costs <= their evolution points
+        console.log('🎯 PHASE 6: Initializing point-based evolution system');
+        
         return {
             'PAWN': [
-                {
-                    id: 'pawn_to_knight',
-                    name: 'Knight Evolution',
-                    targetType: 'KNIGHT',
-                    cost: 3,
-                    timeRequirement: 0, // No time requirement
-                    description: 'Evolve to Knight - L-shaped movement',
-                    icon: '♞',
-                    rarity: 'common'
-                },
-                {
-                    id: 'pawn_to_rook',
-                    name: 'Rook Evolution',
-                    targetType: 'ROOK',
-                    cost: 4,
-                    timeRequirement: 60, // 60 seconds alive
-                    description: 'Evolve to Rook - Straight line movement',
-                    icon: '♜',
-                    rarity: 'common'
-                },
-                {
-                    id: 'pawn_to_bishop',
-                    name: 'Bishop Evolution',
-                    targetType: 'BISHOP',
-                    cost: 4,
-                    timeRequirement: 60,
-                    description: 'Evolve to Bishop - Diagonal movement',
-                    icon: '♝',
-                    rarity: 'common'
-                },
-                {
-                    id: 'pawn_to_queen',
-                    name: 'Queen Evolution',
-                    targetType: 'QUEEN',
-                    cost: 8,
-                    timeRequirement: 300, // 5 minutes alive
-                    description: 'Evolve to Queen - Ultimate power',
-                    icon: '♛',
-                    rarity: 'epic'
-                },
+                // 2 Points
                 {
                     id: 'pawn_to_splitter',
-                    name: 'Splitter Evolution',
+                    name: 'Splitter',
                     targetType: 'SPLITTER',
-                    cost: 5,
-                    timeRequirement: 120, // 2 minutes alive
-                    description: 'Evolve to Splitter - Reproduction ability',
+                    cost: 2,
+                    points: 2,
+                    description: 'Can split into two pieces',
                     icon: '⚡',
-                    rarity: 'uncommon'
-                }
-            ],
-            'KNIGHT': [
-                {
-                    id: 'knight_to_super_knight',
-                    name: 'Super Knight',
-                    targetType: 'SUPER_KNIGHT',
-                    cost: 6,
-                    timeRequirement: 180,
-                    description: 'Enhanced Knight with extended range',
-                    icon: '♞⚡',
-                    rarity: 'rare'
+                    rarity: 'common'
                 },
+                // 3 Points
                 {
-                    id: 'knight_to_jumper',
-                    name: 'Jumper Evolution',
-                    targetType: 'JUMPER',
-                    cost: 7,
-                    timeRequirement: 240,
-                    description: 'Evolve to Jumper - Capture by jumping',
-                    icon: '🦘',
-                    rarity: 'rare'
-                }
-            ],
-            'ROOK': [
-                {
-                    id: 'rook_to_super_rook',
-                    name: 'Super Rook',
-                    targetType: 'SUPER_ROOK',
-                    cost: 8,
-                    timeRequirement: 300,
-                    description: 'Enhanced Rook with unlimited range',
-                    icon: '♜⚡',
-                    rarity: 'rare'
-                }
-            ],
-            'BISHOP': [
-                {
-                    id: 'bishop_to_super_bishop',
-                    name: 'Super Bishop',
-                    targetType: 'SUPER_BISHOP',
-                    cost: 8,
-                    timeRequirement: 300,
-                    description: 'Enhanced Bishop with unlimited range',
-                    icon: '♝⚡',
-                    rarity: 'rare'
-                }
-            ],
-            'QUEEN': [
-                {
-                    id: 'queen_to_hybrid_queen',
-                    name: 'Hybrid Queen',
-                    targetType: 'HYBRID_QUEEN',
-                    cost: 12,
-                    timeRequirement: 600, // 10 minutes alive
-                    description: 'Ultimate evolution - Queen + Jumper abilities',
-                    icon: '♛🦘',
-                    rarity: 'legendary'
-                }
-            ],
-            'SPLITTER': [
-                {
-                    id: 'splitter_to_bishop',
-                    name: 'Bishop Evolution',
+                    id: 'pawn_to_bishop',
+                    name: 'Bishop',
                     targetType: 'BISHOP',
                     cost: 3,
-                    timeRequirement: 0,
-                    description: 'Evolve to Bishop - Diagonal movement',
+                    points: 3,
+                    description: 'Diagonal movement',
                     icon: '♗',
                     rarity: 'common'
                 },
                 {
-                    id: 'splitter_to_knight',
-                    name: 'Knight Evolution',
+                    id: 'pawn_to_knight',
+                    name: 'Knight',
                     targetType: 'KNIGHT',
                     cost: 3,
-                    timeRequirement: 0,
-                    description: 'Evolve to Knight - L-shaped movement',
+                    points: 3,
+                    description: 'L-shaped movement',
                     icon: '♘',
                     rarity: 'common'
-                }
-            ],
-            'JUMPER': [
+                },
+                // 4 Points
                 {
-                    id: 'jumper_to_super_jumper',
-                    name: 'Super Jumper',
-                    targetType: 'SUPER_JUMPER',
-                    cost: 10,
-                    timeRequirement: 300,
-                    description: 'Enhanced Jumper - 2x2 capture area',
-                    icon: '🦘⚡',
+                    id: 'pawn_to_vaultbound',
+                    name: 'Vaultbound',
+                    targetType: 'VAULTBOUND',
+                    cost: 4,
+                    points: 4,
+                    description: 'Enhanced jumping ability',
+                    icon: '🦘',
+                    rarity: 'uncommon'
+                },
+                // 5 Points
+                {
+                    id: 'pawn_to_rook',
+                    name: 'Rook',
+                    targetType: 'ROOK',
+                    cost: 5,
+                    points: 5,
+                    description: 'Straight line movement',
+                    icon: '♜',
+                    rarity: 'common'
+                },
+                // 7 Points
+                {
+                    id: 'pawn_to_vaultseer',
+                    name: 'Vaultseer',
+                    targetType: 'VAULTSEER',
+                    cost: 7,
+                    points: 7,
+                    description: 'Advanced jumping ability',
+                    icon: '🦘✨',
+                    rarity: 'rare'
+                },
+                // 9 Points
+                {
+                    id: 'pawn_to_queen',
+                    name: 'Queen',
+                    targetType: 'QUEEN',
+                    cost: 9,
+                    points: 9,
+                    description: 'Ultimate power - all directions',
+                    icon: '♛',
                     rarity: 'epic'
-                }
-            ],
-            'SUPER_JUMPER': [
+                },
                 {
-                    id: 'super_jumper_to_hyper_jumper',
-                    name: 'Hyper Jumper',
-                    targetType: 'HYPER_JUMPER',
-                    cost: 15,
-                    timeRequirement: 600,
-                    description: 'Ultimate Jumper - 2x3 capture area',
-                    icon: '🦘💫',
-                    rarity: 'legendary'
-                }
-            ],
-            'HYPER_JUMPER': [
+                    id: 'pawn_to_vaultarcher',
+                    name: 'Vaultarcher',
+                    targetType: 'VAULTARCHER',
+                    cost: 9,
+                    points: 9,
+                    description: 'Master jumping ability',
+                    icon: '🦘🏹',
+                    rarity: 'epic'
+                },
+                // 10 Points
                 {
-                    id: 'hyper_jumper_to_mistress_jumper',
-                    name: 'Mistress Jumper',
-                    targetType: 'MISTRESS_JUMPER',
-                    cost: 20,
-                    timeRequirement: 900, // 15 minutes alive
-                    description: 'Master Jumper - 2x3 + landing capture',
+                    id: 'pawn_to_vaultmistress',
+                    name: 'Vaultmistress',
+                    targetType: 'VAULTMISTRESS',
+                    cost: 10,
+                    points: 10,
+                    description: 'Supreme jumping mastery',
                     icon: '🦘👑',
                     rarity: 'legendary'
+                },
+                // 12 Points
+                {
+                    id: 'pawn_to_covenant_queen',
+                    name: 'Covenant Queen',
+                    targetType: 'COVENANT_QUEEN',
+                    cost: 12,
+                    points: 12,
+                    description: 'Ultimate evolution - Queen + Jump',
+                    icon: '♛🦘',
+                    rarity: 'legendary'
                 }
-            ]
+            ],
+            // For ALL other pieces, they can evolve to any piece of higher value
+            'SPLITTER': this.getEvolutionOptionsForPoints(2),
+            'BISHOP': this.getEvolutionOptionsForPoints(3),
+            'KNIGHT': this.getEvolutionOptionsForPoints(3),
+            'VAULTBOUND': this.getEvolutionOptionsForPoints(4),
+            'ROOK': this.getEvolutionOptionsForPoints(5),
+            'VAULTSEER': this.getEvolutionOptionsForPoints(7),
+            'QUEEN': this.getEvolutionOptionsForPoints(9),
+            'VAULTARCHER': this.getEvolutionOptionsForPoints(9),
+            'VAULTMISTRESS': this.getEvolutionOptionsForPoints(10),
+            'COVENANT_QUEEN': [] // Cannot evolve further
         };
+    }
+
+    // Helper method to get evolution options based on current piece value
+    getEvolutionOptionsForPoints(currentValue) {
+        const options = [];
+        const allPieces = [
+            { type: 'SPLITTER', name: 'Splitter', value: 2, icon: '⚡', desc: 'Can split into two pieces' },
+            { type: 'BISHOP', name: 'Bishop', value: 3, icon: '♗', desc: 'Diagonal movement' },
+            { type: 'KNIGHT', name: 'Knight', value: 3, icon: '♘', desc: 'L-shaped movement' },
+            { type: 'VAULTBOUND', name: 'Vaultbound', value: 4, icon: '🦘', desc: 'Enhanced jumping ability' },
+            { type: 'ROOK', name: 'Rook', value: 5, icon: '♜', desc: 'Straight line movement' },
+            { type: 'VAULTSEER', name: 'Vaultseer', value: 7, icon: '🦘✨', desc: 'Advanced jumping ability' },
+            { type: 'QUEEN', name: 'Queen', value: 9, icon: '♛', desc: 'Ultimate power - all directions' },
+            { type: 'VAULTARCHER', name: 'Vaultarcher', value: 9, icon: '🦘🏹', desc: 'Master jumping ability' },
+            { type: 'VAULTMISTRESS', name: 'Vaultmistress', value: 10, icon: '🦘👑', desc: 'Supreme jumping mastery' },
+            { type: 'COVENANT_QUEEN', name: 'Covenant Queen', value: 12, icon: '♛🦘', desc: 'Ultimate evolution' }
+        ];
+
+        // Add all pieces that cost more than current value
+        for (const piece of allPieces) {
+            if (piece.value > currentValue) {
+                options.push({
+                    id: `evolve_to_${piece.type.toLowerCase()}`,
+                    name: piece.name,
+                    targetType: piece.type,
+                    cost: piece.value,
+                    points: piece.value,
+                    description: piece.desc,
+                    icon: piece.icon,
+                    rarity: piece.value >= 10 ? 'legendary' : piece.value >= 7 ? 'epic' : piece.value >= 4 ? 'rare' : 'common'
+                });
+            }
+        }
+
+        return options.sort((a, b) => a.cost - b.cost);
     }
 
     // Initialize evolution requirements
@@ -256,40 +248,28 @@ class EvolutionManager {
         return bank;
     }
 
-            // Get available evolution paths for a piece
-        getAvailableEvolutionPaths(pieceId, piece, playerId) {
-            console.log(`🎯 PHASE 5 DEBUG: getAvailableEvolutionPaths called for piece ${pieceId}, type: ${piece.type}`);
-            
-            const bank = this.initializePlayerBank(playerId);
-            console.log(`🎯 PHASE 5 DEBUG: Player bank points: ${bank.points}`);
-            
-            const paths = this.evolutionPaths[piece.type] || [];
-            console.log(`🎯 PHASE 5 DEBUG: Evolution paths for ${piece.type}:`, paths.length, paths.map(p => p.targetType));
-            
-            const pieceAliveTime = this.getPieceAliveTime(pieceId);
-            console.log(`🎯 PHASE 5 DEBUG: Piece alive time: ${pieceAliveTime}s`);
-            
-            const pieceStats = this.pieceTimeTracking.get(pieceId)?.stats || {};
-            console.log(`🎯 PHASE 5 DEBUG: Piece stats:`, pieceStats);
-            
-            // ✅ PHASE 5 FIX: Return ALL paths with affordability/requirement info instead of filtering
-            return paths.map(path => {
-            const canAfford = bank.points >= path.cost;
-            const meetsTimeRequirement = pieceAliveTime >= path.timeRequirement;
-            const meetsSpecialRequirements = this.checkEvolutionRequirements(path.targetType, pieceStats, bank, pieceAliveTime);
+                // Get available evolution paths for a piece
+    getAvailableEvolutionPaths(pieceId, piece, playerId) {
+        console.log(`🎯 PHASE 7: getAvailableEvolutionPaths called for piece ${pieceId}, type: ${piece.type}`);
+        
+        // ✅ PHASE 7: Use piece's own evolution points instead of player bank
+        const piecePoints = piece.evolutionPoints || require('../server/pieceTypes').PIECE_TYPES[piece.type].points;
+        console.log(`🎯 PHASE 7: Piece ${piece.type} has ${piecePoints} evolution points`);
+        
+        const paths = this.evolutionPaths[piece.type] || [];
+        console.log(`🎯 PHASE 7: Evolution paths for ${piece.type}:`, paths.length, paths.map(p => p.targetType));
+        
+        // ✅ PHASE 7: Point-based system - piece needs enough evolution points
+        return paths.map(path => {
+            const canAfford = piecePoints >= path.cost;
             
             return {
                 ...path,
-                currentAliveTime: pieceAliveTime,
-                requiredAliveTime: path.timeRequirement,
                 canAfford: canAfford,
-                meetsTimeRequirement: meetsTimeRequirement,
-                meetsRequirements: meetsTimeRequirement && meetsSpecialRequirements,
+                meetsRequirements: canAfford, // Only requirement is having enough points
                 // Include failure reasons for UI display
                 failureReasons: [
-                    !canAfford && `Need ${path.cost - bank.points} more points`,
-                    !meetsTimeRequirement && `Need ${Math.ceil(path.timeRequirement - pieceAliveTime)} more seconds alive`,
-                    !meetsSpecialRequirements && 'Special requirements not met'
+                    !canAfford && `Need ${path.cost - piecePoints} more points`
                 ].filter(Boolean)
             };
         });
