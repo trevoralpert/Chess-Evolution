@@ -577,6 +577,21 @@
     </div>
   </div>
 
+  <!-- Help Buttons (below timer) -->
+  <div id="help-buttons" class="absolute right-4 z-50" style="display: none; top: 380px;">
+    <div class="card bg-base-100/90 shadow-xl compact w-48">
+      <div class="card-body p-3 space-y-2">
+        <h4 class="text-xs text-base-content/70 mb-1">Help & Info</h4>
+        <button id="evolution-tree-btn" class="btn btn-ghost btn-xs w-full justify-start">
+          <i class="fas fa-tree mr-2"></i>Evolution Tree
+        </button>
+        <button id="piece-details-btn" class="btn btn-ghost btn-xs w-full justify-start">
+          <i class="fas fa-chess mr-2"></i>Piece Details
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Chat UI (hidden until game starts) -->
   <div id="chat-ui" class="absolute bottom-4 left-4 z-50 w-72" style="display: none;">
     <div class="card bg-base-100 shadow-xl">
@@ -628,6 +643,49 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   
+  <!-- Evolution Tree Modal -->
+  <div id="evolution-tree-modal" class="fixed inset-0 z-[100] hidden">
+    <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" onclick="closeEvolutionTree()"></div>
+    <div class="relative z-10 flex items-center justify-center min-h-screen p-4">
+      <div class="bg-base-100 rounded-xl max-w-6xl w-full max-h-[90vh] overflow-auto shadow-2xl">
+        <div class="sticky top-0 bg-base-100 border-b border-base-300 p-4 flex justify-between items-center">
+          <h2 class="text-2xl font-bold flex items-center gap-2">
+            <i class="fas fa-tree"></i>
+            Evolution Tree
+          </h2>
+          <button onclick="closeEvolutionTree()" class="btn btn-circle btn-ghost">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+        <div class="p-4 text-center">
+          <img id="evolution-tree-img" src="/images/evolution-tree.png" alt="Evolution Tree" class="mx-auto max-w-full" 
+               onerror="this.onerror=null; this.src='/images/evochess-splash.png'; this.parentElement.innerHTML='<p class=\'text-error\'>Evolution Tree image not found. Please add evolution-tree.png to the images folder.</p>';">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Piece Details Modal -->
+  <div id="piece-details-modal" class="fixed inset-0 z-[100] hidden">
+    <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" onclick="closePieceDetails()"></div>
+    <div class="relative z-10 flex items-center justify-center min-h-screen p-4">
+      <div class="bg-base-100 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-auto shadow-2xl">
+        <div class="sticky top-0 bg-base-100 border-b border-base-300 p-4 flex justify-between items-center">
+          <h2 class="text-2xl font-bold flex items-center gap-2">
+            <i class="fas fa-chess"></i>
+            Piece Details
+          </h2>
+          <button onclick="closePieceDetails()" class="btn btn-circle btn-ghost">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+        <div class="p-6 prose prose-sm max-w-none" id="piece-details-content">
+          <!-- Content will be populated by JavaScript -->
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Initialize GLTFLoader when scripts are loaded -->
   <script>
     window.addEventListener('load', function() {
