@@ -2179,6 +2179,12 @@ function checkMoveBasedBonuses(piece) {
     
     // Broadcast game state to update floating numbers
     broadcastGameState();
+    
+    // Offer evolution choice to human players
+    const pieceOwner = gameState.players[piece.playerId];
+    if (pieceOwner && !pieceOwner.isAI) {
+      offerEvolution(piece.playerId, piece.id, 'equator_bonus');
+    }
   }
   
   // Check for circumnavigation bonus at 18 moves
@@ -2202,6 +2208,12 @@ function checkMoveBasedBonuses(piece) {
     
     // Broadcast game state to update floating numbers
     broadcastGameState();
+    
+    // Offer evolution choice to human players
+    const pieceOwner = gameState.players[piece.playerId];
+    if (pieceOwner && !pieceOwner.isAI) {
+      offerEvolution(piece.playerId, piece.id, 'circumnavigation_bonus');
+    }
   }
 }
 

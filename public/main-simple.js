@@ -768,7 +768,7 @@ function setupSocketListeners() {
     updateAllEvolutionPointLabels();
     
     if (data.playerId === socket.id) {
-      showNotification('Circumnavigation Complete!', 
+      showNotification('Pole Conquered!', 
         `+8 evolution points (${data.moveCount} moves)`, 
         'success');
     }
