@@ -1,0 +1,153 @@
+🚀 EvoChess Migration Roadmap - Demo Day (January 20, 2025)
+
+**Timeline**: 12:15 PM → 5:00 PM Demo (4 hours 45 minutes available)
+**Target Environment**: DEPLOYED VERSION (more stable for demo)
+**Goal**: Full migration from old piece names to new piece names + successful demo
+
+===============================================================================
+ANSWERS TO KEY QUESTIONS:
+===============================================================================
+
+1. **Backend Cleanup**: ✅ Agreed - Full migration to new names
+   We'll replace all old piece names (JUMPER, SUPER_JUMPER, etc.) with the actual 
+   file names (VAULTBOUND, VAULTSEER, etc.) throughout the entire codebase.
+
+2. **Demo Environment Recommendation**: **Use the DEPLOYED version**
+   - Reason: The deployed logs show proper model loading with "Loading model for..." messages
+   - Reason: The embedded version has missing log messages and potential loading issues
+   - Safer bet: The deployed version appears more stable and complete
+
+3. **Migration Strategy**: Full comprehensive migration first, then investigate sync issues
+
+===============================================================================
+MIGRATION PHASES: (OPTIMIZED ORDER)
+===============================================================================
+
+### Phase 1: Pre-Migration Setup (15 minutes)
+- [ ] **1.1** Create backup of current working state
+- [ ] **1.2** Verify deployed version is working properly
+- [ ] **1.3** Document current piece mappings for reference
+
+### Phase 2: Server-Side Migration (75 minutes) 
+- [ ] **2.1** Update `server/gameConfig.js` - Replace old piece names with new ones
+- [ ] **2.2** Update `server/pieceTypes.js` - Migrate all piece definitions and movement patterns  
+- [ ] **2.3** Update `server/evolutionManager.js` - Change evolution requirements to use new names
+- [ ] **2.4** Update `server/index.js` - Replace all old piece references in game logic
+- [ ] **2.5** Update `server/aiManager.js` - Update AI logic to use new piece names
+- [ ] **2.6** Update `server/victoryManager.js` - Update victory conditions
+- [ ] **2.7** Update `server/statisticsManager.js` - Update stats tracking
+
+### Phase 3: Client-Side Migration (45 minutes)
+- [ ] **3.1** Update `public/main-simple.js` - Remove backward compatibility mapping
+- [ ] **3.2** Update MODEL_PATHS to only use new piece names
+- [ ] **3.3** Update any remaining client-side references to old names
+- [ ] **3.4** Update `public/index.html` - Fix any UI references to old names
+
+### Phase 4: Local Testing (45 minutes) ⚠️ CRITICAL - DO NOT DEPLOY UNTIL THIS PASSES
+- [ ] **4.1** Test locally - Verify all models load correctly
+- [ ] **4.2** Test game functionality - Ensure pieces move and evolve properly
+- [ ] **4.3** Test multiplayer locally (if possible) or single-player with AI
+- [ ] **4.4** Verify no console errors related to old piece names
+- [ ] **4.5** Test piece evolution system with new names
+
+### Phase 5: Production Deployment (20 minutes)
+- [ ] **5.1** Deploy to production environment (only after Phase 4 success)
+- [ ] **5.2** Verify deployed version starts without errors
+- [ ] **5.3** Quick smoke test of production deployment
+
+### Phase 6: Production Testing & Demo Prep (45 minutes)
+- [ ] **6.1** Test multiplayer connection on production
+- [ ] **6.2** Verify all piece models load visually in production
+- [ ] **6.3** Test key demo scenarios (piece movement, evolution, multiplayer)
+- [ ] **6.4** Prepare demo talking points and scenarios
+
+### Phase 7: Data Migration (Optional - 20 minutes) 
+- [ ] **7.1** Update `data/player-stats.json` - Replace old stat names with new ones
+- [ ] **7.2** Clean up any other data files with old references
+- [ ] **7.3** Note: This is non-critical for demo, can be skipped if time runs short
+
+### Phase 8: Final Buffer & Contingency (25 minutes)
+- [ ] **8.1** Address any critical issues found during production testing
+- [ ] **8.2** Rollback plan if needed - revert to current working state
+- [ ] **8.3** Final demo run-through
+
+===============================================================================
+CRITICAL SUCCESS METRICS FOR DEMO:
+===============================================================================
+- [ ] All 12 piece models load without errors
+- [ ] Multiplayer connection works reliably  
+- [ ] Piece evolution system functions with new names
+- [ ] No console errors related to old piece names
+- [ ] Game is playable and stable
+
+===============================================================================
+RISK MITIGATION:
+===============================================================================
+- **Backup Strategy**: Keep current working deployed version as fallback
+- **Testing Priority**: Focus on deployed environment since that's demo target
+- **Time Management**: If migration takes longer than expected, focus on client-side fixes first (phases 3-4) as they're more visible
+
+===============================================================================
+MIGRATION MAPPING REFERENCE:
+===============================================================================
+OLD NAME          → NEW NAME
+JUMPER           → VAULTBOUND
+SUPER_JUMPER     → VAULTSEER  
+HYPER_JUMPER     → VAULTARCHER
+MISTRESS_JUMPER  → VAULTMISTRESS
+HYBRID_QUEEN     → COVENANT_QUEEN
+
+===============================================================================
+FILES TO UPDATE:
+===============================================================================
+
+**Server Files (Priority 1):**
+- server/gameConfig.js
+- server/pieceTypes.js  
+- server/evolutionManager.js
+- server/index.js
+- server/aiManager.js
+- server/victoryManager.js
+- server/statisticsManager.js
+
+**Client Files (Priority 2):**
+- public/main-simple.js (MODEL_PATHS section)
+- public/index.html
+
+**Data Files (Priority 3):**
+- data/player-stats.json
+
+===============================================================================
+CURRENT PRIORITY: START PHASE 1 - BACKUP AND VERIFICATION
+===============================================================================
+
+**Next Action**: Begin Phase 1.1 - Create backup of current working state
+
+**Demo Success Depends On**: 
+1. All piece models loading correctly
+2. Stable multiplayer functionality  
+3. Clean console (no old name errors)
+4. Working evolution system
+
+**Time Check**: Monitor progress every 30 minutes to stay on schedule
+
+===============================================================================
+OPTIMIZED TIME BREAKDOWN:
+===============================================================================
+Phase 1: Pre-Migration Setup         = 15 minutes
+Phase 2: Server-Side Migration       = 75 minutes  
+Phase 3: Client-Side Migration       = 45 minutes
+Phase 4: Local Testing              = 45 minutes ⚠️ CRITICAL GATE
+Phase 5: Production Deployment       = 20 minutes
+Phase 6: Production Testing & Demo   = 45 minutes  
+Phase 7: Data Migration (Optional)   = 20 minutes
+Phase 8: Final Buffer               = 25 minutes
+                                    ─────────────
+TOTAL:                              = 290 minutes (4h 50min)
+
+⚠️ **KEY OPTIMIZATION CHANGES:**
+1. **Local Testing BEFORE Deployment** - Prevents breaking production
+2. **Data Migration Made Optional** - Less critical for demo functionality  
+3. **Separate Local vs Production Testing** - Ensures both environments work
+4. **Reduced Server Migration Time** - More realistic estimate
+5. **Added Critical Gate** - Do not deploy until local testing passes 
