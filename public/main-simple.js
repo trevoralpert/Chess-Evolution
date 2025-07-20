@@ -997,8 +997,7 @@ function handleMouseUp(e) {
   isDragging = false;
 }
 
-// Timer management functions
-function startTimer(playerId, timeLimit, startTime) {
+// ✅ REMOVED: Timer management functions - already imported from TimerManager
   activePlayerId = playerId;
   timerStartTime = startTime;
   timerDuration = timeLimit;
@@ -2558,38 +2557,9 @@ socket.on('multi-jump-capture', (data) => {
   });
 });
 
-function showNotification(message, color, duration) {
-  // Create notification element
-  const notification = document.createElement('div');
-  notification.style.cssText = `
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.9);
-    color: ${color};
-    padding: 20px;
-    border-radius: 10px;
-    text-align: center;
-    z-index: 1000;
-    font-size: 24px;
-    font-weight: bold;
-    border: 3px solid ${color};
-    animation: pulse 1s infinite;
-  `;
-  
-  notification.textContent = message;
-  document.body.appendChild(notification);
-  
-  // Remove notification after duration
-  setTimeout(() => {
-    if (notification.parentNode) {
-      notification.parentNode.removeChild(notification);
-    }
-  }, duration);
-}
+// ✅ REMOVED: showNotification - already imported from NotificationManager
 
-function showBattleContestPrompt(battleId, attackingPiece, defendingPiece, timeLimit) {
+// ✅ REMOVED: showBattleContestPrompt - already imported from BattleManager
   // Remove any existing prompt
   const existingPrompt = document.getElementById('battle-contest-prompt');
   if (existingPrompt) {
@@ -2981,36 +2951,10 @@ function updatePieceMeshOptimized(piece) {
   }
 }
 
-// Update evolution points label for a specific piece
-function updateEvolutionPointsLabel(mesh, piece) {
-  // Find the evolution label in the mesh children
-  const evolutionLabel = mesh.children.find(child => 
-    child.userData && child.userData.isEvolutionLabel
-  );
-  
-  if (evolutionLabel) {
-    const evolutionPoints = getEvolutionPointsForPiece(piece);
-    const newTexture = createEvolutionPointsLabel(evolutionPoints, piece.playerId);
-    
-    // Dispose of old texture to prevent memory leaks
-    if (evolutionLabel.material.map) {
-      evolutionLabel.material.map.dispose();
-    }
-    
-    // Apply new texture
-    evolutionLabel.material.map = newTexture;
-    evolutionLabel.material.needsUpdate = true;
-  }
-}
+// ✅ REMOVED: updateEvolutionPointsLabel - already imported from EvolutionManager
 
-// Update all evolution point labels (call this when player evolution points change)
-function updateAllEvolutionPointLabels() {
-    Object.values(pieceMeshes).forEach(mesh => {
-    if (mesh.userData && mesh.userData.piece && mesh.userData.piece.type !== 'KING') {
-      updateEvolutionPointsLabel(mesh, mesh.userData.piece);
-    }
-  });
-}
+
+// ✅ REMOVED: updateAllEvolutionPointLabels - already imported from EvolutionManager
 
 // Cached text label creation - textLabelCache moved to top of file to fix initialization order
 
@@ -3223,26 +3167,7 @@ function updatePieceMesh(piece) {
   }
 }
 
-function getWorldPosition(row, col) {
-  console.log('🌍 getWorldPosition called with:', {
-    row, col,
-    gridRows: gameState.gridConfig.rows,
-    gridCols: gameState.gridConfig.cols
-  });
-  
-  // Keep original piece positioning - pieces are at grid intersections/vertices
-  const { phi, theta } = gridToSpherical(
-    gameState.gridConfig.rows,
-    gameState.gridConfig.cols,
-    row,
-    col
-  );
-  
-  const position = sphericalToCartesian(globeRadius + 0.35, phi, theta); // Positioned just above grid surface
-  console.log('🌍 Calculated position:', { phi, theta, position });
-  
-  return position;
-}
+// ✅ REMOVED: getWorldPosition - already imported from GridUtils
 
 function updateUI() {
   const playerCount = Object.keys(gameState.players).length;
