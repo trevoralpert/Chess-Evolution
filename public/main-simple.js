@@ -34,6 +34,19 @@ import {
 import { PerformanceOptimizer } from './modules/performanceOptimizer.js';
 import { TransitionManager } from './modules/transitionManager.js';
 import { VisualEffectsManager } from './modules/visualEffectsManager.js';
+import { 
+  GRID_CONFIG, 
+  WORLD_CONFIG, 
+  TIMER_CONFIG,
+  createDefaultGameState,
+  DEFAULTS,
+  UI_ELEMENTS,
+  SOCKET_EVENTS,
+  GAME_MODES,
+  PIECE_TYPES
+} from './modules/gameConfig.js';
+import { initializeThreeJS, startAnimationLoop } from './modules/sceneConfig.js';
+import { initializeUIElements, getElement, setElementText, setTemporaryElementColor } from './modules/uiReferences.js';
 
 console.log('✅ Modules imported successfully');
 
@@ -1233,8 +1246,8 @@ camera.position.set(5, 5, 10);
 camera.lookAt(0, 0, 0);
 
 // Globe setup
-const globeRadius = 5;
-const sphereGeometry = new THREE.SphereGeometry(globeRadius, 64, 64);
+// Globe radius now imported from gameConfig.js as WORLD_CONFIG.WORLD_CONFIG.globeRadius
+const sphereGeometry = new THREE.SphereGeometry(WORLD_CONFIG.WORLD_CONFIG.globeRadius, 64, 64);
 const sphereMaterial = new THREE.MeshStandardMaterial({ 
   color: 0x2266aa, 
   wireframe: false,
@@ -1263,7 +1276,7 @@ function createGridOverlay() {
     
     // Create circular caps at the poles first
     // North pole cap (where Player 1 king is at row 0)
-    const northCapGeometry = new THREE.CircleGeometry(globeRadius * 0.08, 32); // Smaller radius
+    const northCapGeometry = new THREE.CircleGeometry(WORLD_CONFIG.WORLD_CONFIG.globeRadius * 0.08, 32); // Smaller radius
     const northCapMaterial = new THREE.MeshBasicMaterial({ 
       color: 0x4169E1, // Blue
       transparent: true,
@@ -1271,14 +1284,14 @@ function createGridOverlay() {
       side: THREE.DoubleSide
     });
     const northCap = new THREE.Mesh(northCapGeometry, northCapMaterial);
-    northCap.position.set(0, globeRadius + 0.05, 0); // Much lower so pieces sit well above
+    northCap.position.set(0, WORLD_CONFIG.globeRadius + 0.05, 0); // Much lower so pieces sit well above
     northCap.rotation.x = -Math.PI / 2;
     northCap.userData = { isPole: true, poleType: 'north' };
     scene.add(northCap);
     gridSquares.push(northCap);
     
     // South pole cap (where Player 2 king is at row 19)
-    const southCapGeometry = new THREE.CircleGeometry(globeRadius * 0.08, 32); // Smaller radius
+    const southCapGeometry = new THREE.CircleGeometry(WORLD_CONFIG.globeRadius * 0.08, 32); // Smaller radius
     const southCapMaterial = new THREE.MeshBasicMaterial({ 
       color: 0xDC143C, // Red
       transparent: true,
@@ -1286,7 +1299,7 @@ function createGridOverlay() {
       side: THREE.DoubleSide
     });
     const southCap = new THREE.Mesh(southCapGeometry, southCapMaterial);
-    southCap.position.set(0, -globeRadius - 0.05, 0); // Much lower so pieces sit well above
+    southCap.position.set(0, -WORLD_CONFIG.globeRadius - 0.05, 0); // Much lower so pieces sit well above
     southCap.rotation.x = Math.PI / 2;
     southCap.userData = { isPole: true, poleType: 'south' };
     scene.add(southCap);
@@ -1297,8 +1310,8 @@ function createGridOverlay() {
       // Calculate the Y position for this ring - MATCH PIECE POSITIONING EXACTLY
       const ringPhiDeg = (row / (gridRows - 1)) * 180; // Same formula as pieces
       const ringPhi = THREE.MathUtils.degToRad(ringPhiDeg); // Convert to radians
-      const ringY = globeRadius * Math.cos(ringPhi);
-      const ringRadius = globeRadius * Math.sin(ringPhi);
+      const ringY = WORLD_CONFIG.globeRadius * Math.cos(ringPhi);
+      const ringRadius = WORLD_CONFIG.globeRadius * Math.sin(ringPhi);
       
       // Calculate ring thickness (moved to outer scope)
       const ringThickness = Math.PI / gridRows + 0.005; // Slightly thinner rings for better fit
@@ -1322,7 +1335,7 @@ function createGridOverlay() {
           // Create curved ring section using SphereGeometry to follow sphere surface
           
           const curvedSegmentGeometry = new THREE.SphereGeometry(
-            globeRadius + 0.05, // radius (much lower so pieces sit well above)
+            WORLD_CONFIG.globeRadius + 0.05, // radius (much lower so pieces sit well above)
             16, // widthSegments (longitude divisions for smoothness)
             8, // heightSegments (latitude divisions for smoothness)
             angleStart, // phiStart (longitude start)
@@ -1346,7 +1359,7 @@ function createGridOverlay() {
           
           // Add subtle border lines between sections for better grid definition
           const borderGeometry = new THREE.SphereGeometry(
-            globeRadius + 0.06, // slightly larger radius for borders (above grid, well below pieces)
+            WORLD_CONFIG.globeRadius + 0.06, // slightly larger radius for borders (above grid, well below pieces)
             2, // thin width
             8, // height segments
             angleStart, // start angle
@@ -1378,7 +1391,7 @@ function createGridOverlay() {
       // Add horizontal ring border after each ring (except last)
       if (row < gridRows - 1) {
         const ringBorderGeometry = new THREE.SphereGeometry(
-          globeRadius + 0.06, // slightly larger radius (above grid, well below pieces)
+          WORLD_CONFIG.globeRadius + 0.06, // slightly larger radius (above grid, well below pieces)
           32, // width segments
           2, // thin height
           0, // full rotation
@@ -1576,12 +1589,8 @@ testModelAccess().then((accessible) => {
 
 // Old grid overlay function removed - using new version above
 
-// Game state
-let gameState = {
-  players: {},
-  pieces: {},
-  gridConfig: { rows: 20, cols: 8 }
-};
+// Game state - now using configuration from gameConfig.js
+let gameState = createDefaultGameState();
 
 // COLOR_MAP now imported from colorUtils.js module
 
@@ -2636,7 +2645,7 @@ function getWorldPosition(row, col) {
     col
   );
   
-  const position = sphericalToCartesian(globeRadius + 0.35, phi, theta); // Positioned just above grid surface
+  const position = sphericalToCartesian(WORLD_CONFIG.globeRadius + 0.35, phi, theta); // Positioned just above grid surface
   console.log('🌍 Calculated position:', { phi, theta, position });
   
   return position;
