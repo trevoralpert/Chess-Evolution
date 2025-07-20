@@ -1,37 +1,4 @@
-console.log('🚀 Starting main-simple.js v16 - MODULARIZED VERSION 🚀');
-
-// ===== MODULE IMPORTS =====
-// Import utility modules for better code organization
-import { 
-  gridToSpherical, 
-  sphericalToCartesian, 
-  getWorldPosition,
-  easeOutCubic,
-  clamp,
-  lerp
-} from './modules/mathUtils.js';
-
-import { 
-  COLOR_MAP, 
-  getColorFromString, 
-  getPlayerColor,
-  getPieceColorForPlayer,
-  lightenColor,
-  darkenColor
-} from './modules/colorUtils.js';
-
-import { 
-  MODEL_PATHS,
-  getModelScale,
-  getGeometricScale,
-  getModelHeightAdjustment,
-  isEvolvedPiece,
-  getEvolutionLevel,
-  getBasePieceType,
-  getEvolutionTierName
-} from './modules/modelUtils.js';
-
-console.log('✅ Modules imported successfully');
+console.log('🚀 Starting main-simple.js v15 - ADDING GLTF LOADER 🚀');
 
 // Check if Three.js is loaded
 if (typeof THREE === 'undefined') {
@@ -825,6 +792,26 @@ function setupSocketListeners() {
       showNotification('Your Turn!', 'Make your move', 'info');
     }
   });
+}
+
+// Grid utility functions (copied from gridToSphere.js)
+function gridToSpherical(rows, cols, row, col) {
+  // phi: 0° = north pole, 180° = south pole
+  const phi = (row / (rows - 1)) * 180;
+  // theta: 0° = 0°, 360° = 360° (longitude)
+  const theta = (col / cols) * 360;
+  return { phi, theta };
+}
+
+function sphericalToCartesian(r, phi, theta) {
+  const phiRad = THREE.MathUtils.degToRad(phi);
+  const thetaRad = THREE.MathUtils.degToRad(theta);
+  
+  return {
+    x: r * Math.sin(phiRad) * Math.cos(thetaRad),
+    y: r * Math.cos(phiRad),
+    z: r * Math.sin(phiRad) * Math.sin(thetaRad),
+  };
 }
 
 // Socket.io connection - will be initialized when game starts
@@ -1781,7 +1768,21 @@ function initializeGLTFLoader() {
 // Try to initialize GLTFLoader
 const hasGLTFLoader = initializeGLTFLoader();
 
-// MODEL_PATHS now imported from modelUtils.js module
+// Model file mappings - using finalized GLB files from Final pieces folder
+const MODEL_PATHS = {
+  'KING': './chess piece models/Final pieces/KING.glb',
+  'QUEEN': './chess piece models/Final pieces/QUEEN.glb',
+  'ROOK': './chess piece models/Final pieces/ROOK.glb',
+  'KNIGHT': './chess piece models/Final pieces/KNIGHT.glb',
+  'BISHOP': './chess piece models/Final pieces/BISHOP.glb',
+  'PAWN': './chess piece models/Final pieces/PAWN.glb',
+  'SPLITTER': './chess piece models/Final pieces/SPLITTER.glb',
+  'JUMPER': './chess piece models/Final pieces/JUMPER.glb',
+  'SUPER_JUMPER': './chess piece models/Final pieces/SUPER_JUMPER.glb',
+  'HYPER_JUMPER': './chess piece models/Final pieces/HYPER_JUMPER.glb',
+  'MISTRESS_JUMPER': './chess piece models/Final pieces/MISTRESS_JUMPER.glb',
+  'HYBRID_QUEEN': './chess piece models/Final pieces/HYBRID_QUEEN.glb'
+};
 
 // Load a 3D model with caching
 async function loadModel(pieceType) {
@@ -1903,7 +1904,17 @@ let gameState = {
   gridConfig: { rows: 20, cols: 8 }
 };
 
-// COLOR_MAP now imported from colorUtils.js module
+// ✅ PHASE 4: Color mapping synchronized with server auto-assignment system
+const COLOR_MAP = {
+  'red': 0xFF0000,      // Player 1
+  'blue': 0x0080FF,     // Player 2
+  'green': 0x00FF00,    // Player 3
+  'orange': 0xFF8000,   // Player 4
+  'purple': 0x8000FF,   // Player 5
+  'yellow': 0xFFD700,   // Player 6
+  'cyan': 0x00FFFF,     // Player 7
+  'pink': 0xFF69B4      // Player 8
+};
 
 // Visual elements
 const pieceMeshes = {};
@@ -3380,7 +3391,62 @@ function createEvolutionPointsLabel(evolutionPoints, playerId) {
   return new THREE.CanvasTexture(canvas);
 }
 
-// Model utility functions now imported from modelUtils.js module
+// Helper function to get appropriate scale for GLB models
+function getModelScale(pieceType) {
+  const scaleMap = {
+    'KING': 0.5,
+    'QUEEN': 0.45,
+    'ROOK': 0.4,
+    'KNIGHT': 0.4,
+    'BISHOP': 0.4,
+    'PAWN': 0.3,
+    'SPLITTER': 0.35,
+    'JUMPER': 0.4,
+    'SUPER_JUMPER': 0.45,
+    'HYPER_JUMPER': 0.5,
+    'MISTRESS_JUMPER': 0.55,
+    'HYBRID_QUEEN': 0.6
+  };
+  return scaleMap[pieceType] || 0.4;
+}
+
+// Helper function to get appropriate scale for geometric shapes (fallback)
+function getGeometricScale(pieceType) {
+  const scaleMap = {
+    'KING': 1.2,
+    'QUEEN': 1.1,
+    'ROOK': 1.0,
+    'KNIGHT': 1.0,
+    'BISHOP': 1.0,
+    'PAWN': 1.0,
+    'SPLITTER': 1.0,
+    'JUMPER': 1.0,
+    'SUPER_JUMPER': 1.1,
+    'HYPER_JUMPER': 1.15,
+    'MISTRESS_JUMPER': 1.2,
+    'HYBRID_QUEEN': 1.3
+  };
+  return scaleMap[pieceType] || 1.0;
+}
+
+// Helper function to get height adjustments for GLB models
+function getModelHeightAdjustment(pieceType) {
+  const adjustmentMap = {
+    'KING': 0.08,        // King appears sunken, lift it up
+    'QUEEN': 0.04,       // Queen might need slight adjustment
+    'ROOK': 0.02,        // Rook might need slight adjustment
+    'KNIGHT': 0.02,      // Knight might need slight adjustment
+    'BISHOP': 0.03,      // Bishop might need slight adjustment
+    'PAWN': 0.0,         // Pawn is the reference - no adjustment needed
+    'SPLITTER': 0.02,    // Evolved pieces might need adjustments
+    'JUMPER': 0.03,
+    'SUPER_JUMPER': 0.03,
+    'HYPER_JUMPER': 0.04,
+    'MISTRESS_JUMPER': 0.05,
+    'HYBRID_QUEEN': 0.06
+  };
+  return adjustmentMap[pieceType] || 0.0;
+}
 
 // Helper function to create geometric shape fallbacks
 function createGeometricPiece(pieceType) {
@@ -4517,7 +4583,61 @@ function getCurrentlySelectedPieceId() {
 
 
 
-// Color utility functions now imported from colorUtils.js module
+// Helper function to convert color string to hex
+function getColorFromString(colorString) {
+  const colorMap = {
+    'red': 0xff0000,
+    'blue': 0x0000ff,
+    'green': 0x00ff00,
+    'yellow': 0xffff00,
+    'purple': 0xff00ff,
+    'cyan': 0x00ffff,
+    'orange': 0xff8800,
+    'pink': 0xff69b4
+  };
+  return colorMap[colorString] || 0xffffff;
+}
+
+// COLOR_MAP moved to top of file to fix initialization order
+
+// Get distinct player color using server-assigned color
+function getPlayerColor(playerId, playerIndex) {
+  const player = gameState.players[playerId];
+  
+  if (player && player.selectedColor && COLOR_MAP[player.selectedColor]) {
+    return COLOR_MAP[player.selectedColor];
+  }
+  
+  // Fallback to index-based colors (more reliable than string-based)
+  const fallbackColors = [
+    0xFF6B6B, // Red-ish
+    0x4ECDC4, // Cyan/Teal
+    0x45B7D1, // Blue
+    0x96CEB4, // Green
+    0xFECE85, // Orange
+    0xF8B500, // Yellow
+    0xC44569, // Pink
+    0x6C5CE7  // Purple
+  ];
+  
+  // Handle missing or invalid playerIndex
+  let colorIndex = 0;
+  if (typeof playerIndex === 'number' && !isNaN(playerIndex)) {
+    colorIndex = playerIndex % fallbackColors.length;
+  } else {
+    // If no valid playerIndex, try to derive from playerId
+    if (gameState && gameState.players) {
+      const playerIds = Object.keys(gameState.players);
+      const foundIndex = playerIds.indexOf(playerId);
+      colorIndex = foundIndex >= 0 ? foundIndex % fallbackColors.length : 0;
+    }
+  }
+  
+  const fallbackColor = fallbackColors[colorIndex];
+  
+  console.log(`🎨 Using fallback color for player ${playerIndex || 'undefined'}: ${fallbackColor.toString(16)}`);
+  return fallbackColor;
+}
 
 // Enhanced piece color function that prioritizes player identification
 function getPieceColorForPlayer(piece, player, playerIndex) {

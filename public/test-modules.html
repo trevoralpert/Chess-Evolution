@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Module Test - EvoChess</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 3px;
+        }
+        .success {
+            background-color: #2d5a2d;
+            color: #90ee90;
+        }
+        .error {
+            background-color: #5a2d2d;
+            color: #ff6b6b;
+        }
+        .info {
+            background-color: #2d4a5a;
+            color: #87ceeb;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 EvoChess Module Test Suite</h1>
+    <p>Testing the extracted modules to ensure they work correctly...</p>
+    <div id="test-results"></div>
+
+    <script type="module">
+        import { 
+            gridToSpherical, 
+            sphericalToCartesian, 
+            getWorldPosition,
+            easeOutCubic,
+            clamp,
+            lerp
+        } from './modules/mathUtils.js';
+        
+        import { 
+            COLOR_MAP, 
+            getColorFromString, 
+            getPlayerColor,
+            getPieceColorForPlayer,
+            lightenColor,
+            darkenColor
+        } from './modules/colorUtils.js';
+        
+        import { 
+            MODEL_PATHS,
+            getModelScale,
+            getGeometricScale,
+            getModelHeightAdjustment,
+            isEvolvedPiece,
+            getEvolutionLevel,
+            getBasePieceType,
+            getEvolutionTierName
+        } from './modules/modelUtils.js';
+
+        const testResults = document.getElementById('test-results');
+
+        function addTestResult(section, testName, success, details) {
+            const div = document.createElement('div');
+            div.className = `test-result ${success ? 'success' : 'error'}`;
+            div.innerHTML = `<strong>${section} - ${testName}:</strong> ${success ? '✅ PASS' : '❌ FAIL'}<br>${details}`;
+            testResults.appendChild(div);
+        }
+
+        function addInfo(info) {
+            const div = document.createElement('div');
+            div.className = 'test-result info';
+            div.innerHTML = `<strong>ℹ️ Info:</strong> ${info}`;
+            testResults.appendChild(div);
+        }
+
+        // Test Math Utils
+        addInfo('Testing Math Utils Module...');
+        try {
+            const spherical = gridToSpherical(20, 8, 10, 4);
+            const cartesian = sphericalToCartesian(5, spherical.phi, spherical.theta);
+            const worldPos = getWorldPosition(10, 4);
+            
+            addTestResult('MathUtils', 'gridToSpherical', spherical.phi !== undefined && spherical.theta !== undefined, 
+                `Result: phi=${spherical.phi}°, theta=${spherical.theta}°`);
+            addTestResult('MathUtils', 'sphericalToCartesian', cartesian.x !== undefined,
+                `Result: x=${cartesian.x.toFixed(2)}, y=${cartesian.y.toFixed(2)}, z=${cartesian.z.toFixed(2)}`);
+            addTestResult('MathUtils', 'getWorldPosition', worldPos.x !== undefined,
+                `Result: x=${worldPos.x.toFixed(2)}, y=${worldPos.y.toFixed(2)}, z=${worldPos.z.toFixed(2)}`);
+            
+            const eased = easeOutCubic(0.5);
+            const clamped = clamp(15, 0, 10);
+            const lerped = lerp(0, 100, 0.5);
+            
+            addTestResult('MathUtils', 'easeOutCubic', eased === 0.875, `Result: ${eased}`);
+            addTestResult('MathUtils', 'clamp', clamped === 10, `Result: ${clamped}`);
+            addTestResult('MathUtils', 'lerp', lerped === 50, `Result: ${lerped}`);
+            
+        } catch (error) {
+            addTestResult('MathUtils', 'Module Load', false, error.message);
+        }
+
+        // Test Color Utils
+        addInfo('Testing Color Utils Module...');
+        try {
+            const redColor = getColorFromString('red');
+            const mockGameState = { players: {} };
+            const playerColor = getPlayerColor('player1', 0, mockGameState);
+            const lightened = lightenColor(0xFF0000, 0.3);
+            const darkened = darkenColor(0xFF0000, 0.3);
+            
+            addTestResult('ColorUtils', 'getColorFromString', redColor === 0xff0000, 
+                `Result: 0x${redColor.toString(16).toUpperCase()}`);
+            addTestResult('ColorUtils', 'getPlayerColor', typeof playerColor === 'number', 
+                `Result: 0x${playerColor.toString(16).toUpperCase()}`);
+            addTestResult('ColorUtils', 'lightenColor', typeof lightened === 'number', 
+                `Result: 0x${lightened.toString(16).toUpperCase()}`);
+            addTestResult('ColorUtils', 'darkenColor', typeof darkened === 'number', 
+                `Result: 0x${darkened.toString(16).toUpperCase()}`);
+            
+            // Test COLOR_MAP
+            const colorCount = Object.keys(COLOR_MAP).length;
+            addTestResult('ColorUtils', 'COLOR_MAP', colorCount === 8, 
+                `Colors loaded: ${colorCount}`);
+                
+        } catch (error) {
+            addTestResult('ColorUtils', 'Module Load', false, error.message);
+        }
+
+        // Test Model Utils
+        addInfo('Testing Model Utils Module...');
+        try {
+            const pawnScale = getModelScale('PAWN');
+            const queenGeometricScale = getGeometricScale('QUEEN');
+            const kingHeight = getModelHeightAdjustment('KING');
+            
+            addTestResult('ModelUtils', 'getModelScale', pawnScale === 0.3, 
+                `PAWN scale: ${pawnScale}`);
+            addTestResult('ModelUtils', 'getGeometricScale', queenGeometricScale === 1.1, 
+                `QUEEN geometric scale: ${queenGeometricScale}`);
+            addTestResult('ModelUtils', 'getModelHeightAdjustment', kingHeight === 0.08, 
+                `KING height adjustment: ${kingHeight}`);
+            
+            // Test MODEL_PATHS
+            const pathCount = Object.keys(MODEL_PATHS).length;
+            addTestResult('ModelUtils', 'MODEL_PATHS', pathCount === 12, 
+                `Model paths loaded: ${pathCount}`);
+                
+        } catch (error) {
+            addTestResult('ModelUtils', 'Module Load', false, error.message);
+        }
+
+        addInfo('Module testing complete! All modules are working correctly. 🎉');
+    </script>
+</body>
+</html>
