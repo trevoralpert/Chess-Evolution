@@ -492,12 +492,12 @@
 
 #### **🚀 EXTRACTION PHASE: Function Removal in Progress! ✅**
 
-**📊 Current Extraction Progress:**
+**📊 Final Extraction Progress:**
 - **Original functions:** 137 functions
-- **Functions extracted:** 43 functions ✅
-- **Functions remaining:** 94 functions
-- **Lines removed:** 668 lines ✅
-- **Current main file:** 5,537 lines (down from 6,205)
+- **Functions extracted:** 54 functions ✅
+- **Functions remaining:** 83 functions
+- **Lines removed:** 972 lines ✅
+- **Current main file:** 5,233 lines (down from 6,205)
 
 **✅ Functions Successfully Extracted:**
 - **Lobby System Functions** - 11 functions removed (146 lines)
@@ -505,12 +505,15 @@
 - **Evolution UI Functions** - 7 functions removed (130 lines)
 - **Menu System Functions** - 2 functions removed (69 lines)
 - **Tournament UI Functions** - 13 functions removed (91 lines)
+- **Game Initialization Functions** - 6 functions removed (185 lines)
+- **Timer Management Functions** - 4 functions removed (85 lines)
+- **Battle System Functions** - 1 function removed (34 lines)
 
-**🎯 Extraction Results So Far:**
-- **Main file reduction:** 6,205 → 5,537 lines (-668 lines, -10.8%)
-- **Function reduction:** 137 → 94 functions (-43 functions, -31.4%)
+**🎯 Final Extraction Results:**
+- **Main file reduction:** 6,205 → 5,233 lines (-972 lines, -15.7%)
+- **Function reduction:** 137 → 83 functions (-54 functions, -39.4%)
 - **Modules remain:** 20 modules, 7,764 lines (unchanged)
-- **Total codebase:** 5,537 + 7,764 = 13,301 lines
+- **Total codebase:** 5,233 + 7,764 = 12,997 lines
 
 **📈 Extraction Impact:**
 ✅ **Significant file size reduction** achieved  

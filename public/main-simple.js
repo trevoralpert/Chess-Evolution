@@ -98,14 +98,7 @@ async function loadGLTFLoader() {
   startGameInitialization();
 })();
 
-function startGameInitialization() {
-  // Wait for DOM to be ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeAfterDOM);
-  } else {
-    initializeAfterDOM();
-  }
-}
+// startGameInitialization function now imported from gameInitialization.js module
 
 // Menu System Variables (declare at module level)
 let menuScreen, gameUI, gameOverScreen;
@@ -215,68 +208,7 @@ function initMenuSystem() {
   });
 }
 
-// Start the game
-function startGame() {
-  console.log('🎮 Starting game with:', { playerName, gameMode });
-  
-  // Prevent multiple connections
-  if (socket && socket.connected) {
-    console.log('⚠️ Already connected to server');
-    return;
-  }
-  
-  // Initialize socket connection first
-  socket = io();
-  window.globalSocket = socket;
-  console.log('Socket.io initialized, waiting for connection...');
-  
-  // Wait for connection, then send appropriate game mode request
-  socket.on('connection-established', (data) => {
-    console.log('✅ Connected to server:', data);
-    
-    // Hide menu, show game UI and timer
-    menuScreen.style.display = 'none';
-    gameUI.style.display = 'block';
-    const timingUI = document.getElementById('timing-ui');
-    if (timingUI) timingUI.style.display = 'block';
-    isInGame = true;
-    
-    // Send the appropriate game creation request based on mode
-    switch (gameMode) {
-      case 'vs-ai':
-        console.log('🤖 Requesting vs AI game...');
-        socket.emit('create-vs-ai-game', {
-          playerName: playerName,
-          difficulty: 'MEDIUM' // Can be made configurable later
-        });
-        break;
-        
-      case 'create-vs-human':
-        console.log('🎯 Requesting create vs human game...');
-        socket.emit('create-vs-human-game', {
-          playerName: playerName
-        });
-        break;
-        
-      case 'join-vs-human':
-        console.log('🤝 Requesting join human game...');
-        socket.emit('join-human-game', {
-          playerName: playerName
-        });
-        break;
-        
-      default:
-        console.error('Unknown game mode:', gameMode);
-        socket.emit('create-vs-ai-game', {
-          playerName: playerName,
-          difficulty: 'MEDIUM'
-        });
-    }
-  });
-  
-  // Set up all socket event listeners
-  setupSocketListeners();
-}
+// Game initialization functions now imported from gameInitialization.js module
 
 // Menu system functions now imported from menuSystem.js module
 
@@ -907,56 +839,7 @@ function handleMouseUp(e) {
   isDragging = false;
 }
 
-// Timer management functions
-function startTimer(playerId, timeLimit, startTime) {
-  activePlayerId = playerId;
-  timerStartTime = startTime;
-  timerDuration = timeLimit;
-  isTimerPaused = false;
-  
-  // Update UI with initial time
-  const initialRemaining = Math.max(0, timerDuration - (Date.now() - timerStartTime));
-  updateTimerDisplay(initialRemaining);
-  
-  // Start the timer interval
-  if (currentTimer) {
-    clearInterval(currentTimer);
-  }
-  
-  currentTimer = setInterval(() => {
-    if (!isTimerPaused) {
-      const elapsed = Date.now() - timerStartTime;
-      const remaining = Math.max(0, timerDuration - elapsed);
-      updateTimerDisplay(remaining);
-    }
-  }, 100); // Update every 100ms for smooth animation
-  
-  console.log(`Timer started for player ${playerId}: ${timeLimit}ms`);
-}
-
-function pauseTimer() {
-  isTimerPaused = true;
-  const elapsed = Date.now() - timerStartTime;
-  pausedTimeRemaining = Math.max(0, timerDuration - elapsed);
-  
-  document.getElementById('timer-status').textContent = 'Timer Paused (Battle/Evolution)';
-  document.getElementById('timer-bar').style.background = '#666';
-  
-  console.log('Timer paused');
-}
-
-function resumeTimer() {
-  if (isTimerPaused) {
-    isTimerPaused = false;
-    timerStartTime = Date.now();
-    timerDuration = pausedTimeRemaining;
-    
-    document.getElementById('timer-status').textContent = 'Timer Active';
-    document.getElementById('timer-bar').style.background = 'linear-gradient(90deg, #00ff00, #ffff00, #ff6600, #ff0000)';
-    
-    console.log('Timer resumed');
-  }
-}
+// Timer management functions now imported from timerFunctions.js module
 
 
 
@@ -1016,41 +899,7 @@ function startRealTimeTimer(duration) {
   console.log(`Real-time timer started: ${duration}ms`);
 }
 
-function updateTimerDisplay(timeRemaining) {
-  const timeRemainingElement = document.getElementById('time-remaining');
-  const timerBarElement = document.getElementById('timer-bar');
-  const timerStatusElement = document.getElementById('timer-status');
-  
-  console.log('🕒 updateTimerDisplay called with:', timeRemaining, 'Elements found:', {
-    timeRemaining: !!timeRemainingElement,
-    timerBar: !!timerBarElement, 
-    timerStatus: !!timerStatusElement
-  });
-  
-  if (!timeRemainingElement || !timerBarElement || !timerStatusElement) {
-    console.log('⚠️ Timer elements not found in DOM');
-    return;
-  }
-  
-  const remainingSeconds = timeRemaining / 1000;
-  timeRemainingElement.textContent = remainingSeconds.toFixed(1);
-  console.log('🕒 Updated timer display to:', remainingSeconds.toFixed(1));
-  
-  // Update progress bar
-  const progress = (timeRemaining / timerDuration) * 100;
-  timerBarElement.style.width = `${progress}%`;
-  
-  // Update status and colors
-  if (timeRemaining <= 0) {
-    timerStatusElement.textContent = 'Ready to move';
-    timerStatusElement.style.color = '#00ff00';
-    timerBarElement.style.background = '#00ff00';
-  } else {
-    timerStatusElement.textContent = 'Timer counting down...';
-    timerStatusElement.style.color = '#ff8800';
-    timerBarElement.style.background = 'linear-gradient(90deg, #00ff00, #ffff00, #ff6600, #ff0000)';
-  }
-}
+// updateTimerDisplay function now imported from timerFunctions.js module
 
 function updateTimerUI(timer, queuedMove) {
   const timerStatusElement = document.getElementById('timer-status');
@@ -1964,76 +1813,7 @@ function showNotification(message, color, duration) {
   }, duration);
 }
 
-function showBattleContestPrompt(battleId, attackingPiece, defendingPiece, timeLimit) {
-  // Remove any existing prompt
-  const existingPrompt = document.getElementById('battle-contest-prompt');
-  if (existingPrompt) {
-    existingPrompt.remove();
-  }
-  
-  // Create contest prompt UI
-  const promptDiv = document.createElement('div');
-  promptDiv.id = 'battle-contest-prompt';
-  promptDiv.style.cssText = `
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(0, 0, 0, 0.9);
-    color: white;
-    padding: 20px;
-    border-radius: 10px;
-    text-align: center;
-    z-index: 1000;
-    border: 2px solid #ff6b6b;
-  `;
-  
-  const countdown = document.createElement('div');
-  countdown.id = 'contest-countdown';
-  countdown.style.cssText = `
-    font-size: 24px;
-    font-weight: bold;
-    color: #ff6b6b;
-    margin-bottom: 10px;
-  `;
-  
-  promptDiv.innerHTML = `
-    <h3>Battle Contest!</h3>
-    <p>${attackingPiece.symbol} ${attackingPiece.type} (${attackingPiece.value}pts) attacking your ${defendingPiece.symbol} ${defendingPiece.type} (${defendingPiece.value}pts)</p>
-    <p>Do you want to contest this battle with dice?</p>
-    <button id="contest-yes" style="margin: 10px; padding: 10px 20px; font-size: 16px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">Contest!</button>
-    <button id="contest-no" style="margin: 10px; padding: 10px 20px; font-size: 16px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">Auto-Resolve</button>
-  `;
-  
-  promptDiv.appendChild(countdown);
-  document.body.appendChild(promptDiv);
-  
-  // Add event listeners
-  document.getElementById('contest-yes').addEventListener('click', () => {
-    socket.emit('contest-response', { battleId, wantsToContest: true });
-    promptDiv.remove();
-  });
-  
-  document.getElementById('contest-no').addEventListener('click', () => {
-    socket.emit('contest-response', { battleId, wantsToContest: false });
-    promptDiv.remove();
-  });
-  
-  // Countdown timer
-  let timeLeft = timeLimit;
-  const updateCountdown = () => {
-    countdown.textContent = `Time: ${timeLeft}s`;
-    if (timeLeft <= 0) {
-      // Auto-resolve if no response
-      socket.emit('contest-response', { battleId, wantsToContest: false });
-      promptDiv.remove();
-    } else {
-      timeLeft--;
-      setTimeout(updateCountdown, 1000);
-    }
-  };
-  updateCountdown();
-}
+// showBattleContestPrompt function now imported from movementBattleSystem.js module
 
 function showDiceBattleAnimation(battleLog, winner, loser, duration) {
   // Create dice battle animation UI
@@ -2699,23 +2479,7 @@ let lobbies = [];
 
 // Evolution system functions now imported from evolutionUI.js module
 
-function startGameCountdown(countdown) {
-  const countdownEl = document.getElementById('game-starting-countdown');
-  const timerEl = document.getElementById('countdown-timer');
-  
-  countdownEl.style.display = 'block';
-  timerEl.textContent = countdown;
-  
-  const interval = setInterval(() => {
-    countdown--;
-    timerEl.textContent = countdown;
-    
-    if (countdown <= 0) {
-      clearInterval(interval);
-      countdownEl.style.display = 'none';
-    }
-  }, 1000);
-}
+// startGameCountdown function now imported from gameInitialization.js module
 
 // Tournament management
 let currentTournament = null;
@@ -4034,79 +3798,11 @@ function hideAIUI() {
   document.getElementById('ai-ui').style.display = 'none';
 }
 
-function addAIPlayer() {
-  const difficulty = document.getElementById('ai-difficulty-select').value;
-  const personalityType = document.getElementById('ai-personality-select').value;
-  
-  const personality = getAIPersonality(personalityType);
-  
-  console.log('Adding AI player...');
-  socket.emit('add-ai-player', {
-    difficulty,
-    personality
-  });
-  
-  // Update button state for visual feedback
-  const addAIBtn = document.getElementById('add-ai-btn');
-  if (addAIBtn) {
-    addAIBtn.textContent = 'Adding AI...';
-    addAIBtn.disabled = true;
-    
-    // Re-enable after a short delay
-    setTimeout(() => {
-      addAIBtn.textContent = 'Add AI Player';
-      addAIBtn.disabled = false;
-    }, 2000);
-  }
-}
+// addAIPlayer function now imported from gameInitialization.js module
 
-function removeAllAI() {
-  currentAIPlayers.forEach(aiPlayer => {
-    socket.emit('remove-ai-player', { aiPlayerId: aiPlayer.id });
-  });
-  currentAIPlayers = [];
-  updateAIPlayersList();
-}
+// removeAllAI function now imported from gameInitialization.js module
 
-// Quit game function
-function quitGame() {
-  const confirmQuit = confirm('Are you sure you want to quit the game? This will remove all your pieces and end your session.');
-  
-  if (confirmQuit) {
-    // Clear local game state
-    gameState = {
-      players: {},
-      pieces: {},
-      gridConfig: { rows: 20, cols: 8 }
-    };
-    
-    // Clear visual elements
-    Object.keys(pieceMeshes).forEach(pieceId => {
-      scene.remove(pieceMeshes[pieceId]);
-      delete pieceMeshes[pieceId];
-    });
-    
-    // Clear highlights and selections
-    clearValidMoveHighlights();
-    clearSelectionHighlight();
-    selectedPieceId = null;
-    validMoves = [];
-    
-    // Update UI
-    gameInfoEl.textContent = 'You have quit the game';
-    gameInfoEl.style.color = '#ff6b6b';
-    
-    // Notify server and disconnect
-    socket.emit('quit-game');
-    
-    // Optionally reload page after short delay
-    setTimeout(() => {
-      if (confirm('Would you like to reload the page to start a new game?')) {
-        window.location.reload();
-      }
-    }, 1000);
-  }
-}
+// quitGame function now imported from gameInitialization.js module
 
 function getAIPersonality(personalityType) {
   const personalities = {
