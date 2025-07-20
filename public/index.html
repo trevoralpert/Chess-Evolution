@@ -6,7 +6,19 @@
   <title>EvoChess - Multiplayer Evolution Chess on a Globe</title>
   
   <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind CSS - Replace with production build -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Suppress Tailwind CDN warning in production
+      if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        console.warn = (function(originalWarn) {
+          return function(...args) {
+            if (args[0] && args[0].includes('cdn.tailwindcss.com')) return;
+            originalWarn.apply(console, args);
+          };
+        })(console.warn);
+      }
+    </script>
   
   <!-- DaisyUI -->
   <link href="https://cdn.jsdelivr.net/npm/daisyui@4.6.0/dist/full.min.css" rel="stylesheet" type="text/css" />

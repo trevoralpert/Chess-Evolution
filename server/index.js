@@ -2088,6 +2088,40 @@ function handlePieceMove(playerId, moveData) {
   // ✅ PHASE 7: Check move-based bonuses for pawns
   if (piece.type === 'PAWN') {
     checkMoveBasedBonuses(piece);
+    
+    // Check if pawn reached opposite pole for pole bonus
+    const player = gameState.players[piece.playerId];
+    if (player) {
+      const spawnRow = player.spawnArea.baseRow;
+      const isNorthPole = spawnRow <= 9;
+      const oppositeRow = isNorthPole ? 19 : 0;
+      
+      // ✅ FIXED: Use separate flag for pole bonus vs move-based circumnavigation
+      if (piece.row === oppositeRow && !piece.hasPoleBonus) {
+        piece.hasPoleBonus = true;
+        // Award +8 evolution points to the piece itself
+        piece.evolutionPoints = (piece.evolutionPoints || 1) + 8;
+        
+        console.log(`🎯 ${piece.symbol} reached opposite pole! +8 evolution points, now has ${piece.evolutionPoints} evolution points`);
+        
+        // Broadcast pole bonus event
+        io.emit('pole-bonus', {
+          pieceId: piece.id,
+          pieceType: piece.type,
+          playerId: piece.playerId,
+          points: 8,
+          piecePoints: piece.evolutionPoints,
+          reason: 'pole_reached',
+          position: { row: piece.row, col: piece.col }
+        });
+        
+        // Offer evolution choice to human players
+        const pieceOwner = gameState.players[piece.playerId];
+        if (pieceOwner && !pieceOwner.isAI) {
+          offerEvolutionChoice(piece.playerId, piece.id, 'pole_bonus');
+        }
+      }
+    }
   }
   
   // ✅ PHASE 7: Check position-based bonus for splitters
@@ -2291,8 +2325,9 @@ function checkSplitterPositionBonus(piece) {
   if (piece.type !== 'SPLITTER') return;
   
   // Check if splitter is at row 0 or 19 (poles)
-  if ((piece.row === 0 || piece.row === 19) && !piece.hasCircumnavigationBonus) {
-    piece.hasCircumnavigationBonus = true;
+  // ✅ FIXED: Use separate flag for pole bonus
+  if ((piece.row === 0 || piece.row === 19) && !piece.hasPoleBonus) {
+    piece.hasPoleBonus = true;
     // ✅ PHASE 7: Add evolution points to the piece itself
     piece.evolutionPoints = (piece.evolutionPoints || 2) + 8;
     
@@ -2310,6 +2345,12 @@ function checkSplitterPositionBonus(piece) {
     
     // Broadcast game state to update floating numbers
     broadcastGameState();
+    
+    // Offer evolution choice to human players
+    const pieceOwner = gameState.players[piece.playerId];
+    if (pieceOwner && !pieceOwner.isAI) {
+      offerEvolutionChoice(piece.playerId, piece.id, 'pole_bonus');
+    }
   }
 }
 
@@ -3175,9 +3216,9 @@ function offerEvolutionChoice(playerId, pieceId, reason) {
     return;
   }
   
-  // Get player's current evolution points
-  const bankInfo = evolutionManager.getPlayerBankInfo(playerId);
-  console.log(`🎯 OFFER EVOLUTION - Bank info:`, bankInfo);
+  // ✅ PHASE 7: Get piece's evolution points instead of player bank
+  const piecePoints = piece.evolutionPoints || PIECE_TYPES[piece.type].points;
+  console.log(`🎯 OFFER EVOLUTION - Piece has ${piecePoints} evolution points`);
   
   // Pause all game timers while player makes choice
   timingManager.pauseAllCooldowns();
@@ -3192,7 +3233,7 @@ function offerEvolutionChoice(playerId, pieceId, reason) {
       piece: piece,
       reason: reason,
       availablePaths: availablePaths,
-      bankInfo: bankInfo,
+      piecePoints: piecePoints,  // ✅ Fixed: Send piecePoints instead of bankInfo
       timeLimit: 30 // 30 seconds to make choice
     });
   }
@@ -3853,6 +3894,15 @@ function getValidMoves(pieceId) {
         const posKey = GridUtils.getPositionKey(targetRow, targetCol);
         const occupyingPieceId = gameState.grid[posKey];
         
+        // Special pole circle restriction for pawns
+        if (piece.type === 'PAWN' && (targetRow === 0 || targetRow === 19)) {
+          // Check if this is a King's pole circle (any of the 8 positions around the pole)
+          if (occupyingPieceId) {
+            // Can't move into occupied pole circle positions
+            return;
+          }
+        }
+        
         if (!occupyingPieceId) {
           validMoves.push({ row: targetRow, col: targetCol, type: 'move' });
         }
@@ -3871,44 +3921,48 @@ function getValidMoves(pieceId) {
         if (occupyingPieceId) {
           const occupyingPiece = gameState.pieces[occupyingPieceId];
           if (occupyingPiece.playerId !== piece.playerId) {
+            // Special pole circle restriction for pawns
+            if (piece.type === 'PAWN' && (targetRow === 0 || targetRow === 19)) {
+              // Pawns can attack into pole circles even if occupied
+            }
             validMoves.push({ row: targetRow, col: targetCol, type: 'attack' });
           }
         }
       }
-    });
-    
-    // Check split directions (SPLITTER only)
-    if (piece.type === 'SPLITTER') {
-      const player = gameState.players[piece.playerId];
-      if (player) {
-        // Splitters can only split sideways (left/right), never forward or backward
-        const splitDirs = [
-          { row: 0, col: -1 }, // Left
-          { row: 0, col: 1 }   // Right
-        ];
-        
-        splitDirs.forEach(dir => {
-          const targetRow = piece.row + dir.row;
-          const targetCol = GridUtils.normalizeCol(piece.col + dir.col);
+          });
+      
+      // Check split directions (SPLITTER only)
+      if (piece.type === 'SPLITTER') {
+        const player = gameState.players[piece.playerId];
+        if (player) {
+          // Splitters can only split sideways (left/right), never forward or backward
+          const splitDirs = [
+            { row: 0, col: -1 }, // Left
+            { row: 0, col: 1 }   // Right
+          ];
           
-          if (GridUtils.isValidPosition(targetRow, targetCol)) {
-            const posKey = GridUtils.getPositionKey(targetRow, targetCol);
-            const occupyingPieceId = gameState.grid[posKey];
+          splitDirs.forEach(dir => {
+            const targetRow = piece.row + dir.row;
+            const targetCol = GridUtils.normalizeCol(piece.col + dir.col);
             
-            if (!occupyingPieceId) {
-              // Can split to empty squares
-              validMoves.push({ row: targetRow, col: targetCol, type: 'split' });
-            } else {
-              // Can split onto enemy pieces (captures them)
-              const occupyingPiece = gameState.pieces[occupyingPieceId];
-              if (occupyingPiece && occupyingPiece.playerId !== piece.playerId) {
-                validMoves.push({ row: targetRow, col: targetCol, type: 'split', capture: occupyingPieceId });
+            if (GridUtils.isValidPosition(targetRow, targetCol)) {
+              const posKey = GridUtils.getPositionKey(targetRow, targetCol);
+              const occupyingPieceId = gameState.grid[posKey];
+              
+              if (!occupyingPieceId) {
+                // Can split to empty squares
+                validMoves.push({ row: targetRow, col: targetCol, type: 'split' });
+              } else {
+                // Can split onto enemy pieces (captures them)
+                const occupyingPiece = gameState.pieces[occupyingPieceId];
+                if (occupyingPiece && occupyingPiece.playerId !== piece.playerId) {
+                  validMoves.push({ row: targetRow, col: targetCol, type: 'split', capture: occupyingPieceId });
+                }
               }
             }
-          }
-        });
+          });
+        }
       }
-    }
     
   } else {
     // Standard movement patterns (omnidirectional, diagonal, orthogonal, etc.)
@@ -4024,6 +4078,44 @@ function getValidMoves(pieceId) {
         });
       }
     }
+  }
+  
+  // Filter out moves that would put King in check
+  if (piece.type === 'KING') {
+    return validMoves.filter(move => {
+      // Simulate the move
+      const originalRow = piece.row;
+      const originalCol = piece.col;
+      const originalGridKey = GridUtils.getPositionKey(originalRow, originalCol);
+      const targetGridKey = GridUtils.getPositionKey(move.row, move.col);
+      const capturedPieceId = gameState.grid[targetGridKey];
+      let capturedPiece = null;
+      
+      // Make the move temporarily
+      piece.row = move.row;
+      piece.col = move.col;
+      gameState.grid[originalGridKey] = null;
+      if (capturedPieceId) {
+        capturedPiece = gameState.pieces[capturedPieceId];
+        delete gameState.pieces[capturedPieceId];
+      }
+      gameState.grid[targetGridKey] = pieceId;
+      
+      // Check if this position is under attack
+      const wouldBeInCheck = isKingInCheck(piece.playerId);
+      
+      // Undo the move
+      piece.row = originalRow;
+      piece.col = originalCol;
+      gameState.grid[originalGridKey] = pieceId;
+      gameState.grid[targetGridKey] = capturedPieceId;
+      if (capturedPiece) {
+        gameState.pieces[capturedPieceId] = capturedPiece;
+      }
+      
+      // Only allow moves that don't put King in check
+      return !wouldBeInCheck;
+    });
   }
   
   return validMoves;
