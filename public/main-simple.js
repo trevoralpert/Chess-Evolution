@@ -52,6 +52,9 @@ import { getEvolutionPointsForPiece, createEvolutionPointsLabel, createCachedTex
 import { formatTime, formatTimeWithColor, createTimerDisplay, formatCountdown } from './modules/timerFunctions.js';
 import { initMenuSystem, returnToMenu, showGameOver } from './modules/menuSystem.js';
 import { showLobbyUI, hideLobbyUI, showLobbyCreation, hideLobbyCreation, showLobbyRoom, updateLobbyRoomDisplay, createLobby, joinLobby, leaveLobby, toggleReady, refreshLobbies, updateLobbyList, getPlayerName } from './modules/lobbySystem.js';
+import { showStatisticsUI, hideStatisticsUI, showPersonalStats, showLeaderboard, showAchievements, showGlobalStats, updateStatsButtonStyles, refreshLeaderboard, displayPersonalStats, displayLeaderboard, displayAchievements, displayGlobalStats } from './modules/statisticsUI.js';
+import { showEvolutionUI, hideEvolutionUI, refreshEvolutionBank, updateEvolutionBank, showEvolutionChoice, hideEvolutionChoice, handleEvolutionCompleted, chooseEvolution, bankEvolutionPoints, closeEvolutionDialog, showEvolutionContextMenu, hideEvolutionContextMenu } from './modules/evolutionUI.js';
+import { showTournamentUI, hideTournamentUI, showTournamentCreation, hideTournamentCreation, createTournament, showTournamentList, updateTournamentList, updateTournamentStatus, updateBracketsDisplay } from './modules/tournamentUI.js';
 
 console.log('✅ Modules imported successfully');
 
