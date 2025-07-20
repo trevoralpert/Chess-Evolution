@@ -1254,6 +1254,11 @@ io.on('connection', (socket) => {
     const { pieceId, choice } = data;
     handleEvolutionChoiceResponse(socket.id, pieceId, choice);
   });
+  
+  // Vault capture selection handlers
+  socket.on('vault-capture-response', (data) => {
+    handleVaultCaptureResponse(socket.id, data);
+  });
 
   // Chat system handlers
   socket.on('send-chat-message', (data) => {
@@ -2018,7 +2023,12 @@ function handlePieceMove(playerId, moveData) {
   
   // Handle multi-jump-capture moves (evolved jumpers)
   if (matchingMove.type === 'multi-jump-capture') {
-    return handleMultiJumpCapture(playerId, pieceId, matchingMove, targetRow, targetCol);
+    const result = handleMultiJumpCapture(playerId, pieceId, matchingMove, targetRow, targetCol);
+    // If capture selection is pending, don't proceed with turn transition
+    if (result && result.pending) {
+      return null; // This prevents the normal turn transition
+    }
+    return result;
   }
   
   // Handle dual movement (Hybrid Queen)
@@ -2552,6 +2562,51 @@ function handlePieceSplit(playerId, splitData) {
   return { success: true, message: successMsg };
 }
 
+function handleVaultCaptureResponse(playerId, data) {
+  const pendingCapture = gameState.pendingCaptures?.[playerId];
+  if (!pendingCapture) {
+    console.log('No pending capture found for player');
+    return;
+  }
+  
+  // Clean up pending capture
+  delete gameState.pendingCaptures[playerId];
+  
+  // Resume timers
+  timingManager.resumeAllCooldowns();
+  
+  // Process the capture with selected pieces
+  const result = handleMultiJumpCapture(
+    playerId,
+    pendingCapture.pieceId,
+    pendingCapture.matchingMove,
+    pendingCapture.targetRow,
+    pendingCapture.targetCol,
+    data.selectedCaptures
+  );
+  
+  if (result && !result.pending) {
+    // Record the move
+    spectatorManager.recordMove('main', {
+      type: 'move',
+      playerId: playerId,
+      pieceId: pendingCapture.pieceId,
+      fromPosition: { row: pendingCapture.originalRow, col: pendingCapture.originalCol },
+      toPosition: { row: pendingCapture.targetRow, col: pendingCapture.targetCol },
+      moveType: result.moveType || 'multi-jump-capture',
+      captures: result.captures || []
+    });
+    
+    // Send confirmation back to the client
+    io.emit('move-result', { success: true, message: result.message, playerId: playerId });
+    
+    // Start next player's turn
+    setTimeout(() => {
+      startNextPlayerTurn(playerId);
+    }, 500);
+  }
+}
+
 function handleHeirProduction(playerId, pieceId) {
   const piece = gameState.pieces[pieceId];
   if (!piece) {
@@ -2588,7 +2643,7 @@ function handleHeirProduction(playerId, pieceId) {
   };
 }
 
-function handleMultiJumpCapture(playerId, pieceId, matchingMove, targetRow, targetCol) {
+function handleMultiJumpCapture(playerId, pieceId, matchingMove, targetRow, targetCol, selectedCaptures = null) {
   const piece = gameState.pieces[pieceId];
   const enemyPiecesInArea = matchingMove.enemyPiecesInArea;
   const landingCapture = matchingMove.landingCapture;
@@ -2598,21 +2653,79 @@ function handleMultiJumpCapture(playerId, pieceId, matchingMove, targetRow, targ
   const originalRow = piece.row;
   const originalCol = piece.col;
   
+  // Check if this is a vault piece that needs player selection
+  const isVaultPiece = ['VAULTBOUND', 'VAULTSEER', 'VAULTARCHER', 'VAULTMISTRESS'].includes(piece.type);
+  const needsSelection = isVaultPiece && enemyPiecesInArea.length > 0 && maxCaptures !== 'all' && !selectedCaptures;
+  
+  if (needsSelection && gameState.players[playerId] && !gameState.players[playerId].isAI) {
+    // Pause timers and request player selection
+    timingManager.pauseAllCooldowns();
+    
+    // Store pending capture for later
+    gameState.pendingCaptures = gameState.pendingCaptures || {};
+    gameState.pendingCaptures[playerId] = {
+      pieceId,
+      matchingMove,
+      targetRow,
+      targetCol,
+      originalRow,
+      originalCol,
+      timestamp: Date.now()
+    };
+    
+    // Send capture selection request to player
+    const playerSocket = io.sockets.sockets.get(playerId);
+    if (playerSocket) {
+      playerSocket.emit('vault-capture-selection', {
+        pieceId,
+        pieceType: piece.type,
+        jumpArea: matchingMove.captureArea,
+        enemyPieces: enemyPiecesInArea.map(ep => ({
+          id: ep.id,
+          type: ep.piece.type,
+          symbol: ep.piece.symbol,
+          position: ep.position
+        })),
+        maxCaptures,
+        canLandOnEnemy: matchingMove.canLandOnEnemy,
+        landingCapture: landingCapture ? {
+          id: landingCapture.id,
+          type: landingCapture.piece.type,
+          symbol: landingCapture.piece.symbol,
+          position: landingCapture.position
+        } : null,
+        timeLimit: 30 // 30 seconds to choose
+      });
+    }
+    
+    // Set timeout for automatic selection
+    setTimeout(() => {
+      if (gameState.pendingCaptures[playerId]) {
+        console.log('Vault capture selection timed out - auto-selecting');
+        const autoSelected = enemyPiecesInArea.slice(0, maxCaptures).map(ep => ep.id);
+        handleVaultCaptureResponse(playerId, { selectedCaptures: autoSelected });
+      }
+    }, 30000);
+    
+    return { success: true, message: 'Waiting for capture selection...', pending: true };
+  }
+  
   // Determine which pieces to capture based on jumper type
   let piecesToCapture = [];
   
   if (maxCaptures === 'unlimited' || maxCaptures === 'all') {
     // Hybrid Queen and Covenant Queen - capture ALL pieces in area
     piecesToCapture = enemyPiecesInArea.map(ep => ep.id);
+  } else if (selectedCaptures) {
+    // Use player's selected captures
+    piecesToCapture = selectedCaptures;
   } else {
-    // Other jumpers - capture up to maxCaptures pieces
-    // For vault pieces, this should be selective (player chooses which to capture)
-    // TODO: Later we can add player choice UI for vault pieces
+    // Auto-select for AI or non-vault pieces
     piecesToCapture = enemyPiecesInArea.slice(0, maxCaptures).map(ep => ep.id);
   }
   
   // Add landing capture if applicable (Vaultmistress, Covenant Queen, Mistress Jumper and Hybrid Queen)
-  if (landingCapture && matchingMove.canLandOnEnemy) {
+  if (landingCapture && matchingMove.canLandOnEnemy && !piecesToCapture.includes(landingCapture.id)) {
     piecesToCapture.push(landingCapture.id);
   }
   

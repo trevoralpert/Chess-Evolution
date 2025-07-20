@@ -2988,6 +2988,39 @@ socket.on('multi-jump-capture', (data) => {
   });
 });
 
+// Handle vault capture selection request
+socket.on('vault-capture-selection', (data) => {
+  console.log('Vault capture selection requested:', data);
+  showVaultCaptureSelection(data);
+});
+
+// Handle heir production notification
+socket.on('heir-produced', (data) => {
+  const { pieceId, pieceType, playerId, position } = data;
+  console.log(`👑 Heir produced by ${pieceType} at (${position.row}, ${position.col})`);
+  
+  // Show heir production notification
+  const player = gameState.players[playerId];
+  if (player) {
+    showNotification('Heir Produced!', `${pieceType} has produced an heir!`, 'info');
+  }
+  
+  // Create visual effect at position
+  const worldPos = getWorldPosition(position.row, position.col);
+  createHeirProductionEffect(worldPos);
+});
+
+// Handle heir activation (new King spawned)
+socket.on('heir-activated', (data) => {
+  const { playerId, message } = data;
+  console.log(`👑 Heir activated for player ${playerId}!`);
+  
+  const player = gameState.players[playerId];
+  if (player) {
+    showNotification('Heir Activated!', message, 'success');
+  }
+});
+
 function showNotification(message, color, duration) {
   // Create notification element
   const notification = document.createElement('div');
@@ -7436,4 +7469,298 @@ function hideEvolutionContextMenu() {
     clearInterval(window.evolutionContextCountdown);
     window.evolutionContextCountdown = null;
   }
+}
+
+// Show vault capture selection UI
+function showVaultCaptureSelection(data) {
+  const { pieceId, pieceType, jumpArea, enemyPieces, maxCaptures, canLandOnEnemy, landingCapture, timeLimit } = data;
+  
+  // Create overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'vault-capture-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+  `;
+  
+  // Create selection dialog
+  const dialog = document.createElement('div');
+  dialog.className = 'vault-capture-dialog';
+  dialog.style.cssText = `
+    background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
+    border: 2px solid #FFD700;
+    border-radius: 15px;
+    padding: 30px;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  `;
+  
+  // Title
+  const title = document.createElement('h2');
+  title.textContent = `${pieceType} Capture Selection`;
+  title.style.cssText = `
+    color: #FFD700;
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 24px;
+  `;
+  dialog.appendChild(title);
+  
+  // Instructions
+  const instructions = document.createElement('p');
+  instructions.textContent = `Select up to ${maxCaptures} enemy pieces to capture:`;
+  instructions.style.cssText = `
+    color: #fff;
+    text-align: center;
+    margin-bottom: 20px;
+  `;
+  dialog.appendChild(instructions);
+  
+  // Enemy pieces list
+  const piecesList = document.createElement('div');
+  piecesList.style.cssText = `
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+  `;
+  
+  const selectedPieces = new Set();
+  
+  enemyPieces.forEach(enemy => {
+    const pieceCard = document.createElement('div');
+    pieceCard.style.cssText = `
+      background: #333;
+      border: 2px solid #666;
+      border-radius: 10px;
+      padding: 10px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    `;
+    
+    const symbol = document.createElement('div');
+    symbol.textContent = enemy.symbol;
+    symbol.style.cssText = `
+      font-size: 32px;
+      margin-bottom: 5px;
+    `;
+    pieceCard.appendChild(symbol);
+    
+    const type = document.createElement('div');
+    type.textContent = enemy.type;
+    type.style.cssText = `
+      color: #ccc;
+      font-size: 12px;
+    `;
+    pieceCard.appendChild(type);
+    
+    const position = document.createElement('div');
+    position.textContent = `(${enemy.position.row}, ${enemy.position.col})`;
+    position.style.cssText = `
+      color: #999;
+      font-size: 10px;
+    `;
+    pieceCard.appendChild(position);
+    
+    pieceCard.onclick = () => {
+      if (selectedPieces.has(enemy.id)) {
+        selectedPieces.delete(enemy.id);
+        pieceCard.style.border = '2px solid #666';
+        pieceCard.style.background = '#333';
+      } else if (selectedPieces.size < maxCaptures) {
+        selectedPieces.add(enemy.id);
+        pieceCard.style.border = '2px solid #FFD700';
+        pieceCard.style.background = '#444';
+      }
+      updateConfirmButton();
+    };
+    
+    piecesList.appendChild(pieceCard);
+  });
+  
+  dialog.appendChild(piecesList);
+  
+  // Landing capture info
+  if (landingCapture && canLandOnEnemy) {
+    const landingInfo = document.createElement('div');
+    landingInfo.style.cssText = `
+      background: #444;
+      border: 2px solid #FF6600;
+      border-radius: 10px;
+      padding: 15px;
+      margin-bottom: 20px;
+      text-align: center;
+    `;
+    landingInfo.innerHTML = `
+      <p style="color: #FF6600; margin: 0 0 10px 0;">Landing Square Capture:</p>
+      <div style="font-size: 24px;">${landingCapture.symbol}</div>
+      <div style="color: #ccc; font-size: 14px;">${landingCapture.type} at (${landingCapture.position.row}, ${landingCapture.position.col})</div>
+      <div style="color: #999; font-size: 12px; margin-top: 10px;">This piece will be captured automatically when landing</div>
+    `;
+    dialog.appendChild(landingInfo);
+  }
+  
+  // Timer
+  const timer = document.createElement('div');
+  timer.style.cssText = `
+    text-align: center;
+    color: #FFD700;
+    font-size: 18px;
+    margin-bottom: 20px;
+  `;
+  let timeRemaining = timeLimit;
+  const updateTimer = () => {
+    timer.textContent = `Time remaining: ${timeRemaining}s`;
+    if (timeRemaining <= 0) {
+      clearInterval(timerInterval);
+      // Auto-submit with current selection
+      submitSelection();
+    }
+  };
+  updateTimer();
+  const timerInterval = setInterval(() => {
+    timeRemaining--;
+    updateTimer();
+  }, 1000);
+  dialog.appendChild(timer);
+  
+  // Buttons
+  const buttonContainer = document.createElement('div');
+  buttonContainer.style.cssText = `
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  `;
+  
+  const confirmButton = document.createElement('button');
+  confirmButton.textContent = 'Confirm Selection';
+  confirmButton.style.cssText = `
+    background: #FFD700;
+    color: #000;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    opacity: 0.5;
+  `;
+  confirmButton.disabled = true;
+  
+  const updateConfirmButton = () => {
+    if (selectedPieces.size > 0) {
+      confirmButton.disabled = false;
+      confirmButton.style.opacity = '1';
+      confirmButton.textContent = `Capture ${selectedPieces.size} piece${selectedPieces.size > 1 ? 's' : ''}`;
+    } else {
+      confirmButton.disabled = true;
+      confirmButton.style.opacity = '0.5';
+      confirmButton.textContent = 'Select pieces to capture';
+    }
+  };
+  
+  const submitSelection = () => {
+    clearInterval(timerInterval);
+    socket.emit('vault-capture-response', {
+      selectedCaptures: Array.from(selectedPieces)
+    });
+    document.body.removeChild(overlay);
+  };
+  
+  confirmButton.onclick = submitSelection;
+  buttonContainer.appendChild(confirmButton);
+  
+  dialog.appendChild(buttonContainer);
+  overlay.appendChild(dialog);
+  document.body.appendChild(overlay);
+  
+  updateConfirmButton();
+}
+
+// Create heir production visual effect
+function createHeirProductionEffect(worldPos) {
+  // Create golden crown particles
+  const particleCount = 50;
+  const particles = [];
+  
+  for (let i = 0; i < particleCount; i++) {
+    const particleGeometry = new THREE.SphereGeometry(0.02, 4, 4);
+    const particleMaterial = new THREE.MeshBasicMaterial({
+      color: 0xFFD700,
+      transparent: true,
+      opacity: 1
+    });
+    
+    const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+    particle.position.set(worldPos.x, worldPos.y, worldPos.z);
+    
+    // Random velocity
+    particle.userData.velocity = new THREE.Vector3(
+      (Math.random() - 0.5) * 0.02,
+      Math.random() * 0.03 + 0.01,
+      (Math.random() - 0.5) * 0.02
+    );
+    
+    scene.add(particle);
+    particles.push(particle);
+  }
+  
+  // Create golden ring effect
+  const ringGeometry = new THREE.RingGeometry(0.1, 0.3, 32);
+  const ringMaterial = new THREE.MeshBasicMaterial({
+    color: 0xFFD700,
+    transparent: true,
+    opacity: 0.8,
+    side: THREE.DoubleSide
+  });
+  
+  const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+  ring.position.set(worldPos.x, worldPos.y, worldPos.z);
+  ring.rotation.x = Math.PI / 2;
+  scene.add(ring);
+  
+  // Animate the effect
+  let animationTime = 0;
+  const animateHeirEffect = () => {
+    animationTime += 0.02;
+    
+    // Animate particles
+    particles.forEach((particle, index) => {
+      particle.position.add(particle.userData.velocity);
+      particle.userData.velocity.y -= 0.0005; // Gravity
+      particle.material.opacity = 1 - animationTime;
+      particle.scale.setScalar(1 + animationTime * 0.5);
+    });
+    
+    // Animate ring
+    ring.scale.setScalar(1 + animationTime * 3);
+    ring.material.opacity = 0.8 - animationTime;
+    
+    if (animationTime < 1) {
+      requestAnimationFrame(animateHeirEffect);
+    } else {
+      // Clean up
+      particles.forEach(particle => {
+        scene.remove(particle);
+        particle.geometry.dispose();
+        particle.material.dispose();
+      });
+      scene.remove(ring);
+      ringGeometry.dispose();
+      ringMaterial.dispose();
+    }
+  };
+  
+  animateHeirEffect();
 } 
