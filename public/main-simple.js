@@ -254,29 +254,31 @@ function initializeGameComponents() {
 function setupSocketListeners() {
   console.log('📡 Setting up socket event listeners...');
   
-  // Connection handlers
-  socket.on('connect', () => {
+  // Initialize the comprehensive socket communication system
+  initializeSocket();
+  
+  // Set up custom connection handling
+  window.onSocketConnected = () => {
     statusEl.textContent = 'Connected';
     statusEl.style.color = '#00ff00';
     console.log('Socket connected successfully');
-    console.log('My socket ID:', socket.id);
     
     // Initialize game components
     initializeGameComponents();
     
     // Send player info to server - colors auto-assigned by Phase 3 system
-    socket.emit('player-joined', {
+    emitEvent('player-joined', {
       name: playerName
       // ✅ PHASE 4 FIX: No color sent - server auto-assigns based on player index
     });
     
     // Request AI difficulties for the dropdown
-    socket.emit('get-ai-difficulties');
+    emitEvent('get-ai-difficulties');
     
     // Add AI player if vs AI mode
     if (gameMode === 'vsai') {
       setTimeout(() => {
-        socket.emit('add-ai-player', {
+        emitEvent('add-ai-player', {
           difficulty: 'MEDIUM',
           personality: {
             preferredPieces: ['QUEEN', 'ROOK', 'BISHOP'],
@@ -287,451 +289,66 @@ function setupSocketListeners() {
         });
       }, 1000);
     }
-  });
+  };
 
-  socket.on('disconnect', () => {
+  window.onSocketDisconnected = () => {
     statusEl.textContent = 'Disconnected';
     statusEl.style.color = '#ff0000';
-  });
+  };
 
-  socket.on('game-full', () => {
+  window.returnToMenu = () => {
     statusEl.textContent = 'Game Full';
     statusEl.style.color = '#ff8800';
     gameInfoEl.textContent = 'Game is full. Please try again later.';
-  });
+  };
 
-  socket.on('game-state-update', async (newGameState) => {
-    console.log('🔄 Received game state update:', newGameState);
-    console.log('🔄 Players in received state:', Object.keys(newGameState.players || {}));
-    console.log('🔄 Pieces in received state:', Object.keys(newGameState.pieces || {}));
-    console.log('🔄 Number of pieces received:', Object.keys(newGameState.pieces || {}).length);
-    
-    // PHASE 1D DEBUG: Force rendering in all game modes, including waiting
-    console.log('🎮 EMPTY BOARD DEBUG: Current game mode:', gameMode);
-    console.log('🎮 EMPTY BOARD DEBUG: Pieces to render:', Object.values(newGameState.pieces || {}).map(p => `${p.type}@(${p.row},${p.col})`));
-    
-    // Process delta updates for performance
-    const delta = performanceOptimizer.processDeltaUpdate(newGameState);
-    
-    if (delta.fullUpdate) {
-      // Full update on first load
-      console.log('🔄 Processing full update');
-      gameState = newGameState;
-      
-      // Evolution points are now included in the game state from the server
-      Object.keys(gameState.players).forEach(playerId => {
-        const evolutionPoints = gameState.players[playerId].evolutionPoints;
-        console.log(`🎯 Player ${playerId} has ${evolutionPoints} evolution points from server`);
-      });
-      
-      console.log('🎮 EMPTY BOARD DEBUG: About to call updateVisuals() with pieces:', Object.keys(gameState.pieces || {}));
-      await updateVisuals();
-      console.log('🎮 EMPTY BOARD DEBUG: updateVisuals() completed, rendered meshes:', Object.keys(pieceMeshes));
-      updateUI();
-      console.log('🔄 Full update completed');
-    } else {
-      // Delta update - only update changed elements
-      console.log('🔄 Processing delta update');
-      gameState = newGameState;
-      await updateVisualsDelta(delta);
-      
-      // Always call updateUI immediately for player count changes
-      updateUI();
-      
-      // Update evolution point labels when game state changes
-      updateAllEvolutionPointLabels();
-      
-      // Throttled UI updates for other elements
-      performanceOptimizer.createThrottledFunction('ui-update', () => {
-        updateUI();
-      }, 200);
-    }
-    
-    console.log('Game state updated:', gameState);
-    console.log('Players in game state:', Object.keys(gameState.players || {}));
-    console.log('Pieces in game state:', Object.keys(gameState.pieces || {}));
-    console.log('My socket ID:', socket.id);
-    console.log('Players object:', gameState.players);
-  });
+  // Set up global window functions for the socket communication module
+  window.updateVisuals = updateVisuals;
+  window.updateUI = updateUI;
+  window.updateAllEvolutionPointLabels = updateAllEvolutionPointLabels;
+  window.showNotification = showNotification;
+  window.highlightValidMoves = highlightValidMoves;
+  window.clearSelectedPiece = clearSelectedPiece;
+  window.removePieceMesh = removePieceMesh;
+  window.updatePieceMesh = updatePieceMesh;
+  window.addChatMessage = addChatMessage;
+  window.updateChatStatus = updateChatStatus;
+  window.updateActivePlayer = updateActivePlayer;
+  window.startTimer = startTimer;
+  window.updateTimerDisplay = updateTimerDisplay;
+  window.handlePlayerTimeout = handlePlayerTimeout;
+  window.pauseTimer = pauseTimer;
+  window.resumeTimer = resumeTimer;
+  window.updateSpectatorGamesList = updateSpectatorGamesList;
+  window.updateReplaysList = updateReplaysList;
+  window.updateReplayUI = updateReplayUI;
+  window.showTournamentResults = showTournamentResults;
 
-  // Essential game handlers
-  socket.on('valid-moves', (data) => {
-    // Only show moves if this is for the currently selected piece
-    if (data.pieceId === selectedPieceId) {
-      validMoves = data.moves;
-      
-      // Check if this is a Hybrid Queen with dual movement
-      const selectedPiece = gameState.pieces[selectedPieceId];
-      if (selectedPiece && selectedPiece.type === 'HYBRID_QUEEN' && data.moves.length > 0) {
-        showDualMovementUI();
-      }
-      
-      highlightValidMoves();
-    }
-  });
-
-  socket.on('move-result', (data) => {
-    if (data.success) {
-      console.log('Move successful:', data.message);
-      selectedPieceId = null;
-      validMoves = [];
-      clearValidMoveHighlights();
-      clearSelectionHighlight();
-      hideDualMovementUI();
-    } else {
-      console.error('Move failed:', data.message);
-      showNotification(data.message || 'Move failed', '#ff0000', 3000);
-    }
-  });
-
-  socket.on('battle-result', (data) => {
-    const { winner, loser, battleType } = data;
-    console.log(`Battle result: ${winner} defeated ${loser} (${battleType})`);
-  });
-
-  socket.on('piece-evolution', (data) => {
-    const { pieceId, oldType, newType, position } = data;
-    console.log(`🔄 Piece evolution: ${oldType} → ${newType} for piece ${pieceId}`);
-    
-    // Get the piece from game state
-    const piece = gameState.pieces[pieceId];
-    if (piece) {
-      const playerId = piece.playerId;
-      console.log(`🔄 Updating visual mesh for piece evolution: ${pieceId} from ${oldType} to ${newType}`);
-      
-      // PRESERVE ORIGINAL COLOR: Store the color from the old mesh before removing it
-      let originalColor = null;
-      const oldMesh = pieceMeshes[pieceId];
-      if (oldMesh) {
-        console.log(`🔍 Old mesh found:`, oldMesh);
-        console.log(`🔍 Old mesh material:`, oldMesh.material);
-        console.log(`🔍 Old mesh children:`, oldMesh.children);
-        
-        // Try to get color from the mesh or its children
-        if (oldMesh.material) {
-          if (Array.isArray(oldMesh.material)) {
-            originalColor = oldMesh.material[0].color.clone();
-          } else {
-            originalColor = oldMesh.material.color.clone();
-          }
-          console.log(`🎨 Preserved original color from mesh: ${originalColor.getHexString()}`);
-        } else if (oldMesh.children && oldMesh.children.length > 0) {
-          // Look for color in child meshes (GLB models often have children)
-          for (let child of oldMesh.children) {
-            if (child.material) {
-              if (Array.isArray(child.material)) {
-                originalColor = child.material[0].color.clone();
-              } else {
-                originalColor = child.material.color.clone();
-              }
-              console.log(`🎨 Preserved original color from child: ${originalColor.getHexString()}`);
-              break;
-            }
-          }
-        }
-        
-        if (!originalColor) {
-          console.log(`⚠️ Could not find original color, will use default player color`);
-        }
-      }
-      
-      // Update the piece type in game state to match server
-      piece.type = newType;
-      
-      // Remove old mesh
-      if (oldMesh) {
-        // Remove old mesh from scene
-        scene.remove(oldMesh);
-        
-        // Dispose of old mesh resources
-        if (oldMesh.geometry) oldMesh.geometry.dispose();
-        if (oldMesh.material) {
-          if (Array.isArray(oldMesh.material)) {
-            oldMesh.material.forEach(mat => mat.dispose());
-          } else {
-            oldMesh.material.dispose();
-          }
-        }
-        
-        // Remove from pieces cache
-        delete pieceMeshes[pieceId];
-        console.log(`🔄 Removed old ${oldType} mesh for piece ${pieceId}`);
-      }
-      
-      // Create new mesh with evolved type
-      createPieceMeshOptimized(piece).then(() => {
-        console.log(`✅ Successfully recreated mesh as ${newType} for piece ${pieceId}`);
-        
-        // APPLY PRESERVED COLOR: Set the new mesh to use the original color
-        if (pieceMeshes[pieceId]) {
-          const newMesh = pieceMeshes[pieceId];
-          
-          // If we preserved a color, use it; otherwise get the proper player color
-          let colorToApply = originalColor;
-          if (!colorToApply) {
-            // Get the proper player color
-            const player = gameState.players[playerId];
-            const playerIndex = Object.keys(gameState.players).indexOf(playerId);
-            const playerColor = getPlayerColor(playerId, playerIndex);
-            colorToApply = new THREE.Color(playerColor);
-            console.log(`🎨 Using player color ${colorToApply.getHexString()} for new ${newType} mesh`);
-          }
-          
-          // Apply color to mesh and all children
-          function applyColorToMesh(mesh, color) {
-            if (mesh.material) {
-              if (Array.isArray(mesh.material)) {
-                mesh.material.forEach(mat => {
-                  if (mat.color) mat.color.copy(color);
-                });
-              } else {
-                if (mesh.material.color) mesh.material.color.copy(color);
-              }
-            }
-            // Apply to children too
-            if (mesh.children) {
-              mesh.children.forEach(child => applyColorToMesh(child, color));
-            }
-          }
-          
-          applyColorToMesh(newMesh, colorToApply);
-          console.log(`🎨 Applied color ${colorToApply.getHexString()} to new ${newType} mesh and all children`);
-        }
-        
-        // Create evolution effect at the piece position
-        const worldPos = getWorldPosition(piece.row, piece.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
-        if (visualEffects) {
-          visualEffects.createEvolutionEffect(worldPos, oldType, newType);
-        }
-        
-        // Show notification
-        const player = gameState.players[playerId];
-        const playerName = player ? player.name : 'Unknown Player';
-        showNotification(`${playerName}'s ${oldType} evolved to ${newType}!`, '#00ff00', 3000);
-      }).catch(error => {
-        console.error(`❌ Failed to recreate evolved piece mesh:`, error);
-      });
-    } else {
-      console.warn(`⚠️ Piece ${pieceId} not found in game state for evolution`);
-    }
-  });
-
-  socket.on('evolution-point-award', (data) => {
-    // ✅ PHASE 6 BUG FIX: Server sends 'points', not 'amount'
-    const { playerId, points, reason } = data;
-    console.log(`Evolution points awarded: ${points} to ${playerId} for ${reason}`);
-    
-    // Update player's evolution points in game state
-    if (gameState.players[playerId]) {
-      gameState.players[playerId].evolutionPoints = (gameState.players[playerId].evolutionPoints || 0) + points;
-      console.log(`🎯 Updated player ${playerId} evolution points to:`, gameState.players[playerId].evolutionPoints);
-    }
-    
-    // Update all floating evolution point labels
-    updateAllEvolutionPointLabels();
-    
-    // Update evolution bank display if this is our player
-    if (socket.id === playerId) {
-      refreshEvolutionBank();
-    }
-  });
-
-  socket.on('player-eliminated', (data) => {
-    const { playerId, playerName, reason } = data;
-    console.log(`Player eliminated: ${playerName} (${reason})`);
-    
-    // Show elimination notification
-    if (socket.id === playerId) {
-      showNotification(`You have been eliminated! ${reason}`, '#ff0000', 5000);
-    } else {
-      showNotification(`${playerName} has been eliminated! ${reason}`, '#ff8800', 3000);
-    }
-    
-    // Update UI
-    updateUI();
-  });
-
-  // AI system handlers
-  socket.on('ai-player-added', (data) => {
-    const { aiPlayer } = data;
-    console.log('AI player added:', aiPlayer.name);
-    
-    // Update AI players list
-    currentAIPlayers = Object.values(gameState.players).filter(p => p.isAI);
-    updateAIPlayersList();
-    
-    showNotification(`AI player added: ${aiPlayer.name}`, '#00ff00', 2000);
-  });
-
-  socket.on('ai-difficulties', (data) => {
-    const { difficulties } = data;
-    console.log('AI difficulties received:', difficulties);
-    
-    // Update AI difficulty dropdown
-    const dropdown = document.getElementById('ai-difficulty-select');
-    if (dropdown) {
-      dropdown.innerHTML = '';
-      Object.entries(difficulties).forEach(([key, diff]) => {
-        const option = document.createElement('option');
-        option.value = key;
-        option.textContent = diff.name;
-        dropdown.appendChild(option);
-      });
-    }
-  });
-
-  // Chat system handlers
-  socket.on('chat-message', (data) => {
-    addChatMessage(data);
-  });
-
-  socket.on('chat-status', (data) => {
-    updateChatStatus(data.status);
-  });
-
-  // Auto-color assignment - no color selection needed
-  console.log('🎨 Using auto-color assignment - no manual color selection required');
-
-  // Evolution choice handlers
-  socket.on('evolution-choice-available', (data) => {
-    console.log('🎯 Evolution choice available:', data);
-    showEvolutionChoice(data);
-    showEvolutionUI(); // Auto-show evolution UI when choice is available
-  });
-
-  socket.on('evolution-choice-success', (data) => {
-    console.log('🎯 Evolution choice success:', data);
-    handleEvolutionCompleted(data);
-  });
-
-  socket.on('evolution-choice-failed', (data) => {
-    console.log('🎯 Evolution choice failed:', data);
-    hideEvolutionChoice();
-    showNotification('Evolution Failed', data.error, 'error');
-  });
-
-  socket.on('evolution-choice-cancelled', (data) => {
-    console.log('🎯 Evolution choice cancelled:', data);
-    hideEvolutionChoice();
-    showNotification('Evolution Cancelled', 'Evolution choice was cancelled', 'info');
-  });
-
-  socket.on('evolution-choice-dialog', (data) => {
-    console.log('🎯 Evolution choice dialog event received:', data);
-    const { pieceId, piece, reason, availablePaths, bankInfo, timeLimit } = data;
-    // ✅ PHASE 5: Use context menu instead of popup dialog
-    showEvolutionContextMenu(data, lastRightClickEvent);
-  });
-
-  socket.on('evolution-completed', (data) => {
-    // Handle evolution completed by other players
-    if (data.playerId !== socket.id) {
-      const playerName = gameState.players[data.playerId]?.name || 'Unknown';
-      showNotification('Player Evolution', 
-        `${playerName}'s ${data.oldType} evolved to ${data.newType}!`, 
-        'info');
-    }
-  });
-
-  socket.on('evolution-point-gained', (data) => {
-    console.log(`🎯 Evolution point gained event:`, data);
-    
-    // Update player's evolution points in game state
-    if (gameState.players[data.playerId]) {
-      gameState.players[data.playerId].evolutionPoints = data.totalPoints || (gameState.players[data.playerId].evolutionPoints || 0) + data.points;
-      console.log(`🎯 Updated player ${data.playerId} evolution points to:`, gameState.players[data.playerId].evolutionPoints);
-    }
-    
-    // Update all floating evolution point labels
-    updateAllEvolutionPointLabels();
-    
-    if (data.playerId === socket.id) {
-      showNotification('Evolution Points', 
-        `+${data.points} points (${data.reason.replace('_', ' ')})`, 
-        'success');
-      
-      // Update evolution bank display if UI is open
-      if (document.getElementById('evolution-ui').style.display === 'block') {
-        refreshEvolutionBank();
-      }
-    }
-  });
-
-  socket.on('evolution-points-banked', (data) => {
-    const { pieceId, playerId, points, totalPoints, reason } = data;
-    
-    if (playerId === socket.id) {
-      gameInfoEl.textContent = `Banked ${points} evolution points! Total: ${totalPoints}`;
-      showNotification('Evolution Points', 
-        `Banked ${points} points. Total: ${totalPoints}`, 
-        'success');
-    }
-  });
-
-  // Timer system handlers
-  socket.on('player-timer-started', (data) => {
-    console.log('🕒 Player timer started:', data);
-    if (data.playerId === socket.id) {
-      // Start visual timer countdown for this player
-      startRealTimeTimer(data.timerDuration);
-    }
-  });
-
-  socket.on('player-timer-update', (data) => {
-    console.log('🕒 Player timer update:', data);
-    if (data.playerId === socket.id) {
-      // Stop client-side timer when server updates start
-      if (currentTimer) {
-        clearInterval(currentTimer);
-        currentTimer = null;
-        console.log('🕒 Stopped client-side timer, using server updates');
-      }
-      updateTimerDisplay(data.timeRemaining);
-    }
-  });
-
-  socket.on('player-timer-zero', (data) => {
-    console.log('🕒 Player timer at zero:', data);
-    if (data.playerId === socket.id) {
-      // Timer is at 0, player can move
-      const statusEl = document.getElementById('timer-status');
-      if (statusEl) {
-        statusEl.textContent = 'Ready to move';
-        statusEl.style.color = '#00ff00';
-      }
-    }
-  });
-
-  socket.on('game-started-first-move', (data) => {
-    console.log('🎮 Game started:', data);
-    const statusEl = document.getElementById('timer-status');
-    if (statusEl) {
-      statusEl.textContent = 'Game Active';
-      statusEl.style.color = '#00ff00';
-    }
-    showNotification('Game Started!', data.message, 'success');
-  });
-
-  socket.on('active-player-changed', (data) => {
-    console.log('🔄 Active player changed:', data);
-    const activePlayerNameEl = document.getElementById('active-player-name');
-    if (activePlayerNameEl) {
-      activePlayerNameEl.textContent = data.playerName || 'Unknown';
-    }
-    
-    // Show notification if it's your turn
-    if (data.playerId === socket.id) {
-      showNotification('Your Turn!', 'Make your move', 'info');
-    }
-  });
+  // Set up additional global window functions
+  window.showDualMovementUI = showDualMovementUI;
+  window.clearValidMoveHighlights = clearValidMoveHighlights;
+  window.clearSelectionHighlight = clearSelectionHighlight;
+  window.hideDualMovementUI = hideDualMovementUI;
+  
+  console.log('✅ Socket communication module initialized and window functions set up');
 }
 
 // Socket.io connection - will be initialized when game starts
+}
+
+// Socket.io connection - initialized through the socket communication module
 let socket = null;
-console.log('Socket.io will be initialized when game starts');
+console.log('Socket.io will be initialized through the socket communication module');
 
 // Make socket globally accessible for evolution dialog functions
 window.globalSocket = null;
+
+// Initialize socket when needed
+function initializeSocketConnection() {
+  socket = initializeSocket();
+  window.globalSocket = socket;
+  return socket;
+}
 
 // Timer management variables
 let currentTimer = null;
@@ -1415,9 +1032,9 @@ const textLabelCache = new Map();
 
 // Removed all duplicate socket handlers - they are now properly handled in setupSocketListeners() function
 
-// All remaining duplicate socket handlers below this point should also be removed
+// All socket handlers have been moved to the socketCommunication module
 
-socket.on('tournament-joined', (data) => {
+// Auto-update color display when game state changes
   const { tournament, player } = data;
   console.log(`Joined tournament: ${tournament.name} as ${player.name}`);
   gameInfoEl.textContent = `Joined tournament: ${tournament.name}`;
@@ -1429,359 +1046,23 @@ socket.on('tournament-joined', (data) => {
   updateTournamentStatus(tournament);
 });
 
-socket.on('tournament-join-failed', (data) => {
-  const { error } = data;
-  console.log(`Failed to join tournament: ${error}`);
-  gameInfoEl.textContent = `Failed to join tournament: ${error}`;
-  gameInfoEl.style.color = '#ff4444';
-  setTimeout(() => {
-    gameInfoEl.style.color = '#ffffff';
-  }, 3000);
-});
 
-socket.on('tournament-started', (data) => {
-  const { tournament } = data;
-  console.log(`Tournament started: ${tournament.name}`);
-  gameInfoEl.textContent = `Tournament started: ${tournament.name}`;
-  gameInfoEl.style.color = '#ffd700';
-  setTimeout(() => {
-    gameInfoEl.style.color = '#ffffff';
-  }, 3000);
-  
-  updateTournamentStatus(tournament);
-});
 
-socket.on('tournament-updated', (data) => {
-  const { tournament } = data;
-  updateTournamentStatus(tournament);
-});
 
-socket.on('tournament-match-started', (data) => {
-  const { tournamentId, match, tournament } = data;
-  console.log(`Tournament match started: ${match.player1.name} vs ${match.player2.name}`);
-  gameInfoEl.textContent = `Match started: ${match.player1.name} vs ${match.player2.name}`;
-  gameInfoEl.style.color = '#ffd700';
-  setTimeout(() => {
-    gameInfoEl.style.color = '#ffffff';
-  }, 3000);
-  
-  updateTournamentStatus(tournament);
-});
 
-socket.on('tournament-match-completed', (data) => {
-  const { match, tournament } = data;
-  console.log(`Tournament match completed: ${match.winner.name} wins!`);
-  gameInfoEl.textContent = `Match completed: ${match.winner.name} wins!`;
-  gameInfoEl.style.color = '#44ff44';
-  setTimeout(() => {
-    gameInfoEl.style.color = '#ffffff';
-  }, 3000);
-  
-  updateTournamentStatus(tournament);
-});
 
-socket.on('tournament-completed', (data) => {
-  const { tournament, winner, prizes, leaderboard } = data;
-  console.log(`Tournament completed: ${winner.name} is the champion!`);
-  gameInfoEl.textContent = `🏆 Tournament Champion: ${winner.name}! 🏆`;
-  gameInfoEl.style.color = '#ffd700';
-  setTimeout(() => {
-    gameInfoEl.style.color = '#ffffff';
-  }, 10000);
-  
-  updateTournamentStatus(tournament);
-  
-  // Display championship celebration
-  if (leaderboard && leaderboard.length > 0) {
-    const championInfo = leaderboard.find(p => p.isChampion);
-    if (championInfo) {
-      setTimeout(() => {
-        alert(`🏆 TOURNAMENT CHAMPION 🏆\n\n${championInfo.name}\n\nWins: ${championInfo.wins}\nWin Rate: ${championInfo.winRate}%\n\nCongratulations!`);
-      }, 1000);
-    }
-  }
-});
 
-socket.on('tournament-info', (data) => {
-  const { tournament } = data;
-  updateTournamentStatus(tournament);
-});
 
-socket.on('battle-contest-prompt', (data) => {
-  const { battleId, attackingPiece, defendingPiece, timeLimit } = data;
-  console.log(`Battle contest prompt: ${attackingPiece.symbol} attacking ${defendingPiece.symbol}`);
-  
-  // Show contest prompt UI
-  showBattleContestPrompt(battleId, attackingPiece, defendingPiece, timeLimit);
-});
 
-socket.on('dice-battle-animation', (data) => {
-  const { battleLog, winner, loser, duration } = data;
-  console.log(`Dice battle animation: ${battleLog.attackerDice} vs ${battleLog.defenderDice}`);
-  
-  // Show dice battle animation
-  showDiceBattleAnimation(battleLog, winner, loser, duration);
-});
 
-socket.on('player-eliminated', (data) => {
-  const { eliminatedPlayerId, playerIndex, remainingPlayers } = data;
-  console.log(`PLAYER ELIMINATED: Player ${playerIndex + 1} (${eliminatedPlayerId}) eliminated! ${remainingPlayers} players remaining.`);
-  
-  // Update UI with elimination information
-  gameInfoEl.textContent = `Player ${playerIndex + 1} eliminated! ${remainingPlayers} players left`;
-  gameInfoEl.style.color = '#ff4444';
-  
-  // Show elimination notification
-  showNotification(`Player ${playerIndex + 1} eliminated!`, '#ff4444', 3000);
-  
-  // Flash the globe red briefly
-  const originalColor = globe.material.color.clone();
-  globe.material.color.setHex(0xff4444);
-  setTimeout(() => {
-    globe.material.color.copy(originalColor);
-  }, 500);
-});
 
 // Victory handler moved to line ~5600 to integrate with game over screen
 
-socket.on('piece-split', (data) => {
-  const { originalPieceId, newPieceId, originalPosition, newPosition, playerId } = data;
-  console.log(`Piece split: ${originalPieceId} created copy ${newPieceId} at (${newPosition.row}, ${newPosition.col})`);
-  
-  // Show split notification
-  const player = gameState.players[playerId];
-  const playerIndex = Object.keys(gameState.players).indexOf(playerId) + 1;
-  showNotification(`Player ${playerIndex} Splitter Split!`, player.color, 2000);
-  
-  // Create split effect animation
-  const originalWorldPos = getWorldPosition(originalPosition.row, originalPosition.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
-  const newWorldPos = getWorldPosition(newPosition.row, newPosition.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
-  
-  // Create splitting effect - line between original and new position
-  const splitLineGeometry = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(originalWorldPos.x, originalWorldPos.y, originalWorldPos.z),
-    new THREE.Vector3(newWorldPos.x, newWorldPos.y, newWorldPos.z)
-  ]);
-  
-  const splitLineMaterial = new THREE.LineBasicMaterial({
-    color: 0xFF6B6B, // Red color for splitter
-    linewidth: 3,
-    transparent: true,
-    opacity: 0.8
-  });
-  
-  const splitLine = new THREE.Line(splitLineGeometry, splitLineMaterial);
-  scene.add(splitLine);
-  
-  // Animate the split line
-  let opacity = 0.8;
-  const animateSplitLine = () => {
-    opacity -= 0.05;
-    splitLine.material.opacity = opacity;
-    
-    if (opacity > 0) {
-      requestAnimationFrame(animateSplitLine);
-    } else {
-      scene.remove(splitLine);
-      splitLineGeometry.dispose();
-      splitLineMaterial.dispose();
-    }
-  };
-  
-  // Start animation after a short delay
-  setTimeout(() => {
-    animateSplitLine();
-  }, 500);
-});
-
-socket.on('split-result', (data) => {
-  const { success, message } = data;
-  if (success) {
-    console.log('Split successful:', message);
-    gameInfoEl.textContent = 'Split successful!';
-    gameInfoEl.style.color = '#4CAF50';
-  } else {
-    console.log('Split failed:', message);
-    gameInfoEl.textContent = `Split failed: ${message}`;
-    gameInfoEl.style.color = '#f44336';
-  }
-  
-  // Reset UI color after 3 seconds
-  setTimeout(() => {
-    gameInfoEl.style.color = '#ffffff';
-  }, 3000);
-});
 
 
 
-socket.on('jump-capture', (data) => {
-  const { jumperId, capturedPieceId, jumperPosition, capturedPosition, playerId } = data;
-  console.log(`Jump capture: ${jumperId} captured ${capturedPieceId} by jumping over`);
-  
-  // Show jump capture notification
-  const player = gameState.players[playerId];
-  if (player) {
-    const playerIndex = Object.keys(gameState.players).indexOf(playerId) + 1;
-    showNotification(`Player ${playerIndex} Jump Capture!`, player.color, 2000);
-  }
-  
-  // Create jump capture animation
-  const jumperWorldPos = getWorldPosition(jumperPosition.row, jumperPosition.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
-  const capturedWorldPos = getWorldPosition(capturedPosition.row, capturedPosition.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
-  
-  // Create arc effect showing the jump
-  const jumpArcGeometry = new THREE.BufferGeometry();
-  const jumpArcPoints = [];
-  
-  // Create arc from captured position to jumper position
-  for (let i = 0; i <= 20; i++) {
-    const t = i / 20;
-    const x = capturedWorldPos.x + (jumperWorldPos.x - capturedWorldPos.x) * t;
-    const y = capturedWorldPos.y + (jumperWorldPos.y - capturedWorldPos.y) * t + Math.sin(t * Math.PI) * 0.3;
-    const z = capturedWorldPos.z + (jumperWorldPos.z - capturedWorldPos.z) * t;
-    jumpArcPoints.push(new THREE.Vector3(x, y, z));
-  }
-  
-  jumpArcGeometry.setFromPoints(jumpArcPoints);
-  
-  const jumpArcMaterial = new THREE.LineBasicMaterial({
-    color: 0xff8800, // Orange color for jump capture
-    linewidth: 3,
-    transparent: true,
-    opacity: 0.9
-  });
-  
-  const jumpArc = new THREE.Line(jumpArcGeometry, jumpArcMaterial);
-  scene.add(jumpArc);
-  
-  // Create explosion effect at captured position
-  const explosionGeometry = new THREE.SphereGeometry(0.2, 8, 8);
-  const explosionMaterial = new THREE.MeshBasicMaterial({
-    color: 0xff4444,
-    transparent: true,
-    opacity: 0.7,
-    wireframe: true
-  });
-  
-  const explosion = new THREE.Mesh(explosionGeometry, explosionMaterial);
-  explosion.position.set(capturedWorldPos.x, capturedWorldPos.y, capturedWorldPos.z);
-  scene.add(explosion);
-  
-  // Animate the effects
-  let animationTime = 0;
-  const animateJumpCapture = () => {
-    animationTime += 0.05;
-    
-    // Fade out arc
-    jumpArc.material.opacity = 0.9 - animationTime;
-    
-    // Expand and fade explosion
-    explosion.scale.set(1 + animationTime * 2, 1 + animationTime * 2, 1 + animationTime * 2);
-    explosion.material.opacity = 0.7 - animationTime;
-    
-    if (animationTime < 1) {
-      requestAnimationFrame(animateJumpCapture);
-    } else {
-      // Clean up
-      scene.remove(jumpArc);
-      scene.remove(explosion);
-      jumpArcGeometry.dispose();
-      jumpArcMaterial.dispose();
-      explosionGeometry.dispose();
-      explosionMaterial.dispose();
-    }
-  };
-  
-  animateJumpCapture();
-});
 
-socket.on('multi-jump-capture', (data) => {
-  const { jumperId, capturedPieceIds, capturedPieces, jumperPosition, captureArea, playerId } = data;
-  console.log(`Multi-jump capture: ${jumperId} captured ${capturedPieces.length} pieces`);
-  
-  // Show multi-jump capture notification
-  const player = gameState.players[playerId];
-  if (player) {
-    const playerIndex = Object.keys(gameState.players).indexOf(playerId) + 1;
-    showNotification(`Player ${playerIndex} Multi-Capture! ${capturedPieces.length} pieces!`, player.color, 3000);
-  }
-  
-  // Create multi-capture visual effects
-  const jumperWorldPos = getWorldPosition(jumperPosition.row, jumperPosition.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
-  
-  // Create effects for each captured piece
-  capturedPieces.forEach((capturedPiece, index) => {
-    const capturedWorldPos = getWorldPosition(capturedPiece.row, capturedPiece.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
-    
-    // Create lightning effect from captured piece to jumper
-    const lightningGeometry = new THREE.BufferGeometry();
-    const lightningPoints = [];
-    
-    // Create jagged lightning path
-    for (let i = 0; i <= 10; i++) {
-      const t = i / 10;
-      const x = capturedWorldPos.x + (jumperWorldPos.x - capturedWorldPos.x) * t + (Math.random() - 0.5) * 0.1;
-      const y = capturedWorldPos.y + (jumperWorldPos.y - capturedWorldPos.y) * t + (Math.random() - 0.5) * 0.1;
-      const z = capturedWorldPos.z + (jumperWorldPos.z - capturedWorldPos.z) * t + (Math.random() - 0.5) * 0.1;
-      lightningPoints.push(new THREE.Vector3(x, y, z));
-    }
-    
-    lightningGeometry.setFromPoints(lightningPoints);
-    
-    const lightningMaterial = new THREE.LineBasicMaterial({
-      color: 0xaa00ff, // Purple color for multi-capture
-      linewidth: 2,
-      transparent: true,
-      opacity: 0.8
-    });
-    
-    const lightning = new THREE.Line(lightningGeometry, lightningMaterial);
-    scene.add(lightning);
-    
-    // Create explosion effect at captured position
-    const explosionGeometry = new THREE.SphereGeometry(0.15, 8, 8);
-    const explosionMaterial = new THREE.MeshBasicMaterial({
-      color: 0xaa00ff,
-      transparent: true,
-      opacity: 0.6,
-      wireframe: true
-    });
-    
-    const explosion = new THREE.Mesh(explosionGeometry, explosionMaterial);
-    explosion.position.set(capturedWorldPos.x, capturedWorldPos.y, capturedWorldPos.z);
-    scene.add(explosion);
-    
-    // Animate the effects with staggered timing
-    let animationTime = 0;
-    const animateMultiCapture = () => {
-      animationTime += 0.04;
-      
-      // Fade out lightning
-      lightning.material.opacity = 0.8 - animationTime;
-      
-      // Expand and fade explosion
-      explosion.scale.set(1 + animationTime * 3, 1 + animationTime * 3, 1 + animationTime * 3);
-      explosion.material.opacity = 0.6 - animationTime;
-      
-      if (animationTime < 1) {
-        requestAnimationFrame(animateMultiCapture);
-      } else {
-        // Clean up
-        scene.remove(lightning);
-        scene.remove(explosion);
-        lightningGeometry.dispose();
-        lightningMaterial.dispose();
-        explosionGeometry.dispose();
-        explosionMaterial.dispose();
-      }
-    };
-    
-    // Start animation with slight delay for each piece
-    setTimeout(() => {
-      animateMultiCapture();
-    }, index * 100);
-  });
-});
+
 
 function showNotification(message, color, duration) {
   // Create notification element
@@ -3666,51 +2947,12 @@ function formatTime(milliseconds) {
 }
 
 // Socket event handlers for spectator mode
-socket.on('spectator-joined', (data) => {
-  isSpectating = true;
-  document.getElementById('join-spectator-btn').style.display = 'none';
-  document.getElementById('leave-spectator-btn').style.display = 'block';
-  document.getElementById('spectator-game-status').textContent = 'Spectating';
-  console.log('Joined as spectator:', data);
-});
 
-socket.on('spectator-left', (data) => {
-  isSpectating = false;
-  document.getElementById('join-spectator-btn').style.display = 'block';
-  document.getElementById('leave-spectator-btn').style.display = 'none';
-  document.getElementById('spectator-game-status').textContent = 'Not spectating';
-  console.log('Left spectator mode:', data);
-});
 
-socket.on('spectator-count-updated', (data) => {
-  spectatorCount = data.count;
-  document.getElementById('spectator-count').textContent = spectatorCount;
-});
 
-socket.on('spectatable-games', (data) => {
-  updateSpectatorGamesList(data.games);
-});
 
-socket.on('replay-list', (data) => {
-  updateReplaysList(data.replays);
-});
 
-socket.on('replay-data', (data) => {
-  currentReplay = data.replay;
-  replayCurrentMove = 0;
-  document.getElementById('replay-controls').style.display = 'block';
-  document.getElementById('stop-replay-btn').style.display = 'block';
-  updateReplayUI();
-  console.log('Loaded replay:', data.replay);
-});
 
-socket.on('replay-state', (data) => {
-  if (data.gameState && data.moves) {
-    // Update the game visualization with replay state
-    updateGameVisualization(data.gameState, data.moves);
-    updateReplayUI();
-  }
-});
 
 function updateSpectatorGamesList(games) {
   const gamesList = document.getElementById('spectator-games-list');
@@ -3878,347 +3120,56 @@ function updateAIStats(aiPlayerId, stats) {
 }
 
 // Socket event handlers for AI
-socket.on('ai-player-added', (data) => {
-  console.log('AI player added:', data);
-  currentAIPlayers.push(data.aiPlayer);
-  updateAIPlayersList();
-  
-  // Show notification
-  const notification = document.createElement('div');
-  notification.style.cssText = `
-    position: fixed;
-    top: 50px;
-    right: 20px;
-    background: #00cc66;
-    color: white;
-    padding: 10px;
-    border-radius: 5px;
-    z-index: 1000;
-    font-size: 14px;
-  `;
-  notification.textContent = `🤖 AI Player Added: ${data.aiPlayer.name} (${data.difficulty})`;
-  document.body.appendChild(notification);
-  
-  setTimeout(() => {
-    notification.remove();
-  }, 3000);
-});
 
-socket.on('ai-player-removed', (data) => {
-  console.log('AI player removed:', data);
-  currentAIPlayers = currentAIPlayers.filter(p => p.id !== data.aiPlayerId);
-  updateAIPlayersList();
-});
 
-socket.on('ai-add-failed', (data) => {
-  console.log('AI add failed:', data);
-  alert('Failed to add AI player: ' + data.error);
-});
 
-socket.on('ai-difficulties', (data) => {
-  console.log('AI difficulties:', data);
-  // Update difficulty select if needed
-  const difficultySelect = document.getElementById('ai-difficulty-select');
-  if (difficultySelect && data && data.difficulties) {
-    difficultySelect.innerHTML = '';
-    data.difficulties.forEach((diff) => {
-      const option = document.createElement('option');
-      option.value = diff.key;
-      option.textContent = diff.name;
-      difficultySelect.appendChild(option);
-    });
-    // Set default to MEDIUM
-    difficultySelect.value = 'MEDIUM';
-  }
-});
 
-socket.on('ai-difficulty-updated', (data) => {
-  console.log('AI difficulty updated:', data);
-  const aiPlayer = currentAIPlayers.find(p => p.id === data.aiPlayerId);
-  if (aiPlayer) {
-    aiPlayer.aiDifficulty = data.newDifficulty;
-    updateAIPlayersList();
-  }
-});
 
-socket.on('ai-stats', (data) => {
-  console.log('AI stats:', data);
-  updateAIStats(data.aiPlayerId, data.stats);
-});
 
-socket.on('ai-move-completed', (data) => {
-  console.log('AI move completed:', data);
-  
-  // Show AI move notification
-  const notification = document.createElement('div');
-  notification.style.cssText = `
-    position: fixed;
-    top: 80px;
-    right: 20px;
-    background: rgba(0, 204, 102, 0.9);
-    color: white;
-    padding: 8px;
-    border-radius: 3px;
-    z-index: 1000;
-    font-size: 12px;
-    max-width: 300px;
-  `;
-  notification.textContent = `🤖 ${data.aiName}: ${data.moveResult}`;
-  document.body.appendChild(notification);
-  
-  setTimeout(() => {
-    notification.remove();
-  }, 2000);
-});
 
 // Update currentAIPlayers when game state changes
-socket.on('game-state-update', (data) => {
-  // Update AI players list based on game state
-  const aiPlayersInGame = Object.values(data.players).filter(p => p.isAI);
-  currentAIPlayers = aiPlayersInGame;
-  updateAIPlayersList();
-});
 
 // Lobby system socket handlers
-socket.on('lobby-created', (data) => {
-  currentLobby = data.lobby;
-  isInLobby = true;
-  showLobbyRoom(data.lobby);
-  console.log('Lobby created:', data.lobby.name);
-});
 
-socket.on('lobby-joined', (data) => {
-  currentLobby = data.lobby;
-  isInLobby = true;
-  showLobbyRoom(data.lobby);
-  console.log('Joined lobby:', data.lobby.name);
-});
 
-socket.on('lobby-left', (data) => {
-  currentLobby = null;
-  isInLobby = false;
-  hideLobbyCreation();
-  refreshLobbies({ socket });
-  console.log('Left lobby:', data.lobbyId);
-});
 
-socket.on('lobby-updated', (data) => {
-  if (currentLobby && currentLobby.id === data.lobby.id) {
-    currentLobby = data.lobby;
-    updateLobbyRoomDisplay(data.lobby);
-  }
-});
 
-socket.on('lobby-list', (data) => {
-  lobbies = data.lobbies;
-  updateLobbyList(lobbies);
-});
 
-socket.on('lobby-list-update', (data) => {
-  lobbies = data.lobbies;
-  updateLobbyList(lobbies);
-});
 
-socket.on('lobby-creation-failed', (data) => {
-  alert('Failed to create lobby: ' + data.error);
-});
 
-socket.on('lobby-join-failed', (data) => {
-  alert('Failed to join lobby: ' + data.error);
-});
 
-socket.on('lobby-leave-failed', (data) => {
-  alert('Failed to leave lobby: ' + data.error);
-});
 
-socket.on('ready-toggled', (data) => {
-  console.log('Ready status toggled:', data.ready);
-});
 
-socket.on('ready-toggle-failed', (data) => {
-  alert('Failed to toggle ready status: ' + data.error);
-});
 
 // === NEW GAME MODE EVENT HANDLERS ===
 
-socket.on('game-created', (data) => {
-  console.log('🎉 Game created successfully!', data);
-  console.log('🎮 EMPTY BOARD DEBUG: game-created event received, gameType:', data.gameType);
-  console.log('🎮 EMPTY BOARD DEBUG: players in created game:', data.players);
-  showNotification('Game Created!', data.message);
-  
-  if (data.gameType === 'vs-human-waiting') {
-    console.log('🎮 EMPTY BOARD DEBUG: Human vs human waiting mode - forcing visual update');
-    showNotification('Waiting for Opponent', 'Game created! Waiting for another player to join...');
-    
-    // Force visual update to ensure pieces are shown even while waiting
-    if (data.players && Object.keys(data.players).length > 0) {
-      console.log('🎮 EMPTY BOARD DEBUG: Found players in game-created, calling updateVisuals');
-      // Trigger piece rendering even in waiting mode
-      setTimeout(() => updateVisuals(), 500);
-    }
-  }
-});
 
-socket.on('game-joined', (data) => {
-  console.log('🎉 Successfully joined game!', data);
-  showNotification('Game Joined!', data.message);
-});
 
-socket.on('game-creation-failed', (data) => {
-  console.error('❌ Game creation failed:', data.error);
-  showNotification('Failed to Create Game', data.error);
-  returnToMenu();
-});
 
-socket.on('join-failed', (data) => {
-  console.error('❌ Failed to join game:', data.error);
-  showNotification('Failed to Join Game', data.error);
-  returnToMenu();
-});
 
-socket.on('game-waiting-for-players', (data) => {
-  console.log('🕐 Game waiting for players:', data);
-  if (!isInGame) {
-    showNotification('Game Available!', `${data.creatorName} is waiting for an opponent. Click "Join Game" to play!`);
-  }
-});
 
-socket.on('player-joined-game', (data) => {
-  console.log('👥 Player joined the game:', data);
-  showNotification('Player Joined!', `${data.playerName} joined the game! (${data.totalPlayers} players total)`);
-});
 
-socket.on('game-preview', (data) => {
-  console.log('👀 Game preview:', data);
-  // Update join button status based on whether game can be joined
-  const joinBtn = document.getElementById('join-game-btn');
-  if (joinBtn) {
-    if (data.canJoin && !data.gameInProgress) {
-      joinBtn.disabled = false;
-      joinBtn.textContent = `JOIN GAME (${data.playersCount}/4)`;
-    } else {
-      joinBtn.disabled = true;
-      joinBtn.textContent = data.gameInProgress ? 'GAME IN PROGRESS' : 'GAME FULL';
-    }
-  }
-});
 
-socket.on('game-starting', (data) => {
-  console.log('Game starting in 3 seconds...');
-  startGameCountdown(data.countdown);
-});
 
-socket.on('game-started', (data) => {
-  console.log('Game started!', data);
-  currentLobby = null;
-  isInLobby = false;
-  hideLobbyUI();
-  
-  // The game state will be updated through the normal game-state-update event
-  showNotification('Game Started!', 'The game has begun. Good luck!');
-});
 
-socket.on('lobby-settings-updated', (data) => {
-  console.log('Lobby settings updated:', data.settings);
-});
 
-socket.on('lobby-settings-update-failed', (data) => {
-  alert('Failed to update lobby settings: ' + data.error);
-});
 
-socket.on('lobby-info', (data) => {
-  console.log('Lobby info:', data.lobby);
-});
 
-socket.on('lobby-not-found', (data) => {
-  alert('Lobby not found: ' + data.lobbyId);
-});
 
-socket.on('player-lobby', (data) => {
-  if (data.lobby) {
-    currentLobby = data.lobby;
-    isInLobby = true;
-    showLobbyRoom(data.lobby);
-  }
-});
 
-socket.on('lobby-stats', (data) => {
-  console.log('Lobby stats:', data.stats);
-});
 
 // Statistics system socket handlers
-socket.on('player-stats', (data) => {
-  playerStats = data.stats;
-  displayPersonalStats(playerStats);
-});
 
-socket.on('leaderboard', (data) => {
-  currentLeaderboard = data.leaderboard;
-  displayLeaderboard(currentLeaderboard, data.category);
-});
 
 // Delta update handlers for better performance
-socket.on('piece-update', (data) => {
-  const { pieceId, piece } = data;
-  if (gameState.pieces) {
-    gameState.pieces[pieceId] = piece;
-    performanceOptimizer.updatePieceEfficient(piece);
-    
-    // Throttled UI update
-    performanceOptimizer.createThrottledFunction('ui-update', () => {
-      updateUI();
-    }, 200);
-  }
-});
 
-socket.on('piece-removed', (data) => {
-  const { pieceId } = data;
-  if (gameState.pieces && gameState.pieces[pieceId]) {
-    delete gameState.pieces[pieceId];
-    performanceOptimizer.removePieceEfficient(pieceId);
-    
-    // Throttled UI update
-    performanceOptimizer.createThrottledFunction('ui-update', () => {
-      updateUI();
-    }, 200);
-  }
-});
 
-socket.on('player-update', (data) => {
-  const { playerId, player } = data;
-  if (gameState.players) {
-    gameState.players[playerId] = player;
-    
-    // Throttled UI update
-    performanceOptimizer.createThrottledFunction('ui-update', () => {
-      updateUI();
-    }, 200);
-  }
-});
 
-socket.on('achievements', (data) => {
-  playerAchievements = data.achievements;
-  displayAchievements(playerAchievements);
-});
 
-socket.on('global-stats', (data) => {
-  globalStats = data.stats;
-  displayGlobalStats(globalStats);
-});
 
-socket.on('player-rank', (data) => {
-  console.log(`Player rank in ${data.category}: ${data.rank}`);
-});
 
-socket.on('game-history', (data) => {
-  console.log('Game history:', data.history);
-});
 
 // Evolution system socket handlers
-socket.on('evolution-bank-info', (data) => {
-  updateEvolutionBank(data.bankInfo);
-});
 
 // Evolution choice handlers moved to setupSocketListeners() function
 
@@ -4343,246 +3294,33 @@ function updateChatStatus(status) {
 }
 
 // Timer system socket handlers
-socket.on('timer-started', (data) => {
-  console.log('Timer started:', data);
-  startTimer(data.playerId, data.timeLimit, data.startTime);
-  
-  // Update active player display
-  const player = gameState.players[data.playerId];
-  if (player) {
-    updateActivePlayer(data.playerId, player.name);
-  }
-});
 
-socket.on('turn-changed', (data) => {
-  console.log('Turn changed:', data);
-  updateActivePlayer(data.activePlayer, data.playerName);
-  
-  // Show notification if it's your turn
-  if (data.activePlayer === socket.id) {
-    showNotification('Your Turn', 'Make your move!', 'info');
-  }
-});
 
-socket.on('player-timeout', (data) => {
-  console.log('Player timeout:', data);
-  showNotification('Player Timeout', data.message, 'warning');
-  
-  // Clear the timer display
-  if (currentTimer) {
-    clearInterval(currentTimer);
-    currentTimer = null;
-  }
-  
-  document.getElementById('timer-status').textContent = 'Player timed out';
-  document.getElementById('timer-status').style.color = '#ff8800';
-});
 
-socket.on('timers-paused', (data) => {
-  console.log('Timers paused:', data);
-  pauseTimer();
-});
 
-socket.on('timers-resumed', (data) => {
-  console.log('Timers resumed:', data);
-  resumeTimer();
-});
 
-socket.on('move-pending', (data) => {
-  console.log('Move pending:', data);
-  showNotification('Move Pending', data.message, 'info');
-  
-  // Pause timer briefly to show move is being processed
-  if (currentTimer) {
-    clearInterval(currentTimer);
-    currentTimer = null;
-  }
-  
-  document.getElementById('timer-status').textContent = 'Processing move...';
-  document.getElementById('timer-status').style.color = '#ffff00';
-});
 
-socket.on('move-collision', (data) => {
-  console.log('Move collision:', data);
-  showNotification('Collision!', data.message, 'warning');
-  
-  // Pause timer during collision resolution
-  pauseTimer();
-});
 
 // Real-time system handlers
-socket.on('game-ready-to-begin', (data) => {
-  console.log('Game ready to begin:', data);
-  const statusEl = document.getElementById('timer-status');
-  if (statusEl) {
-    statusEl.textContent = data.message;
-    statusEl.style.color = '#00ff00';
-  }
-  showNotification('Game Ready', `${data.message} - ${data.playersReady} players ready`, 'success');
-});
 
-socket.on('waiting-for-players', (data) => {
-  console.log('Waiting for players:', data);
-  const statusEl = document.getElementById('timer-status');
-  if (statusEl) {
-    statusEl.textContent = `${data.message} (${data.playersReady}/${data.playersNeeded})`;
-    statusEl.style.color = '#ffff00';
-  }
-});
 
-socket.on('move-queued', (data) => {
-  console.log('Move queued:', data);
-  showNotification('Move Queued', data.message, 'info');
-  
-  // Show queue indicator
-  const statusEl = document.getElementById('timer-status');
-  if (statusEl) {
-    statusEl.textContent = 'Move queued - waiting for timer';
-    statusEl.style.color = '#ffaa00';
-  }
-});
 
-socket.on('move-cancelled', (data) => {
-  console.log('Move cancelled:', data);
-  if (data.playerId === socket.id) {
-    showNotification('Move Cancelled', 'Queued move has been cancelled', 'info');
-    
-    // Clear queue indicator
-    const statusEl = document.getElementById('timer-status');
-    if (statusEl) {
-      statusEl.textContent = 'Timer counting down...';
-      statusEl.style.color = '#ff8800';
-    }
-  }
-});
 
-socket.on('cancel-queued-move-result', (data) => {
-  console.log('Cancel queued move result:', data);
-  if (data.success) {
-    showNotification('Move Cancelled', 'Queued move cancelled successfully', 'info');
-  } else {
-    showNotification('Cancel Failed', 'No move to cancel', 'warning');
-  }
-});
 
-socket.on('player-timer-state', (data) => {
-  console.log('Player timer state:', data);
-  // Update UI based on timer and queue state
-  updateTimerUI(data.timer, data.queuedMove);
-});
 
-socket.on('queued-move-state', (data) => {
-  console.log('Queued move state:', data);
-  // Update queue display
-  updateQueueDisplay(data.queuedMove);
-});
 
-socket.on('collision-contest-prompt', (data) => {
-  console.log('Collision contest prompt:', data);
-  showNotification('Collision Contest', 
-    `${data.attackingPiece.symbol} vs ${data.defendingPiece.symbol} at (${data.targetPosition.row}, ${data.targetPosition.col})`, 
-    'warning');
-  
-  // This would normally show a contest UI, but for now just show notification
-  if (data.defendingPiece.playerId === socket.id) {
-    showNotification('Defend!', 'Choose to contest or decline the battle', 'info');
-  }
-});
 
 // Chat system socket handlers
-socket.on('chat-message', (data) => {
-  console.log('Chat message received:', data);
-  addChatMessage(data);
-});
 
-socket.on('chat-history', (data) => {
-  console.log('Chat history received:', data);
-  data.messages.forEach(message => {
-    addChatMessage(message);
-  });
-});
 
-socket.on('chat-error', (data) => {
-  console.log('Chat error:', data);
-  showNotification('Chat Error', data.error, 'error');
-  updateChatStatus(`Error: ${data.error}`);
-});
 
-socket.on('player-eliminated', (data) => {
-  console.log('Player eliminated:', data);
-  showNotification('Player Eliminated', 
-    `${data.playerName} has been eliminated! (${data.eliminationReason.replace('_', ' ')})`, 
-    'warning');
-});
 
-socket.on('elimination-message', (data) => {
-  console.log('Elimination message:', data);
-  showNotification('Elimination', data.message, 'info');
-});
 
-socket.on('elimination-effects', (data) => {
-  console.log('Elimination effects:', data);
-  showNotification('Elimination Effects', data.message, 'warning');
-});
 
-socket.on('piece-removal-effect', (data) => {
-  console.log('Piece removal effect:', data);
-  // This could trigger visual effects for piece removal
-});
 
-socket.on('victory-message', (data) => {
-  console.log('Victory message:', data);
-  showNotification('Victory!', data.message, 'success');
-});
 
-socket.on('game-victory', (data) => {
-  console.log('Game victory:', data);
-  
-  // Calculate game duration
-  const gameDuration = data.gameDuration || 'Unknown';
-  
-  // Get player stats
-  const myPlayerId = socket.id;
-  const myStats = {
-    piecesKilled: 0,
-    piecesLost: 0,
-    evolutionPoints: 0
-  };
-  
-  // Calculate stats from game state
-  if (gameState && gameState.pieces) {
-    Object.values(gameState.pieces).forEach(piece => {
-      if (piece.playerId === myPlayerId) {
-        myStats.piecesKilled += piece.kills || 0;
-      }
-    });
-  }
-  
-  // Get player info
-  const myPlayer = gameState.players[myPlayerId];
-  if (myPlayer) {
-    myStats.evolutionPoints = myPlayer.evolutionBank?.totalEarned || 0;
-  }
-  
-  // Show game over screen
-  showGameOver(data.winnerName, {
-    duration: gameDuration,
-    piecesKilled: myStats.piecesKilled,
-    piecesLost: myStats.piecesLost,
-    evolutionPoints: myStats.evolutionPoints,
-    victoryType: data.victoryType
-  });
-});
 
-socket.on('territory-update', (data) => {
-  console.log('Territory update:', data);
-  // This could be used to update territory visualization
-});
 
-socket.on('game-draw', (data) => {
-  console.log('Game draw:', data);
-  showNotification('Draw!', data.message, 'info');
-});
 
 // Initialize chat system when page loads
 window.addEventListener('load', () => {
@@ -4613,15 +3351,7 @@ setTimeout(() => {
 console.log('🎨 Auto-color assignment system active - colors assigned by player index');
 
 // AI player event handlers
-socket.on('ai-player-added', (data) => {
-  console.log('AI player added:', data);
-  showNotification('AI Player Added', `${data.name} has joined the game!`, 'success');
-});
 
-socket.on('ai-add-failed', (data) => {
-  console.error('Failed to add AI player:', data.error);
-  showNotification('AI Error', data.error, 'error');
-});
 
 // ✅ PHASE 3: Auto-Color Assignment - Display current player's color
 function updatePlayerColorDisplay() {
@@ -4643,593 +3373,3 @@ function updatePlayerColorDisplay() {
 }
 
 // Auto-update color display when game state changes
-socket.on('game-state-update', (data) => {
-  // ... existing game state update logic ...
-  updatePlayerColorDisplay(); // Update color display
-}); 
-
-// Performance Optimization System (duplicate removed)
-
-// DUPLICATE CLASS DEFINITIONS REMOVED - MOVED TO TOP OF FILE
-
-// Initialize visual effects manager after scene is ready
-if (!visualEffects) {
-  visualEffects = new VisualEffectsManager(scene, renderer, {
-    pieceMeshes: pieceMeshes,
-    camera: camera
-  });
-}
-
-// Update particle system in animation loop
-const originalAnimate = window.animate;
-window.animate = function() {
-  originalAnimate();
-  visualEffects.updateParticles(16.67); // Assume 60 FPS
-};
-
-// ... existing code ...
-
-// Force all pieces to reposition to correct height
-function forceRepositionAllPieces() {
-  console.log('🔄 Forcing all pieces to reposition to correct height');
-  Object.values(gameState.pieces || {}).forEach(piece => {
-    if (pieceMeshes[piece.id]) {
-      const position = getWorldPosition(piece.row, piece.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
-      const mesh = pieceMeshes[piece.id];
-      mesh.position.set(position.x, position.y, position.z);
-      
-      // Apply height adjustment for GLB models to match piece positioning
-      const heightAdjustment = getModelHeightAdjustment(piece.type);
-      if (heightAdjustment !== 0) {
-        const normal = new THREE.Vector3(position.x, position.y, position.z).normalize();
-        mesh.position.add(normal.multiplyScalar(heightAdjustment));
-        console.log(`🔄 Applied height adjustment ${heightAdjustment} to ${piece.type} during repositioning`);
-      }
-      
-      console.log(`🔄 Repositioned ${piece.type} (${piece.id}) to height ${mesh.position.y}`);
-    }
-  });
-}
-
-// Call this once after the page loads to fix any height issues
-setTimeout(() => {
-  if (gameState && gameState.pieces) {
-    forceRepositionAllPieces();
-  }
-}, 2000); // Wait 2 seconds after page load
-
-// ... existing code ...
-
-// ✅ PHASE 5: Legacy dialog system - replaced by context menu
-// function showEvolutionChoiceDialog(pieceId, piece, reason, availablePaths, bankInfo, timeLimit) {
-//   console.log('🎯 showEvolutionChoiceDialog called with:', { pieceId, piece, reason, availablePaths, bankInfo, timeLimit });
-
-function showEvolutionChoiceDialog(pieceId, piece, reason, availablePaths, bankInfo, timeLimit) {
-  console.log('🎯 PHASE 5: Legacy showEvolutionChoiceDialog - redirecting to context menu');
-  // Fallback to context menu if called directly
-  showEvolutionContextMenu({pieceId, piece, reason, availablePaths, bankInfo, timeLimit}, lastRightClickEvent || {clientX: window.innerWidth/2, clientY: window.innerHeight/2});
-  return; // Skip the old dialog code below
-  
-  console.log('🎯 showEvolutionChoiceDialog called with:', { pieceId, piece, reason, availablePaths, bankInfo, timeLimit });
-  
-  // Create dialog HTML with inline styles
-  const dialogHtml = `
-    <div id="evolution-choice-dialog" class="modal-overlay" style="
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0, 0, 0, 0.7);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 10000;
-    ">
-      <div class="modal-content" style="
-        background-color: #2a2a2a;
-        color: white;
-        padding: 20px;
-        border-radius: 10px;
-        max-width: 600px;
-        width: 90%;
-        max-height: 80vh;
-        overflow-y: auto;
-      ">
-        <h2 style="margin-top: 0; color: #4CAF50;">Evolution Choice</h2>
-        <p>Your ${piece.type} can evolve! Choose your path:</p>
-        
-        <div class="evolution-info" style="
-          background-color: #3a3a3a;
-          padding: 10px;
-          border-radius: 5px;
-          margin: 10px 0;
-        ">
-          <p><strong>Reason:</strong> ${reason.replace('_', ' ')}</p>
-          <p><strong>Current Points:</strong> ${bankInfo.points}</p>
-          <p><strong>Time Limit:</strong> <span id="evolution-timer">${timeLimit}</span> seconds</p>
-        </div>
-        
-        <div class="evolution-options" style="display: flex; gap: 20px; flex-wrap: wrap;">
-          <div class="evolution-paths" style="flex: 2; min-width: 300px;">
-            ${availablePaths.map(path => `
-              <div class="evolution-path ${bankInfo.points >= path.cost ? 'affordable' : 'expensive'}" style="
-                background-color: ${bankInfo.points >= path.cost ? '#4a4a4a' : '#3a3a3a'};
-                padding: 15px;
-                border-radius: 5px;
-                margin-bottom: 10px;
-                border: 2px solid ${bankInfo.points >= path.cost ? '#4CAF50' : '#ff4444'};
-              ">
-                <h3 style="margin-top: 0; color: ${bankInfo.points >= path.cost ? '#4CAF50' : '#ff4444'};">
-                  ${path.targetType}
-                </h3>
-                <p>${path.description}</p>
-                <p><strong>Cost:</strong> ${path.cost} points</p>
-                <button class="evolution-btn" 
-                        data-piece-id="${pieceId}"
-                        data-path='${JSON.stringify(path)}'
-                        ${bankInfo.points >= path.cost ? '' : 'disabled'}
-                        style="
-                          background-color: ${bankInfo.points >= path.cost ? '#4CAF50' : '#666'};
-                          color: white;
-                          border: none;
-                          padding: 10px 20px;
-                          border-radius: 5px;
-                          cursor: ${bankInfo.points >= path.cost ? 'pointer' : 'not-allowed'};
-                          font-size: 14px;
-                          pointer-events: ${bankInfo.points >= path.cost ? 'auto' : 'none'};
-                          position: relative;
-                          z-index: 1001;
-                        ">
-                  Evolve (${path.cost} points)
-                </button>
-              </div>
-            `).join('')}
-          </div>
-          
-          <div class="bank-option" style="
-            flex: 1;
-            min-width: 200px;
-            background-color: #4a4a4a;
-            padding: 15px;
-            border-radius: 5px;
-            border: 2px solid #FFA500;
-          ">
-            <h3 style="margin-top: 0; color: #FFA500;">Bank Points</h3>
-            <p>Save your evolution points for later use</p>
-            <button class="bank-btn" data-piece-id="${pieceId}" style="
-              background-color: #FFA500;
-              color: white;
-              border: none;
-              padding: 10px 20px;
-              border-radius: 5px;
-              cursor: pointer;
-              font-size: 14px;
-              pointer-events: auto;
-              position: relative;
-              z-index: 1001;
-            ">
-              Bank Points
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-  
-  // Add to document
-  document.body.insertAdjacentHTML('beforeend', dialogHtml);
-  
-  // Add event listeners to buttons
-  const evolutionBtns = document.querySelectorAll('.evolution-btn');
-  const bankBtns = document.querySelectorAll('.bank-btn');
-  
-  console.log('🎯 Found evolution buttons:', evolutionBtns.length);
-  console.log('🎯 Found bank buttons:', bankBtns.length);
-  
-  evolutionBtns.forEach((button, index) => {
-    console.log(`🎯 Adding click listener to evolution button ${index}`);
-    button.addEventListener('click', function(e) {
-      console.log('🎯 Evolution button clicked!', e);
-      e.preventDefault();
-      e.stopPropagation();
-      const pieceId = this.getAttribute('data-piece-id');
-      const path = JSON.parse(this.getAttribute('data-path'));
-      chooseEvolution(pieceId, path);
-    });
-  });
-  
-  bankBtns.forEach((button, index) => {
-    console.log(`🎯 Adding click listener to bank button ${index}`);
-    button.addEventListener('click', function(e) {
-      console.log('🎯 Bank button clicked!', e);
-      e.preventDefault();
-      e.stopPropagation();
-      const pieceId = this.getAttribute('data-piece-id');
-      bankEvolutionPoints(pieceId);
-    });
-  });
-  
-  // Start countdown timer
-  let timeLeft = timeLimit;
-  const timerElement = document.getElementById('evolution-timer');
-  
-  const countdown = setInterval(() => {
-    timeLeft--;
-    timerElement.textContent = timeLeft;
-    
-    if (timeLeft <= 0) {
-      clearInterval(countdown);
-      // Auto-bank if no choice made
-      bankEvolutionPoints(pieceId);
-    }
-  }, 1000);
-  
-  // Store countdown reference for cleanup
-  window.evolutionCountdown = countdown;
-}
-
-function chooseEvolution(pieceId, evolutionPath) {
-  // Send evolution choice to server
-  window.globalSocket.emit('evolution-choice-response', {
-    pieceId: pieceId,
-    choice: { evolutionPath: evolutionPath }
-  });
-  
-  // Close dialog
-  closeEvolutionDialog();
-}
-
-function bankEvolutionPoints(pieceId) {
-  // Send bank choice to server
-  window.globalSocket.emit('evolution-choice-response', {
-    pieceId: pieceId,
-    choice: 'bank'
-  });
-  
-  // Close dialog
-  closeEvolutionDialog();
-}
-
-// Make these functions globally accessible for onclick handlers
-window.chooseEvolution = chooseEvolution;
-window.bankEvolutionPoints = bankEvolutionPoints;
-
-// Move choice dialog for splitters
-function showMoveChoiceDialog(pieceId, targetRow, targetCol, moveOptions) {
-  // Create dialog HTML
-  const dialogHtml = `
-    <div id="move-choice-dialog" style="
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, 0.9);
-      border: 2px solid #ff6b6b;
-      border-radius: 10px;
-      padding: 20px;
-      color: white;
-      text-align: center;
-      z-index: 10000;
-      min-width: 300px;
-      max-width: 400px;
-    ">
-      <h3 style="margin: 0 0 20px 0; color: #ff6b6b;">Choose Action</h3>
-      <p style="margin-bottom: 20px;">Position (${targetRow}, ${targetCol}) - Multiple actions available:</p>
-      
-      <div style="display: flex; gap: 10px; justify-content: center;">
-        <button id="move-choice-regular" style="
-          background-color: #4CAF50;
-          color: white;
-          border: none;
-          padding: 10px 20px;
-          border-radius: 5px;
-          cursor: pointer;
-          font-size: 16px;
-          pointer-events: auto;
-          position: relative;
-          z-index: 10001;
-        ">
-          <div style="font-size: 24px;">→</div>
-          <div>Move</div>
-          <div style="font-size: 12px; opacity: 0.8;">Regular movement</div>
-        </button>
-        
-        <button id="move-choice-split" style="
-          background-color: #ff6b6b;
-          color: white;
-          border: none;
-          padding: 10px 20px;
-          border-radius: 5px;
-          cursor: pointer;
-          font-size: 16px;
-          pointer-events: auto;
-          position: relative;
-          z-index: 10001;
-        ">
-          <div style="font-size: 24px;">⧨</div>
-          <div>Split</div>
-          <div style="font-size: 12px; opacity: 0.8;">Create two pieces</div>
-        </button>
-      </div>
-      
-      <button id="move-choice-cancel" style="
-        background-color: #666;
-        color: white;
-        border: none;
-        padding: 5px 15px;
-        border-radius: 5px;
-        cursor: pointer;
-        font-size: 14px;
-        margin-top: 15px;
-        pointer-events: auto;
-        position: relative;
-        z-index: 10001;
-      ">Cancel</button>
-    </div>
-  `;
-  
-  // Add to document
-  document.body.insertAdjacentHTML('beforeend', dialogHtml);
-  
-  // Add event listeners
-  document.getElementById('move-choice-regular').addEventListener('click', function() {
-    executeMoveChoice(pieceId, targetRow, targetCol, 'move');
-    closeMoveChoiceDialog();
-  });
-  
-  document.getElementById('move-choice-split').addEventListener('click', function() {
-    executeMoveChoice(pieceId, targetRow, targetCol, 'split');
-    closeMoveChoiceDialog();
-  });
-  
-  document.getElementById('move-choice-cancel').addEventListener('click', function() {
-    closeMoveChoiceDialog();
-  });
-}
-
-function closeMoveChoiceDialog() {
-  const dialog = document.getElementById('move-choice-dialog');
-  if (dialog) {
-    dialog.remove();
-  }
-}
-
-function executeMoveChoice(pieceId, targetRow, targetCol, moveType) {
-  if (moveType === 'split') {
-    console.log(`🔄 SPLIT chosen - Sending split-piece event for ${pieceId} to (${targetRow}, ${targetCol})`);
-    window.globalSocket.emit('split-piece', {
-      pieceId: pieceId,
-      targetRow: targetRow,
-      targetCol: targetCol
-    });
-    gameInfoEl.textContent = `Splitting piece...`;
-  } else {
-    console.log('🚀 MOVE chosen - Sending move-piece event');
-    window.globalSocket.emit('move-piece', {
-      pieceId: pieceId,
-      targetRow: targetRow,
-      targetCol: targetCol
-    });
-    gameInfoEl.textContent = `Moving piece...`;
-  }
-  
-  // Clear highlights after action
-  clearValidMoveHighlights();
-  selectedPieceId = null;
-}
-
-function closeEvolutionDialog() {
-  const dialog = document.getElementById('evolution-choice-dialog');
-  if (dialog) {
-    dialog.remove();
-  }
-  
-  // Clear countdown timer
-  if (window.evolutionCountdown) {
-    clearInterval(window.evolutionCountdown);
-    window.evolutionCountdown = null;
-  }
-}
-
-// ✅ PHASE 5: Evolution Context Menu System
-function showEvolutionContextMenu(data, mouseEvent) {
-  console.log('🎯 PHASE 5: showEvolutionContextMenu called with:', data);
-  
-  // Remove any existing context menu
-  hideEvolutionContextMenu();
-  
-  if (!mouseEvent) {
-    console.warn('⚠️ No mouse event provided for context menu position');
-    return;
-  }
-  
-  const { pieceId, piece, reason, availablePaths, bankInfo, timeLimit } = data;
-  
-  // Create context menu at mouse position
-  const contextMenu = document.createElement('div');
-  contextMenu.id = 'evolution-context-menu';
-  contextMenu.style.cssText = `
-    position: fixed;
-    left: ${mouseEvent.clientX}px;
-    top: ${mouseEvent.clientY}px;
-    background: #2a2a2a;
-    color: white;
-    border: 2px solid #4CAF50;
-    border-radius: 8px;
-    padding: 8px 0;
-    z-index: 10000;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-    min-width: 200px;
-    font-family: 'Orbitron', monospace;
-    font-size: 14px;
-    animation: contextMenuFadeIn 0.2s ease-out;
-  `;
-  
-  // Add CSS animation for smooth appearance
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes contextMenuFadeIn {
-      from { opacity: 0; transform: scale(0.9); }
-      to { opacity: 1; transform: scale(1); }
-    }
-    .context-menu-item {
-      padding: 10px 15px;
-      cursor: pointer;
-      border-bottom: 1px solid #444;
-      transition: background-color 0.2s ease;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .context-menu-item:last-child {
-      border-bottom: none;
-    }
-    .context-menu-item:hover {
-      background-color: #4CAF50;
-      color: white;
-    }
-    .context-menu-item.disabled {
-      color: #666;
-      cursor: not-allowed;
-    }
-    .context-menu-item.disabled:hover {
-      background-color: transparent;
-      color: #666;
-    }
-    .context-menu-header {
-      padding: 8px 15px;
-      background: #4CAF50;
-      color: white;
-      font-weight: bold;
-      font-size: 12px;
-      text-align: center;
-    }
-    .context-menu-cost {
-      color: #ffd700;
-      font-size: 12px;
-      font-weight: bold;
-    }
-  `;
-  
-  if (!document.getElementById('context-menu-styles')) {
-    style.id = 'context-menu-styles';
-    document.head.appendChild(style);
-  }
-  
-  // Create menu content
-  let menuHTML = `
-    <div class="context-menu-header">
-      ${piece.symbol} ${piece.type} Evolution
-      <div style="font-size: 10px; font-weight: normal; margin-top: 2px;">
-        Points: ${bankInfo.points} | Time: <span id="context-timer">${timeLimit}s</span>
-      </div>
-    </div>
-  `;
-  
-  // Add evolution paths
-  availablePaths.forEach(path => {
-    const canAfford = bankInfo.points >= path.cost;
-    const itemClass = canAfford ? 'context-menu-item' : 'context-menu-item disabled';
-    
-    menuHTML += `
-      <div class="${itemClass}" data-action="evolve" data-piece-id="${pieceId}" data-path='${JSON.stringify(path)}'>
-        <div>
-          <div>🔄 → ${path.targetType}</div>
-          <div style="font-size: 11px; color: #ccc;">${path.description}</div>
-        </div>
-        <div class="context-menu-cost">${path.cost}pts</div>
-      </div>
-    `;
-  });
-  
-  // Add bank option
-  menuHTML += `
-    <div class="context-menu-item" data-action="bank" data-piece-id="${pieceId}">
-      <div>
-        <div>💰 Bank Points</div>
-        <div style="font-size: 11px; color: #ccc;">Save for later</div>
-      </div>
-      <div class="context-menu-cost">+${bankInfo.points}</div>
-    </div>
-  `;
-  
-  contextMenu.innerHTML = menuHTML;
-  document.body.appendChild(contextMenu);
-  
-  // Position adjustment to keep menu on screen
-  const menuRect = contextMenu.getBoundingClientRect();
-  const windowWidth = window.innerWidth;
-  const windowHeight = window.innerHeight;
-  
-  if (menuRect.right > windowWidth) {
-    contextMenu.style.left = (mouseEvent.clientX - menuRect.width) + 'px';
-  }
-  if (menuRect.bottom > windowHeight) {
-    contextMenu.style.top = (mouseEvent.clientY - menuRect.height) + 'px';
-  }
-  
-  // Add click handlers
-  contextMenu.addEventListener('click', (e) => {
-    const item = e.target.closest('.context-menu-item');
-    if (!item || item.classList.contains('disabled')) return;
-    
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const action = item.getAttribute('data-action');
-    const pieceId = item.getAttribute('data-piece-id');
-    
-    if (action === 'evolve') {
-      const path = JSON.parse(item.getAttribute('data-path'));
-      console.log('🎯 PHASE 5: Context menu evolution chosen:', path);
-      chooseEvolution(pieceId, path);
-    } else if (action === 'bank') {
-      console.log('🎯 PHASE 5: Context menu bank chosen');
-      bankEvolutionPoints(pieceId);
-    }
-    
-    hideEvolutionContextMenu();
-  });
-  
-  // Start countdown timer
-  let timeLeft = timeLimit;
-  const timerElement = document.getElementById('context-timer');
-  
-  const countdown = setInterval(() => {
-    timeLeft--;
-    if (timerElement) {
-      timerElement.textContent = timeLeft + 's';
-    }
-    
-    if (timeLeft <= 0) {
-      clearInterval(countdown);
-      console.log('🎯 PHASE 5: Context menu timeout, auto-banking');
-      bankEvolutionPoints(pieceId);
-      hideEvolutionContextMenu();
-    }
-  }, 1000);
-  
-  // Store countdown reference for cleanup
-  window.evolutionContextCountdown = countdown;
-  
-  // Hide menu when clicking elsewhere
-  setTimeout(() => {
-    document.addEventListener('click', hideEvolutionContextMenu, { once: true });
-  }, 100);
-  
-  console.log('🎯 PHASE 5: Evolution context menu displayed successfully');
-}
-
-function hideEvolutionContextMenu() {
-  const contextMenu = document.getElementById('evolution-context-menu');
-  if (contextMenu) {
-    contextMenu.remove();
-  }
-  
-  // Clear countdown timer
-  if (window.evolutionContextCountdown) {
-    clearInterval(window.evolutionContextCountdown);
-    window.evolutionContextCountdown = null;
-  }
-} 
