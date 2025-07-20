@@ -92,7 +92,19 @@ function getPlayerColor(playerId, playerIndex) {
  * @returns {THREE.Color|null} Color object or null
  */
 function getPieceColorForPlayer(piece, player, playerIndex) {
-  // Check if this is a split piece that should inherit parent color
+  // ✅ PHASE 4: Check if piece has inherited color from server (for split pieces)
+  if (piece.inheritedColor && COLOR_MAP[piece.inheritedColor]) {
+    const inheritedHexColor = COLOR_MAP[piece.inheritedColor];
+    console.log(`🎨 PHASE 4 - SPLIT INHERITANCE SUCCESS: Split piece ${piece.id} using server-inherited color ${piece.inheritedColor} → 0x${inheritedHexColor.toString(16).toUpperCase()}`);
+    return inheritedHexColor;
+  }
+  
+  // Debug: Log if inheritedColor exists but not found in COLOR_MAP
+  if (piece.inheritedColor && !COLOR_MAP[piece.inheritedColor]) {
+    console.warn(`🚨 PHASE 4 - COLOR_MAP MISMATCH: Split piece ${piece.id} has inheritedColor '${piece.inheritedColor}' but it's not in COLOR_MAP:`, Object.keys(COLOR_MAP));
+  }
+
+  // Check if this is a split piece that should inherit parent color (legacy fallback)
   if (piece.id && piece.id.includes('-split-')) {
     // For split pieces, find any existing piece with the same player that has a color we can inherit
     // Look for other pieces from the same player that might have evolved colors
