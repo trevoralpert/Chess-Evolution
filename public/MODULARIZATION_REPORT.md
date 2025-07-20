@@ -489,3 +489,49 @@
 - **Advanced battle system** with contests and animations
 - **Complete game initialization** with AI management and controls
 - **All game logic functions organized** and ready for extraction from main file
+
+#### **🚀 EXTRACTION PHASE: Function Removal in Progress! ✅**
+
+**📊 Current Extraction Progress:**
+- **Original functions:** 137 functions
+- **Functions extracted:** 43 functions ✅
+- **Functions remaining:** 94 functions
+- **Lines removed:** 668 lines ✅
+- **Current main file:** 5,537 lines (down from 6,205)
+
+**✅ Functions Successfully Extracted:**
+- **Lobby System Functions** - 11 functions removed (146 lines)
+- **Statistics UI Functions** - 10 functions removed (232 lines)
+- **Evolution UI Functions** - 7 functions removed (130 lines)
+- **Menu System Functions** - 2 functions removed (69 lines)
+- **Tournament UI Functions** - 13 functions removed (91 lines)
+
+**🎯 Extraction Results So Far:**
+- **Main file reduction:** 6,205 → 5,537 lines (-668 lines, -10.8%)
+- **Function reduction:** 137 → 94 functions (-43 functions, -31.4%)
+- **Modules remain:** 20 modules, 7,764 lines (unchanged)
+- **Total codebase:** 5,537 + 7,764 = 13,301 lines
+
+**📈 Extraction Impact:**
+✅ **Significant file size reduction** achieved  
+✅ **Duplicate code eliminated** - using enhanced modules  
+✅ **Function calls updated** to use dependency injection  
+✅ **Modular architecture** now actively used  
+✅ **Code quality improved** with better separation  
+
+**🎊 EXTRACTION IS WORKING! Main file decreasing as planned! 🎊**
+
+**Remaining Functions to Extract:**
+- Game initialization and control functions
+- Movement and battle system functions  
+- Socket event handlers
+- 3D rendering and visual functions
+- Timer and UI update functions
+- Mouse/touch interaction functions
+- And more utility functions
+
+**Next Steps:**
+- Continue extracting remaining functions systematically
+- Update function calls to use modules
+- Complete Phase 7: Socket Event Handlers
+- Finalize extraction and optimization
