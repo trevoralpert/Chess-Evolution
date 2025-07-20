@@ -3360,9 +3360,9 @@ async function createPieceMeshOptimized(piece) {
     console.log('🎯 Creating evolution points label for piece:', piece.id);
     const evolutionPoints = getEvolutionPointsForPiece(piece);
     console.log('🎯 Evolution points retrieved:', evolutionPoints);
-    const evolutionLabelTexture = createEvolutionPointsLabel(evolutionPoints, piece.playerId);
-    console.log('🎯 Evolution label texture created:', evolutionLabelTexture);
-    const evolutionLabelMaterial = new THREE.SpriteMaterial({ map: evolutionLabelTexture });
+          const evolutionLabelTexture = createEvolutionPointsLabel(evolutionPoints, piece.playerId, piece.hasProducedHeir);
+      console.log('🎯 Evolution label texture created:', evolutionLabelTexture);
+      const evolutionLabelMaterial = new THREE.SpriteMaterial({ map: evolutionLabelTexture });
     const evolutionLabel = new THREE.Sprite(evolutionLabelMaterial);
     evolutionLabel.scale.set(1.0, 0.5, 1); // Much larger scale
     evolutionLabel.position.set(0, 1.2, 0); // Higher above the piece
@@ -3420,7 +3420,7 @@ function updateEvolutionPointsLabel(mesh, piece) {
   
   if (evolutionLabel) {
     const evolutionPoints = getEvolutionPointsForPiece(piece);
-    const newTexture = createEvolutionPointsLabel(evolutionPoints, piece.playerId);
+    const newTexture = createEvolutionPointsLabel(evolutionPoints, piece.playerId, piece.hasProducedHeir);
     
     // Dispose of old texture to prevent memory leaks
     if (evolutionLabel.material.map) {
@@ -3499,9 +3499,9 @@ function getEvolutionPointsForPiece(piece) {
   return baseValue;
 }
 
-// Create evolution points label with team color styling
-function createEvolutionPointsLabel(evolutionPoints, playerId) {
-  console.log('🎨 Creating evolution points label with points:', evolutionPoints, 'for player:', playerId);
+// Create evolution points label with team color styling and heir indicator
+function createEvolutionPointsLabel(evolutionPoints, playerId, hasProducedHeir = false) {
+  console.log('🎨 Creating evolution points label with points:', evolutionPoints, 'for player:', playerId, 'hasHeir:', hasProducedHeir);
   
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
@@ -3533,7 +3533,10 @@ function createEvolutionPointsLabel(evolutionPoints, playerId) {
   context.fillStyle = textColor;
   context.font = 'bold 20px Arial';
   context.textAlign = 'center';
-  context.fillText(`${evolutionPoints}`, 32, 22);
+  
+  // Show points with heir indicator if applicable
+  const displayText = hasProducedHeir ? `${evolutionPoints}H` : `${evolutionPoints}`;
+  context.fillText(displayText, 32, 22);
   
   // Add small "pts" text
   context.fillStyle = 'rgba(255, 255, 255, 0.7)';

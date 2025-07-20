@@ -1,8 +1,8 @@
 # EvoChess MASTER CHECKLIST - Early Submission July 19, 2025
 **Submission Deadline**: Updated for new day
 **Current Time**: Morning work session
-**Project Status**: ~85% Complete (Updated: CRITICAL FINDINGS! Evolution system has major gaps - only 4/15+ evolution paths implemented)
-**Current Task**: 🎯 IMMEDIATE: Complete Phase 5 - Fix right-click evolution detection (context menu works, detection broken)
+**Project Status**: ~90% Complete (Updated: Phase 8 completed! Vault pieces fully implemented with heir system)
+**Current Task**: 🎯 Phase 9 - Menu Polish (UI improvements only)
 
 ## 🚨 CRITICAL FINDINGS FROM USER TESTING
 **User discovered major system gaps:**
@@ -234,12 +234,19 @@ Create a fully playable, polished version of EvoChess that demonstrates complete
 - [x] **🖱️ Fix Right-Click Evolution**: ✅ Fixed JavaScript "before initialization" error - context menus now work perfectly!
 - [x] **🦘 Implement Vault Pieces**: ✅ Added Vaultbound, Vaultseer, Vaultarcher, Vaultmistress, and Covenant Queen with jumping abilities
 - [x] **♔ Implement Checkmate Logic**: ✅ Added proper check and checkmate detection with position evaluation
-**Status**: **PHASE COMPLETE! All vault pieces implemented with unique jump patterns and checkmate system working!** ✅
+- [x] **🔧 Update Jump Mechanics**: ✅ Fixed vault pieces to use only 2x3 L-shaped knight moves with proper capture areas
+- [x] **💎 Fix Capture Bonuses**: ✅ Pieces now gain evolution points equal to captured piece value (Kings provide 0)
+- [x] **👑 Implement Heir System**: ✅ Vaultmistress & Covenant Queen can produce heirs that spawn new Kings on checkmate
+**Status**: **PHASE COMPLETE! All vault pieces implemented with correct movement, capture mechanics, and heir system!** ✅
 **Implementation**: 
-- Vault pieces added as alternative evolution path with knight-like jumping
-- Each vault piece has progressively larger jump patterns and capture areas
-- Checkmate detection evaluates all possible moves to escape check
-- Check notifications sent to players in real-time
+- Vault pieces use standard 2x3 knight moves only (removed extended patterns)
+- Proper 2x3 rectangle calculation between start and landing positions
+- Selective capture for vault pieces (TODO: add UI for player selection)
+- Vaultmistress can land on enemies, others cannot
+- Covenant Queen captures ALL pieces in jump area automatically
+- Heir production costs one turn, shows "H" indicator
+- New King spawns adjacent to heir producer when checkmated
+- Capture bonuses award full piece value (not just 1 point)
 
 ### **Phase 9: Menu Polish (35 minutes) - UI ONLY, NO BACKEND CHANGES**
 - [ ] **💫 Polish Menu UI/UX**: Responsive design, smooth interactions

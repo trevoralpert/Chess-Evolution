@@ -1982,9 +1982,10 @@ function handlePieceMove(playerId, moveData) {
       piece.col = targetCol;
       gameState.grid[GridUtils.getPositionKey(targetRow, targetCol)] = pieceId;
       
-      // Award evolution points for jump capture
-      const bank = evolutionManager.addEvolutionPoints(piece.playerId, 1, 'jump_capture');
-      console.log(`${piece.symbol} gains evolution point for jump capture! (${bank.points} total)`);
+      // Award evolution points for jump capture (equal to captured piece value)
+      const capturedPieceValue = PIECE_TYPES[capturedPiece.type]?.points || 0;
+      const bank = evolutionManager.addEvolutionPoints(piece.playerId, capturedPieceValue, 'jump_capture');
+      console.log(`${piece.symbol} gains ${capturedPieceValue} evolution points for capturing ${capturedPiece.type}! (${bank.points} total)`);
       
       // Check if player has evolution points to offer choice dialog
       if (bank.points > 0) {
@@ -2027,6 +2028,11 @@ function handlePieceMove(playerId, moveData) {
   
   if (matchingMove.type === 'dual-move-jumper') {
     return handleDualMovementJumper(playerId, pieceId, matchingMove, targetRow, targetCol);
+  }
+  
+  // Handle heir production (Vaultmistress and Covenant Queen)
+  if (matchingMove.type === 'produce-heir') {
+    return handleHeirProduction(playerId, pieceId);
   }
   
   // Check if position is occupied (for regular moves)
@@ -2099,11 +2105,15 @@ function handlePieceMove(playerId, moveData) {
           inCheck: true
         });
         
-        // Check for checkmate
-        if (isPlayerInCheckmate(opponentId)) {
-          console.log(`♔ CHECKMATE! Player ${opponentId} has been checkmated!`);
-          
-          // Handle checkmate like king capture
+              // Check for checkmate
+      if (isPlayerInCheckmate(opponentId)) {
+        console.log(`♔ CHECKMATE! Player ${opponentId} has been checkmated!`);
+        
+        // Check if player has an heir before handling elimination
+        const hasHeir = spawnHeirIfAvailable(opponentId);
+        
+        if (!hasHeir) {
+          // No heir - handle checkmate like king capture
           victoryManager.handlePlayerElimination(opponentId, 'checkmate');
           
           // Notify about checkmate
@@ -2111,7 +2121,15 @@ function handlePieceMove(playerId, moveData) {
             playerId: opponentId,
             checkmatedBy: playerId
           });
+        } else {
+          // Heir spawned - player continues
+          console.log(`👑 New King spawned from heir for player ${opponentId}!`);
+          io.emit('heir-activated', {
+            playerId: opponentId,
+            message: 'Heir has become the new King!'
+          });
         }
+      }
       } else {
         // Clear check status if player is no longer in check
         io.emit('player-in-check', {
@@ -2442,8 +2460,9 @@ function handlePieceSplit(playerId, splitData) {
       piece.kills = (piece.kills || 0) + 1;
       
       // Award evolution points for capture
-      const bank = evolutionManager.addEvolutionPoints(piece.playerId, 1, 'split_capture');
-      console.log(`${piece.symbol} gains evolution point for split capture! (${bank.points} total)`);
+          const capturedPieceValue = PIECE_TYPES[targetPiece.type]?.points || 0;
+    const bank = evolutionManager.addEvolutionPoints(piece.playerId, capturedPieceValue, 'split_capture');
+    console.log(`${piece.symbol} gains ${capturedPieceValue} evolution points for capturing ${targetPiece.type}! (${bank.points} total)`);
       
       // Clean up evolution tracking for dead piece
       evolutionManager.handlePieceDeath(targetPieceId);
@@ -2533,6 +2552,42 @@ function handlePieceSplit(playerId, splitData) {
   return { success: true, message: successMsg };
 }
 
+function handleHeirProduction(playerId, pieceId) {
+  const piece = gameState.pieces[pieceId];
+  if (!piece) {
+    console.log(`Piece not found: ${pieceId}`);
+    return { success: false, message: 'Piece not found' };
+  }
+  
+  // Mark piece as having produced heir
+  piece.hasProducedHeir = true;
+  
+  // Store original position for recording
+  const originalRow = piece.row;
+  const originalCol = piece.col;
+  
+  console.log(`${piece.symbol} (${piece.type}) is producing an heir`);
+  
+  // Broadcast heir production event
+  io.emit('heir-produced', {
+    pieceId: pieceId,
+    pieceType: piece.type,
+    playerId: playerId,
+    position: { row: piece.row, col: piece.col }
+  });
+  
+  // Update game state to show piece has heir
+  broadcastGameState();
+  
+  return { 
+    success: true, 
+    message: `${piece.type} produced an heir`,
+    fromRow: originalRow,
+    fromCol: originalCol,
+    moveType: 'produce-heir'
+  };
+}
+
 function handleMultiJumpCapture(playerId, pieceId, matchingMove, targetRow, targetCol) {
   const piece = gameState.pieces[pieceId];
   const enemyPiecesInArea = matchingMove.enemyPiecesInArea;
@@ -2546,17 +2601,17 @@ function handleMultiJumpCapture(playerId, pieceId, matchingMove, targetRow, targ
   // Determine which pieces to capture based on jumper type
   let piecesToCapture = [];
   
-  if (maxCaptures === 'unlimited') {
-    // Hybrid Queen - capture ALL pieces in area
+  if (maxCaptures === 'unlimited' || maxCaptures === 'all') {
+    // Hybrid Queen and Covenant Queen - capture ALL pieces in area
     piecesToCapture = enemyPiecesInArea.map(ep => ep.id);
   } else {
     // Other jumpers - capture up to maxCaptures pieces
-    // For now, we'll auto-select the first available pieces
-    // TODO: Later we can add player choice UI
+    // For vault pieces, this should be selective (player chooses which to capture)
+    // TODO: Later we can add player choice UI for vault pieces
     piecesToCapture = enemyPiecesInArea.slice(0, maxCaptures).map(ep => ep.id);
   }
   
-  // Add landing capture if applicable (Mistress Jumper and Hybrid Queen)
+  // Add landing capture if applicable (Vaultmistress, Covenant Queen, Mistress Jumper and Hybrid Queen)
   if (landingCapture && matchingMove.canLandOnEnemy) {
     piecesToCapture.push(landingCapture.id);
   }
@@ -2592,9 +2647,13 @@ function handleMultiJumpCapture(playerId, pieceId, matchingMove, targetRow, targ
   piece.col = targetCol;
   gameState.grid[GridUtils.getPositionKey(targetRow, targetCol)] = pieceId;
   
-  // Award evolution points for multi-jump capture
-  const bank = evolutionManager.addEvolutionPoints(piece.playerId, capturedPieces.length, 'multi_jump_capture');
-  console.log(`${piece.symbol} gains ${capturedPieces.length} evolution points for multi-jump capture! (${bank.points} total)`);
+  // Award evolution points for multi-jump capture (sum of all captured piece values)
+  let totalCaptureValue = 0;
+  capturedPieces.forEach(capturedPiece => {
+    totalCaptureValue += PIECE_TYPES[capturedPiece.type]?.points || 0;
+  });
+  const bank = evolutionManager.addEvolutionPoints(piece.playerId, totalCaptureValue, 'multi_jump_capture');
+  console.log(`${piece.symbol} gains ${totalCaptureValue} evolution points for multi-jump capture! (${bank.points} total)`);
   
   // Check if player has evolution points to offer choice dialog
   if (bank.points > 0) {
@@ -2789,20 +2848,25 @@ function completeBattleResolution(winner, loser) {
   // Increment winner's kill count
   winner.kills = (winner.kills || 0) + 1;
   
-  // ✅ PHASE 7: Award evolution point to the winning piece
-  winner.evolutionPoints = (winner.evolutionPoints || PIECE_TYPES[winner.type].points) + 1;
-  console.log(`🎯 PHASE 7: ${winner.symbol} captured ${loser.symbol}! Now has ${winner.evolutionPoints} evolution points`);
-  
-  // Broadcast evolution point gain
-  io.emit('piece-evolution-point-gained', {
-    pieceId: winner.id,
-    pieceType: winner.type,
-    playerId: winner.playerId,
-    points: 1,
-    piecePoints: winner.evolutionPoints,  // Send the piece's total points
-    reason: 'capture',
-    position: { row: winner.row, col: winner.col }
-  });
+  // ✅ PHASE 7: Award evolution points equal to captured piece value (Kings have no value)
+  const capturedPieceValue = loser.type === 'KING' ? 0 : (PIECE_TYPES[loser.type]?.points || 0);
+  if (capturedPieceValue > 0) {
+    winner.evolutionPoints = (winner.evolutionPoints || PIECE_TYPES[winner.type].points) + capturedPieceValue;
+    console.log(`🎯 PHASE 7: ${winner.symbol} captured ${loser.symbol}! Gained ${capturedPieceValue} points, now has ${winner.evolutionPoints} evolution points`);
+    
+    // Broadcast evolution point gain
+    io.emit('piece-evolution-point-gained', {
+      pieceId: winner.id,
+      pieceType: winner.type,
+      playerId: winner.playerId,
+      points: capturedPieceValue,
+      piecePoints: winner.evolutionPoints,  // Send the piece's total points
+      reason: 'capture',
+      position: { row: winner.row, col: winner.col }
+    });
+  } else if (loser.type === 'KING') {
+    console.log(`🎯 ${winner.symbol} captured ${loser.symbol}! Kings provide no evolution points.`);
+  }
   
   // Remove loser from game
   const loserPosKey = GridUtils.getPositionKey(loser.row, loser.col);
@@ -2878,14 +2942,33 @@ function completeBattleResolution(winner, loser) {
   if (loser.type === 'KING') {
     console.log(`CHECKMATE! King ${loser.symbol} captured - Player ${loser.playerId} eliminated!`);
     
-    // Send battle result to chat
-    chatManager.sendGameEvent('main', 'battle_result', {
-      winner: winner.symbol,
-      loser: loser.symbol
-    });
+    // Check if player has an heir before handling elimination
+    const hasHeir = spawnHeirIfAvailable(loser.playerId);
     
-    // Use new victory manager for elimination
-    victoryManager.handlePlayerElimination(loser.playerId, 'king_captured');
+    if (!hasHeir) {
+      // Send battle result to chat
+      chatManager.sendGameEvent('main', 'battle_result', {
+        winner: winner.symbol,
+        loser: loser.symbol
+      });
+      
+      // Use new victory manager for elimination
+      victoryManager.handlePlayerElimination(loser.playerId, 'king_captured');
+    } else {
+      // Heir spawned - player continues
+      console.log(`👑 New King spawned from heir for player ${loser.playerId}!`);
+      io.emit('heir-activated', {
+        playerId: loser.playerId,
+        message: 'Heir has become the new King!'
+      });
+      
+      // Send special battle result for heir activation
+      chatManager.sendGameEvent('main', 'heir_activated', {
+        winner: winner.symbol,
+        loser: loser.symbol,
+        newKing: true
+      });
+    }
   } else {
     // Send battle result to chat for non-elimination battles
     chatManager.sendGameEvent('main', 'battle_result', {
@@ -3229,31 +3312,31 @@ function declareVictory(victoryPlayer) {
 
 function getJumpCaptureArea(startRow, startCol, endRow, endCol) {
   // Calculate the 2x3 rectangular area that a jumper passes over
-  // Based on the user's drawing, this is the area between start and end positions
+  // Based on the user's drawing, this is the rectangle between start and end positions
   
   const captureArea = [];
   
-  // Calculate the direction vector
-  const rowDiff = endRow - startRow;
-  const colDiff = endCol - startCol;
+  // Calculate the bounding box between start and end positions
+  const minRow = Math.min(startRow, endRow);
+  const maxRow = Math.max(startRow, endRow);
+  const minCol = Math.min(startCol, endCol);
+  const maxCol = Math.max(startCol, endCol);
   
-  // For knight-like moves, the 2x3 area is the rectangular region the piece "jumps over"
-  // We'll calculate the midpoint and expand to create the 2x3 area
-  const midRow = Math.floor((startRow + endRow) / 2);
-  const midCol = GridUtils.normalizeCol(Math.floor((startCol + endCol) / 2));
-  
-  // Create a 2x3 area centered around the trajectory
-  for (let dr = -1; dr <= 1; dr++) {
-    for (let dc = -1; dc <= 1; dc++) {
-      const areaRow = midRow + dr;
-      const areaCol = GridUtils.normalizeCol(midCol + dc);
+  // The 2x3 area is the rectangle that includes all squares between start and end
+  // For a knight move, this will be either a 2x3 or 3x2 rectangle
+  for (let row = minRow; row <= maxRow; row++) {
+    for (let col = minCol; col <= maxCol; col++) {
+      // Skip the start and end positions themselves
+      if ((row === startRow && col === startCol) || 
+          (row === endRow && col === endCol)) {
+        continue;
+      }
       
-      if (GridUtils.isValidPosition(areaRow, areaCol)) {
-        // Skip the start and end positions
-        if (!((areaRow === startRow && areaCol === startCol) || 
-              (areaRow === endRow && areaCol === endCol))) {
-          captureArea.push({ row: areaRow, col: areaCol });
-        }
+      if (GridUtils.isValidPosition(row, col)) {
+        captureArea.push({ 
+          row: row, 
+          col: GridUtils.normalizeCol(col) 
+        });
       }
     }
   }
@@ -3356,6 +3439,17 @@ function generateMovesForPattern(piece, pattern, mode) {
     });
   }
   
+  // Add heir production option for Vaultmistress and Covenant Queen
+  if ((piece.type === 'VAULTMISTRESS' || piece.type === 'COVENANT_QUEEN') && 
+      !piece.hasProducedHeir && !gameState.players[piece.playerId]?.isInCheckmate) {
+    validMoves.push({
+      row: piece.row,
+      col: piece.col,
+      type: 'produce-heir',
+      specialAbility: true
+    });
+  }
+  
   return validMoves;
 }
 
@@ -3401,6 +3495,125 @@ function isKingInCheck(playerId) {
   }
   
   return false;
+}
+
+// Spawn heir if available when player is checkmated
+function spawnHeirIfAvailable(playerId) {
+  const player = gameState.players[playerId];
+  if (!player) return false;
+  
+  // Find heir-producing piece
+  let heirProducer = null;
+  for (const pieceId of player.pieces) {
+    const piece = gameState.pieces[pieceId];
+    if (piece && piece.hasProducedHeir && 
+        (piece.type === 'VAULTMISTRESS' || piece.type === 'COVENANT_QUEEN')) {
+      heirProducer = piece;
+      break;
+    }
+  }
+  
+  if (!heirProducer) return false;
+  
+  // Find old King to remove
+  let oldKing = null;
+  for (const pieceId of player.pieces) {
+    const piece = gameState.pieces[pieceId];
+    if (piece && piece.type === 'KING') {
+      oldKing = piece;
+      break;
+    }
+  }
+  
+  if (oldKing) {
+    // Remove old King
+    const oldKingPosKey = GridUtils.getPositionKey(oldKing.row, oldKing.col);
+    delete gameState.grid[oldKingPosKey];
+    delete gameState.pieces[oldKing.id];
+    player.pieces = player.pieces.filter(id => id !== oldKing.id);
+  }
+  
+  // Find safe adjacent square for new King
+  const adjacentPositions = [
+    { row: heirProducer.row - 1, col: heirProducer.col - 1 },
+    { row: heirProducer.row - 1, col: heirProducer.col },
+    { row: heirProducer.row - 1, col: heirProducer.col + 1 },
+    { row: heirProducer.row, col: heirProducer.col - 1 },
+    { row: heirProducer.row, col: heirProducer.col + 1 },
+    { row: heirProducer.row + 1, col: heirProducer.col - 1 },
+    { row: heirProducer.row + 1, col: heirProducer.col },
+    { row: heirProducer.row + 1, col: heirProducer.col + 1 }
+  ];
+  
+  let spawnPosition = null;
+  
+  // First try adjacent squares
+  for (const pos of adjacentPositions) {
+    const normalizedCol = GridUtils.normalizeCol(pos.col);
+    if (GridUtils.isValidPosition(pos.row, normalizedCol)) {
+      const posKey = GridUtils.getPositionKey(pos.row, normalizedCol);
+      if (!gameState.grid[posKey] && !isPositionUnderAttack(pos.row, normalizedCol, playerId)) {
+        spawnPosition = { row: pos.row, col: normalizedCol };
+        break;
+      }
+    }
+  }
+  
+  // If no safe adjacent square, find closest safe square
+  if (!spawnPosition) {
+    for (let distance = 2; distance <= 5; distance++) {
+      for (let dr = -distance; dr <= distance; dr++) {
+        for (let dc = -distance; dc <= distance; dc++) {
+          if (Math.abs(dr) === distance || Math.abs(dc) === distance) {
+            const row = heirProducer.row + dr;
+            const col = GridUtils.normalizeCol(heirProducer.col + dc);
+            if (GridUtils.isValidPosition(row, col)) {
+              const posKey = GridUtils.getPositionKey(row, col);
+              if (!gameState.grid[posKey] && !isPositionUnderAttack(row, col, playerId)) {
+                spawnPosition = { row, col };
+                break;
+              }
+            }
+          }
+        }
+        if (spawnPosition) break;
+      }
+      if (spawnPosition) break;
+    }
+  }
+  
+  if (!spawnPosition) {
+    console.log('No safe position found for heir King!');
+    return false;
+  }
+  
+  // Create new King
+  const newKing = {
+    id: `${playerId}-king-heir-${Date.now()}`,
+    playerId: playerId,
+    type: 'KING',
+    value: PIECE_TYPES.KING.points,
+    symbol: PIECE_TYPES.KING.symbol,
+    row: spawnPosition.row,
+    col: spawnPosition.col,
+    kills: 0,
+    timeAlive: 0,
+    moveCount: 0,
+    evolutionPoints: PIECE_TYPES.KING.points,
+    isHeir: true
+  };
+  
+  gameState.pieces[newKing.id] = newKing;
+  gameState.grid[GridUtils.getPositionKey(spawnPosition.row, spawnPosition.col)] = newKing.id;
+  player.pieces.push(newKing.id);
+  
+  console.log(`New heir King spawned at (${spawnPosition.row}, ${spawnPosition.col}) for player ${playerId}`);
+  
+  // Mark heir producer as having used heir
+  heirProducer.heirUsed = true;
+  
+  broadcastGameState();
+  return true;
 }
 
 // Check if a player is in checkmate

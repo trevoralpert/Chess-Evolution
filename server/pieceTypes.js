@@ -431,142 +431,80 @@ const MOVEMENT_PATTERNS = {
   vaultbound: {
     type: 'vault_knight',
     directions: [
-      // Standard knight moves
+      // Standard knight moves ONLY (2x3 L-shapes)
       { row: -2, col: -1 }, { row: -2, col: 1 },
       { row: -1, col: -2 }, { row: -1, col: 2 },
       { row: 1, col: -2 },  { row: 1, col: 2 },
-      { row: 2, col: -1 },  { row: 2, col: 1 },
-      // Extended vault moves (3-square L-shapes)
-      { row: -3, col: -1 }, { row: -3, col: 1 },
-      { row: -1, col: -3 }, { row: -1, col: 3 },
-      { row: 1, col: -3 },  { row: 1, col: 3 },
-      { row: 3, col: -1 },  { row: 3, col: 1 }
+      { row: 2, col: -1 },  { row: 2, col: 1 }
     ],
     maxDistance: 1,
     jumpOver: true,
     multiCapture: {
-      maxCaptures: 2,
+      maxCaptures: 1,
       canLandOnEnemy: false,
-      captureArea: '3x4' // Larger area than standard knight
+      captureArea: '2x3' // 2x3 rectangle between start and landing
     }
   },
   
   vaultseer: {
     type: 'vault_seer',
     directions: [
-      // All vaultbound moves
+      // Standard knight moves ONLY (2x3 L-shapes)
       { row: -2, col: -1 }, { row: -2, col: 1 },
       { row: -1, col: -2 }, { row: -1, col: 2 },
       { row: 1, col: -2 },  { row: 1, col: 2 },
-      { row: 2, col: -1 },  { row: 2, col: 1 },
-      { row: -3, col: -1 }, { row: -3, col: 1 },
-      { row: -1, col: -3 }, { row: -1, col: 3 },
-      { row: 1, col: -3 },  { row: 1, col: 3 },
-      { row: 3, col: -1 },  { row: 3, col: 1 },
-      // Seer vision jumps (4-square patterns)
-      { row: -4, col: -1 }, { row: -4, col: 1 },
-      { row: -1, col: -4 }, { row: -1, col: 4 },
-      { row: 1, col: -4 },  { row: 1, col: 4 },
-      { row: 4, col: -1 },  { row: 4, col: 1 },
-      { row: -3, col: -2 }, { row: -3, col: 2 },
-      { row: -2, col: -3 }, { row: -2, col: 3 },
-      { row: 2, col: -3 },  { row: 2, col: 3 },
-      { row: 3, col: -2 },  { row: 3, col: 2 }
+      { row: 2, col: -1 },  { row: 2, col: 1 }
     ],
     maxDistance: 1,
     jumpOver: true,
     multiCapture: {
-      maxCaptures: 3,
+      maxCaptures: 2,
       canLandOnEnemy: false,
-      captureArea: '4x5'
+      captureArea: '2x3' // 2x3 rectangle between start and landing
     }
   },
   
   vaultarcher: {
     type: 'vault_archer',
     directions: [
-      // All vaultseer moves
+      // Standard knight moves ONLY (2x3 L-shapes)
       { row: -2, col: -1 }, { row: -2, col: 1 },
       { row: -1, col: -2 }, { row: -1, col: 2 },
       { row: 1, col: -2 },  { row: 1, col: 2 },
-      { row: 2, col: -1 },  { row: 2, col: 1 },
-      { row: -3, col: -1 }, { row: -3, col: 1 },
-      { row: -1, col: -3 }, { row: -1, col: 3 },
-      { row: 1, col: -3 },  { row: 1, col: 3 },
-      { row: 3, col: -1 },  { row: 3, col: 1 },
-      { row: -4, col: -1 }, { row: -4, col: 1 },
-      { row: -1, col: -4 }, { row: -1, col: 4 },
-      { row: 1, col: -4 },  { row: 1, col: 4 },
-      { row: 4, col: -1 },  { row: 4, col: 1 },
-      { row: -3, col: -2 }, { row: -3, col: 2 },
-      { row: -2, col: -3 }, { row: -2, col: 3 },
-      { row: 2, col: -3 },  { row: 2, col: 3 },
-      { row: 3, col: -2 },  { row: 3, col: 2 },
-      // Archer precision jumps (5-square patterns)
-      { row: -5, col: -1 }, { row: -5, col: 1 },
-      { row: -1, col: -5 }, { row: -1, col: 5 },
-      { row: 1, col: -5 },  { row: 1, col: 5 },
-      { row: 5, col: -1 },  { row: 5, col: 1 },
-      { row: -4, col: -2 }, { row: -4, col: 2 },
-      { row: -2, col: -4 }, { row: -2, col: 4 },
-      { row: 2, col: -4 },  { row: 2, col: 4 },
-      { row: 4, col: -2 },  { row: 4, col: 2 }
+      { row: 2, col: -1 },  { row: 2, col: 1 }
     ],
     maxDistance: 1,
     jumpOver: true,
     multiCapture: {
-      maxCaptures: 4,
+      maxCaptures: 3,
       canLandOnEnemy: false,
-      captureArea: '5x6'
+      captureArea: '2x3' // 2x3 rectangle between start and landing
     }
   },
   
   vaultmistress: {
     type: 'vault_mistress',
     directions: [
-      // All vaultarcher moves
+      // Standard knight moves ONLY (2x3 L-shapes)
       { row: -2, col: -1 }, { row: -2, col: 1 },
       { row: -1, col: -2 }, { row: -1, col: 2 },
       { row: 1, col: -2 },  { row: 1, col: 2 },
-      { row: 2, col: -1 },  { row: 2, col: 1 },
-      { row: -3, col: -1 }, { row: -3, col: 1 },
-      { row: -1, col: -3 }, { row: -1, col: 3 },
-      { row: 1, col: -3 },  { row: 1, col: 3 },
-      { row: 3, col: -1 },  { row: 3, col: 1 },
-      { row: -4, col: -1 }, { row: -4, col: 1 },
-      { row: -1, col: -4 }, { row: -1, col: 4 },
-      { row: 1, col: -4 },  { row: 1, col: 4 },
-      { row: 4, col: -1 },  { row: 4, col: 1 },
-      { row: -3, col: -2 }, { row: -3, col: 2 },
-      { row: -2, col: -3 }, { row: -2, col: 3 },
-      { row: 2, col: -3 },  { row: 2, col: 3 },
-      { row: 3, col: -2 },  { row: 3, col: 2 },
-      { row: -5, col: -1 }, { row: -5, col: 1 },
-      { row: -1, col: -5 }, { row: -1, col: 5 },
-      { row: 1, col: -5 },  { row: 1, col: 5 },
-      { row: 5, col: -1 },  { row: 5, col: 1 },
-      { row: -4, col: -2 }, { row: -4, col: 2 },
-      { row: -2, col: -4 }, { row: -2, col: 4 },
-      { row: 2, col: -4 },  { row: 2, col: 4 },
-      { row: 4, col: -2 },  { row: 4, col: 2 },
-      // Mistress mastery jumps (6-square patterns)
-      { row: -6, col: -1 }, { row: -6, col: 1 },
-      { row: -1, col: -6 }, { row: -1, col: 6 },
-      { row: 1, col: -6 },  { row: 1, col: 6 },
-      { row: 6, col: -1 },  { row: 6, col: 1 }
+      { row: 2, col: -1 },  { row: 2, col: 1 }
     ],
     maxDistance: 1,
     jumpOver: true,
     multiCapture: {
-      maxCaptures: 5,
-      canLandOnEnemy: true, // Like Mistress Jumper, can land on enemies
-      captureArea: '6x7+landing'
-    }
+      maxCaptures: 3, // 3 from jump area + 1 landing = 4 total
+      canLandOnEnemy: true, // Can land on enemy pieces
+      captureArea: '2x3+landing' // 2x3 area plus landing square
+    },
+    specialAbility: 'heir' // Can produce heir
   },
   
   covenantQueen: {
     type: 'covenant_queen_dual',
     dualMovement: true,
+    specialAbility: 'heir', // Can produce heir
     modes: {
       queen: {
         type: 'omnidirectional',
@@ -581,39 +519,18 @@ const MOVEMENT_PATTERNS = {
       vault: {
         type: 'vault_ultimate',
         directions: [
-          // All vault patterns combined
+          // Standard knight moves ONLY (2x3 L-shapes)
           { row: -2, col: -1 }, { row: -2, col: 1 },
           { row: -1, col: -2 }, { row: -1, col: 2 },
           { row: 1, col: -2 },  { row: 1, col: 2 },
-          { row: 2, col: -1 },  { row: 2, col: 1 },
-          { row: -3, col: -1 }, { row: -3, col: 1 },
-          { row: -1, col: -3 }, { row: -1, col: 3 },
-          { row: 1, col: -3 },  { row: 1, col: 3 },
-          { row: 3, col: -1 },  { row: 3, col: 1 },
-          { row: -4, col: -1 }, { row: -4, col: 1 },
-          { row: -1, col: -4 }, { row: -1, col: 4 },
-          { row: 1, col: -4 },  { row: 1, col: 4 },
-          { row: 4, col: -1 },  { row: 4, col: 1 },
-          { row: -5, col: -1 }, { row: -5, col: 1 },
-          { row: -1, col: -5 }, { row: -1, col: 5 },
-          { row: 1, col: -5 },  { row: 1, col: 5 },
-          { row: 5, col: -1 },  { row: 5, col: 1 },
-          { row: -6, col: -1 }, { row: -6, col: 1 },
-          { row: -1, col: -6 }, { row: -1, col: 6 },
-          { row: 1, col: -6 },  { row: 1, col: 6 },
-          { row: 6, col: -1 },  { row: 6, col: 1 },
-          // Covenant-exclusive patterns
-          { row: -7, col: -1 }, { row: -7, col: 1 },
-          { row: -1, col: -7 }, { row: -1, col: 7 },
-          { row: 1, col: -7 },  { row: 1, col: 7 },
-          { row: 7, col: -1 },  { row: 7, col: 1 }
+          { row: 2, col: -1 },  { row: 2, col: 1 }
         ],
         jumpOver: true,
         maxDistance: 1,
         multiCapture: {
-          maxCaptures: 7, // Ultimate capture ability
+          maxCaptures: 'all', // Captures ALL pieces in jump area automatically
           canLandOnEnemy: true,
-          captureArea: '7x8+landing'
+          captureArea: '2x3+landing' // 2x3 area plus landing square
         }
       }
     }
