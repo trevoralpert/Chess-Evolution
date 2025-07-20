@@ -50,6 +50,8 @@ import { initializeUIElements, getElement, setElementText, setTemporaryElementCo
 import { getWorldPosition } from './modules/gridFunctions.js';
 import { getEvolutionPointsForPiece, createEvolutionPointsLabel, createCachedTextLabel, createGeometricPiece, getPieceColorForPlayer } from './modules/pieceFunctions.js';
 import { formatTime, formatTimeWithColor, createTimerDisplay, formatCountdown } from './modules/timerFunctions.js';
+import { initMenuSystem, returnToMenu, showGameOver } from './modules/menuSystem.js';
+import { showLobbyUI, hideLobbyUI, showLobbyCreation, hideLobbyCreation, showLobbyRoom, updateLobbyRoomDisplay, createLobby, joinLobby, leaveLobby, toggleReady, refreshLobbies, updateLobbyList, getPlayerName } from './modules/lobbySystem.js';
 
 console.log('✅ Modules imported successfully');
 
@@ -134,7 +136,7 @@ function initializeAfterDOM() {
   if (timingUI) timingUI.style.display = 'none';
   
   // Initialize menu system
-  initMenuSystem();
+  initMenuSystem({ socket });
 }
 
 // Initialize menu system
@@ -338,7 +340,7 @@ function showGameOver(winner, stats) {
 }
 
 // Initialize menu on load
-initMenuSystem();
+  initMenuSystem({ socket });
 
 // Continue with game initialization
 function initializeGameComponents() {
