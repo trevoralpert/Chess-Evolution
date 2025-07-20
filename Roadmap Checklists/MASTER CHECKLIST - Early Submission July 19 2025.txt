@@ -173,21 +173,21 @@ Create a fully playable, polished version of EvoChess that demonstrates complete
 **Solution**: Removed all manual color override pathways, enforced pure auto-assignment ✅
 **Status**: **BYPASS ELIMINATED - SPLIT INHERITANCE SHOULD NOW WORK PERFECTLY** 🎉
 
-### **Phase 5: Evolution Menu Enhancement (25 minutes) - ❌ INCOMPLETE!** ⬅️ **NEXT TASK**
+### **Phase 5: Evolution Menu Enhancement (25 minutes) - ✅ COMPLETED!** 🎉
 - [x] **🖱️ Replace Dialog Boxes**: ✅ Right-click context menu system implemented with smooth animations
 - [x] **🎯 Native-Style Context Menu**: ✅ Context menu appears at mouse position with professional styling
 - [x] **📱 Responsive Design**: ✅ Context menu adjusts position to stay on screen
 - [x] **⏰ Real-Time Countdown**: ✅ Timer shows remaining decision time in context menu
 - [x] **🎨 Elegant Styling**: ✅ Professional appearance with hover effects and smooth transitions
 - [x] **🔧 Fix JavaScript Error**: ✅ Fixed `lastRightClickEvent` temporal dead zone error
-- [ ] **🖱️ Fix Right-Click Detection**: ❌ Manual right-click evolution requests not triggering context menu
-- [ ] **🔍 Debug Piece Selection**: ❌ Right-click not properly identifying pieces with evolution potential
-- [ ] **🔗 Fix Client-Server Handshake**: ❌ Manual evolution requests not reaching server
-- [ ] **🧪 Test Manual Evolution**: ❌ Players cannot right-click pieces to trigger evolution
-**Status**: **CONTEXT MENU WORKS, RIGHT-CLICK DETECTION BROKEN!** ❌
-**Technical Issue**: Context menu appears automatically (circumnavigation), but manual right-click doesn't work
-**Critical Gap**: Players cannot manually control evolution timing - forced to rely on automatic triggers only
-**User Discovery**: Right-click evolution completely non-functional despite beautiful context menu working
+- [x] **🖱️ Fix Right-Click Detection**: ✅ Fixed evolution path filtering - now shows ALL paths with affordability info
+- [x] **🔍 Debug Piece Selection**: ✅ Right-click properly identifies pieces with evolution potential
+- [x] **🔗 Fix Client-Server Handshake**: ✅ Manual evolution requests reaching server
+- [x] **🧪 Test Manual Evolution**: ✅ Fixed duplicate event handlers - right-click evolution now working!
+**Status**: **PHASE COMPLETE! Right-click evolution context menu fully functional!** ✅
+**Solution**: Removed duplicate right-click handling in onMouseClick that was causing double requests
+**Result**: Players can now right-click any piece to see available evolution paths with costs
+**Context Menu Features**: Shows all paths (even unaffordable), countdown timer, hover effects
 
 ### **Phase 6: Complete Evolution Path System (30 minutes) - 🚨 CRITICAL SYSTEM GAP!**
 - [ ] **🎯 Add Missing Evolution Paths**: Queen (8pts), Hybrid Queen (10pts), Vaultmistress/Mistress Jumper (12pts), Super Jumper, Hyper Jumper
@@ -305,7 +305,7 @@ Before final submission:
 - [x] **PHASE 2: Multiplayer foundation (player count control)** ✅ **COMPLETED**
 - [x] **PHASE 3: Auto-color assignment system** ✅ **COMPLETED**
 - [x] **PHASE 4: Split piece color inheritance** ✅ **COMPLETED**
-- [ ] **PHASE 5: Evolution menu enhancement (right-click context)** ❌ **INCOMPLETE** ⬅️ **NEXT TASK** (Context menu works, right-click detection broken)
+- [x] **PHASE 5: Evolution menu enhancement (right-click context)** ✅ **COMPLETED**
 - [ ] **PHASE 6: Complete Evolution Path System** 🚨 **CRITICAL SYSTEM GAP** 
 - [ ] **PHASE 7: Move-based evolution point system** 🎯 **USER'S BRILLIANT SOLUTION**
 - [ ] **PHASE 8: King Circle movement rules** 🎯 **MOVEMENT RULE FIX**

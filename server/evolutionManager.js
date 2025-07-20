@@ -3,6 +3,8 @@ const { PIECE_TYPES } = require('./pieceTypes');
 class EvolutionManager {
     constructor() {
         this.evolutionPaths = this.initializeEvolutionPaths();
+        console.log('🎯 PHASE 5 DEBUG: Evolution paths initialized:', Object.keys(this.evolutionPaths));
+        console.log('🎯 PHASE 5 DEBUG: PAWN paths:', this.evolutionPaths['PAWN'] ? this.evolutionPaths['PAWN'].length : 'NOT FOUND');
         this.pieceTimeTracking = new Map(); // pieceId -> { birthTime, totalAliveTime }
         this.playerEvolutionBanks = new Map(); // playerId -> { points, pendingChoices }
         this.evolutionRequirements = this.initializeEvolutionRequirements();
@@ -254,38 +256,43 @@ class EvolutionManager {
         return bank;
     }
 
-    // Get available evolution paths for a piece
-    getAvailableEvolutionPaths(pieceId, piece, playerId) {
-        const bank = this.initializePlayerBank(playerId);
-        const paths = this.evolutionPaths[piece.type] || [];
-        const pieceAliveTime = this.getPieceAliveTime(pieceId);
-        const pieceStats = this.pieceTimeTracking.get(pieceId)?.stats || {};
-        
-        return paths.filter(path => {
-            // Check if player has enough points
-            if (bank.points < path.cost) return false;
+            // Get available evolution paths for a piece
+        getAvailableEvolutionPaths(pieceId, piece, playerId) {
+            console.log(`🎯 PHASE 5 DEBUG: getAvailableEvolutionPaths called for piece ${pieceId}, type: ${piece.type}`);
             
-            // Check time requirement
-            if (pieceAliveTime < path.timeRequirement) return false;
+            const bank = this.initializePlayerBank(playerId);
+            console.log(`🎯 PHASE 5 DEBUG: Player bank points: ${bank.points}`);
             
-            // Check special requirements
-            const requirements = this.evolutionRequirements[path.targetType];
-            if (requirements) {
-                for (const [req, value] of Object.entries(requirements)) {
-                    if (req === 'minTimeAlive' && pieceAliveTime < value) return false;
-                    if (req === 'minEvolutionPoints' && bank.totalPointsEarned < value) return false;
-                    if (pieceStats[req.replace('min', '').toLowerCase()] < value) return false;
-                }
-            }
+            const paths = this.evolutionPaths[piece.type] || [];
+            console.log(`🎯 PHASE 5 DEBUG: Evolution paths for ${piece.type}:`, paths.length, paths.map(p => p.targetType));
             
-            return true;
-        }).map(path => ({
-            ...path,
-            currentAliveTime: pieceAliveTime,
-            requiredAliveTime: path.timeRequirement,
-            canAfford: bank.points >= path.cost,
-            meetsRequirements: this.checkEvolutionRequirements(path.targetType, pieceStats, bank, pieceAliveTime)
-        }));
+            const pieceAliveTime = this.getPieceAliveTime(pieceId);
+            console.log(`🎯 PHASE 5 DEBUG: Piece alive time: ${pieceAliveTime}s`);
+            
+            const pieceStats = this.pieceTimeTracking.get(pieceId)?.stats || {};
+            console.log(`🎯 PHASE 5 DEBUG: Piece stats:`, pieceStats);
+            
+            // ✅ PHASE 5 FIX: Return ALL paths with affordability/requirement info instead of filtering
+            return paths.map(path => {
+            const canAfford = bank.points >= path.cost;
+            const meetsTimeRequirement = pieceAliveTime >= path.timeRequirement;
+            const meetsSpecialRequirements = this.checkEvolutionRequirements(path.targetType, pieceStats, bank, pieceAliveTime);
+            
+            return {
+                ...path,
+                currentAliveTime: pieceAliveTime,
+                requiredAliveTime: path.timeRequirement,
+                canAfford: canAfford,
+                meetsTimeRequirement: meetsTimeRequirement,
+                meetsRequirements: meetsTimeRequirement && meetsSpecialRequirements,
+                // Include failure reasons for UI display
+                failureReasons: [
+                    !canAfford && `Need ${path.cost - bank.points} more points`,
+                    !meetsTimeRequirement && `Need ${Math.ceil(path.timeRequirement - pieceAliveTime)} more seconds alive`,
+                    !meetsSpecialRequirements && 'Special requirements not met'
+                ].filter(Boolean)
+            };
+        });
     }
 
     // Check if piece meets evolution requirements

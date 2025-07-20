@@ -674,6 +674,7 @@ function setupSocketListeners() {
 
   socket.on('evolution-choice-failed', (data) => {
     console.log('🎯 Evolution choice failed:', data);
+    console.log('🎯 PHASE 5 DEBUG: Error message:', data.error);
     hideEvolutionChoice();
     showNotification('Evolution Failed', data.error, 'error');
   });
@@ -686,6 +687,10 @@ function setupSocketListeners() {
 
   socket.on('evolution-choice-dialog', (data) => {
     console.log('🎯 Evolution choice dialog event received:', data);
+    console.log('🎯 PHASE 5 DEBUG: Available paths:', data.availablePaths);
+    console.log('🎯 PHASE 5 DEBUG: Bank info:', data.bankInfo);
+    console.log('🎯 PHASE 5 DEBUG: lastRightClickEvent:', lastRightClickEvent);
+    
     const { pieceId, piece, reason, availablePaths, bankInfo, timeLimit } = data;
     // ✅ PHASE 5: Use context menu instead of popup dialog
     showEvolutionContextMenu(data, lastRightClickEvent);
@@ -4240,12 +4245,20 @@ function showEvolutionChoice(data) {
 }
 
 function hideEvolutionChoice() {
-  document.getElementById('evolution-choice-panel').style.display = 'none';
+  // ✅ PHASE 5 FIX: Check if panel exists before accessing style
+  const panel = document.getElementById('evolution-choice-panel');
+  if (panel) {
+    panel.style.display = 'none';
+  }
+  
   if (evolutionTimer) {
     clearInterval(evolutionTimer);
     evolutionTimer = null;
   }
   currentEvolutionChoice = null;
+  
+  // Also hide context menu if it exists
+  hideEvolutionContextMenu();
 }
 
 function handleEvolutionCompleted(data) {
@@ -4797,6 +4810,12 @@ function onMouseClick(event) {
   // Check if this is a right-click
   const isRightClick = event.button === 2;
   
+  // ✅ PHASE 5 FIX: Skip right-clicks - they're handled by onRightClick
+  if (isRightClick) {
+    console.log('🖱️ Right-click detected in onMouseClick - skipping (handled by onRightClick)');
+    return false;
+  }
+  
   let clickHandled = false;
   
   // For now, just allow all clicks - we can add drag detection later if needed
@@ -4994,20 +5013,15 @@ function onMouseClick(event) {
       
       if (isOwnPiece) {
         clickHandled = true;
-        if (isRightClick) {
-          // Right-click: Request evolution options
-          window.globalSocket.emit('request-evolution-choice', { pieceId: piece.id });
-        } else {
-          // Left-click: Select piece and show moves
-          selectedPieceId = piece.id;
-          highlightSelectedPiece(piece.id);
-          
-          // Request valid moves for this piece
-          window.globalSocket.emit('get-valid-moves', { pieceId: piece.id });
-          
-          // Update UI
-          gameInfoEl.textContent = `Selected: ${piece.symbol} ${piece.type}`;
-        }
+        // Left-click: Select piece and show moves
+        selectedPieceId = piece.id;
+        highlightSelectedPiece(piece.id);
+        
+        // Request valid moves for this piece
+        window.globalSocket.emit('get-valid-moves', { pieceId: piece.id });
+        
+        // Update UI
+        gameInfoEl.textContent = `Selected: ${piece.symbol} ${piece.type}`;
       } else {
         console.log('Cannot select opponent piece');
         gameInfoEl.textContent = 'Cannot select opponent piece';
@@ -5165,9 +5179,7 @@ function setupMouseInteraction() {
     handleMouseUp(e);
   }, false);
   
-  renderer.domElement.addEventListener('contextmenu', (event) => {
-    event.preventDefault(); // Prevent context menu on right-click
-  }, false);
+  // Duplicate contextmenu handler removed - already handled above
   
   console.log('🖱️ Pointer event listeners attached to canvas');
 }

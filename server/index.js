@@ -1083,28 +1083,37 @@ io.on('connection', (socket) => {
   // Evolution system handlers
   socket.on('request-evolution-choice', (data) => {
     const { pieceId } = data;
+    console.log(`🎯 PHASE 5 DEBUG: request-evolution-choice received for piece ${pieceId}`);
+    
     const piece = gameState.pieces[pieceId];
+    console.log(`🎯 PHASE 5 DEBUG: piece found:`, piece ? `${piece.type} at (${piece.row},${piece.col})` : 'NOT FOUND');
     
     if (!piece || piece.playerId !== socket.id) {
+      console.log(`🎯 PHASE 5 DEBUG: Invalid piece or ownership - piece exists: ${!!piece}, owner match: ${piece?.playerId === socket.id}`);
       socket.emit('evolution-choice-failed', { error: 'Invalid piece or not your piece' });
       return;
     }
     
     // ✅ PHASE 6 BUG FIX: Use proper evolution path system and correct event name
     const availablePaths = evolutionManager.getAvailableEvolutionPaths(pieceId, piece, socket.id);
+    console.log(`🎯 PHASE 5 DEBUG: Available paths:`, availablePaths.length, availablePaths.map(p => p.targetType));
     
+    // ✅ PHASE 5 FIX: Show evolution dialog even if no affordable paths (player can see what's available)
     if (availablePaths.length === 0) {
-      socket.emit('evolution-choice-failed', { error: 'No evolution paths available for this piece' });
+      console.log(`🎯 PHASE 5 DEBUG: No evolution paths defined for piece type ${piece.type}`);
+      socket.emit('evolution-choice-failed', { error: `No evolution paths available for ${piece.type} pieces` });
       return;
     }
     
     // Get bank info
     const bankInfo = evolutionManager.getPlayerBankInfo(socket.id);
+    console.log(`🎯 PHASE 5 DEBUG: Bank info - points: ${bankInfo.points}`);
     
     // Pause cooldowns during evolution choice
     timingManager.pauseAllCooldowns();
     
     // ✅ PHASE 6 BUG FIX: Send evolution-choice-dialog to match Phase 5 context menu system
+    console.log(`🎯 PHASE 5 DEBUG: Emitting evolution-choice-dialog to client`);
     socket.emit('evolution-choice-dialog', {
       pieceId: pieceId,
       piece: piece,
