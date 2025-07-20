@@ -1,10 +1,10 @@
 # === File: fly.toml ===
 
-app = "EvoChess"
+app = "evochess"
 primary_region = "ord"
 
 [build]
-  builder = "heroku/buildpacks:20"
+  builder = "heroku/builder:22"
 
 [env]
   PORT = "3000"

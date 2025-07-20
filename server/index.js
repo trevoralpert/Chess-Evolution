@@ -3014,7 +3014,7 @@ function completeBattleResolution(winner, loser) {
     // Handle AI evolution automatically (AI doesn't get choice dialog)
     if (gameState.players[winner.playerId] && gameState.players[winner.playerId].isAI) {
       // AI still uses automatic evolution but through the new system
-      const availablePaths = evolutionManager.getAvailableEvolutionPaths(winner.playerId, winner.id);
+      const availablePaths = evolutionManager.getAvailableEvolutionPaths(winner.id, winner, winner.playerId);
       if (availablePaths.length > 0) {
         // AI picks the first available evolution path
         const chosenPath = availablePaths[0];
