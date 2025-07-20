@@ -231,23 +231,23 @@ class VictoryManager {
     // During normal gameplay (2+ players), don't spam logs
     const hasVictoryCondition = alivePlayers.length <= 1 || this.evolutionInProgress;
     
-    if (hasVictoryCondition) {
-      console.log(`Victory check: ${alivePlayers.length} alive players out of ${activePlayers.length} active, ${players.length} total`);
-      alivePlayers.forEach(p => {
-        const validPieces = p.pieces.filter(pieceId => {
-          const piece = this.gameState.pieces[pieceId];
-          return piece && piece.playerId === p.id;
+    // Only log during single player scenarios when there's a real chance of victory
+    if (hasVictoryCondition && alivePlayers.length <= 1) {
+      const gameTime = this.gameState.gameStartTime ? (Date.now() - this.gameState.gameStartTime) : 0;
+      const MIN_GAME_TIME_FOR_VICTORY = 600000; // 10 minutes
+      const hasGameStarted = gameTime > MIN_GAME_TIME_FOR_VICTORY;
+      
+      // Only log if we're close to a victory condition
+      if (hasGameStarted || activePlayers.length > 1) {
+        console.log(`Victory check: ${alivePlayers.length} alive players out of ${activePlayers.length} active, ${players.length} total`);
+        alivePlayers.forEach(p => {
+          const validPieces = p.pieces.filter(pieceId => {
+            const piece = this.gameState.pieces[pieceId];
+            return piece && piece.playerId === p.id;
+          });
+          console.log(`  Player ${p.name} (${p.id}): ${validPieces.length} valid pieces, isAI: ${p.isAI}`);
         });
-        console.log(`  Player ${p.name} (${p.id}): ${validPieces.length} valid pieces, isAI: ${p.isAI}`);
-        
-        // Log piece details if evolution was recent or no pieces
-        if (this.evolutionInProgress || validPieces.length === 0) {
-          console.log(`    Piece details:`, validPieces.map(pid => {
-            const piece = this.gameState.pieces[pid];
-            return { id: pid, type: piece?.type, exists: !!piece };
-          }));
-        }
-      });
+      }
     }
     
     // ✅ EARLY EXIT: If no victory condition exists, skip the rest of the checks
@@ -269,8 +269,6 @@ class VictoryManager {
       const totalPlayers = activePlayers.length; // Use active players, not total
       const hasGameStarted = gameTime > MIN_GAME_TIME_FOR_VICTORY; // MUCH more conservative
       
-      console.log(`Single player check: activePlayers=${totalPlayers}, gameTime=${gameTime}ms, hasGameStarted=${hasGameStarted}`);
-      
       // Additional validation: ensure we actually had a multi-player game
       const hadMultiplePlayers = totalPlayers > 1 || Object.keys(this.gameState.players).length > 1;
       
@@ -283,8 +281,6 @@ class VictoryManager {
       } else if (hadMultiplePlayers && hasGameStarted && alivePlayers.length === 0) {
         console.log(`Declaring draw: had multiple players but no one left after 10+ minutes`);
         this.declareVictory(null, 'draw');
-      } else {
-        console.log(`Not declaring victory: conditions not met (hadMultiplePlayers=${hadMultiplePlayers}, hasGameStarted=${hasGameStarted}, gameTime=${gameTime}ms)`);
       }
       return;
     }

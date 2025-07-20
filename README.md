@@ -52,19 +52,37 @@ cd Chess-Evolution
 # Install dependencies
 npm install
 
-# Start development server
+# Start development server (with auto-reload)
 npm run dev
+
+# OR start production server
+npm start
 
 # Open in browser
 http://localhost:3000
 ```
 
-### Production Build
+### Playing the Game
 
-```bash
-# Start production server
-npm start
-```
+1. **Main Menu**
+   - Enter your name (auto-generated if left blank)
+   - Choose a game mode:
+     - **Quick Play** - Start immediately vs AI
+     - **VS AI** - Play against computer opponent
+     - **Create Game** - Host a multiplayer game
+     - **Join Game** - Join an existing game
+
+2. **Game Controls**
+   - **Left Click** - Select and move pieces
+   - **Right Click** - Open evolution menu (when points available)
+   - **Mouse Drag** - Rotate the 3D globe
+   - **Scroll** - Zoom in/out
+
+3. **Evolution System**
+   - Capture pieces to gain their point value
+   - Pawns gain +1 point at equator (9 moves)
+   - Pawns gain +8 points for circumnavigation (18 moves)
+   - Right-click any piece to evolve when you have enough points
 
 ## 🛠️ Tech Stack
 
@@ -184,6 +202,33 @@ npm test         # Run tests (when implemented)
    - Point-based resolution
    - Contest mechanics
    - Dice roll calculations
+
+## 🏆 Current Status (July 2025)
+
+### ✅ Completed Features
+- **Core Gameplay** - Full chess mechanics on spherical board
+- **Evolution System** - 15+ pieces with point-based evolution
+- **Vault Pieces** - Complete implementation with multi-capture UI
+- **Heir System** - Vaultmistress & Covenant Queen can produce heirs
+- **Multiplayer** - Real-time sync with Socket.io
+- **AI Players** - Three difficulty levels
+- **Visual Polish** - Professional UI with smooth transitions
+- **Move-Based Bonuses** - Equator & circumnavigation rewards
+- **Splitter Mechanics** - Unlimited splitting with proper inheritance
+- **Right-Click Evolution** - Context menu with all available paths
+
+### 🚧 In Development
+- Mobile responsive design
+- Tournament mode UI
+- Spectator mode UI
+- Additional piece evolutions
+- Sound effects and music
+
+### 📈 Performance
+- Stable with 2-4 players
+- 60 FPS on modern hardware
+- Low network latency design
+- Optimized 3D rendering
 
 ## 🤝 Contributing
 

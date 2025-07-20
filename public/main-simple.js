@@ -91,45 +91,116 @@ function initMenuSystem() {
   // Auto-color assignment - no manual color picker needed
   console.log('🎨 Auto-color assignment system initialized - colors assigned by player index');
   
+  // Helper function to add loading state to button
+  function setButtonLoading(button, isLoading, originalText) {
+    if (isLoading) {
+      button.classList.add('btn-loading');
+      button.disabled = true;
+      button.innerHTML = '<span class="loading loading-spinner"></span> Loading...';
+    } else {
+      button.classList.remove('btn-loading');
+      button.disabled = false;
+      button.innerHTML = originalText;
+    }
+  }
+  
+  // Helper function to validate player name
+  function validateAndGetPlayerName() {
+    const input = document.getElementById('player-name-input');
+    let name = input.value.trim();
+    
+    if (!name) {
+      name = 'Player ' + Math.floor(Math.random() * 1000);
+      input.value = name;
+      
+      // Flash the input to show it was auto-filled
+      input.classList.add('input-success');
+      setTimeout(() => input.classList.remove('input-success'), 500);
+    }
+    
+    return name;
+  }
+  
   // Menu button handlers
-  document.getElementById('quick-play-btn').addEventListener('click', () => {
+  document.getElementById('quick-play-btn').addEventListener('click', function() {
+    const btn = this;
+    const originalHTML = btn.innerHTML;
+    setButtonLoading(btn, true);
+    
     console.log('🚀 Quick Play - Starting vs AI...');
-    playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
+    playerName = validateAndGetPlayerName();
     gameMode = 'vs-ai';
-    startGame();
+    
+    // Add slight delay for smoother transition
+    setTimeout(() => {
+      startGame();
+      setButtonLoading(btn, false, originalHTML);
+    }, 300);
   });
   
-  document.getElementById('vs-ai-btn').addEventListener('click', () => {
+  document.getElementById('vs-ai-btn').addEventListener('click', function() {
+    const btn = this;
+    const originalHTML = btn.innerHTML;
+    setButtonLoading(btn, true);
+    
     console.log('🤖 Starting vs AI...');
-    playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
+    playerName = validateAndGetPlayerName();
     gameMode = 'vs-ai';
-    startGame();
+    
+    setTimeout(() => {
+      startGame();
+      setButtonLoading(btn, false, originalHTML);
+    }, 300);
   });
   
-  document.getElementById('create-game-btn').addEventListener('click', () => {
+  document.getElementById('create-game-btn').addEventListener('click', function() {
+    const btn = this;
+    const originalHTML = btn.innerHTML;
+    setButtonLoading(btn, true);
+    
     console.log('🎯 Creating multiplayer game...');
-    playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
+    playerName = validateAndGetPlayerName();
     gameMode = 'create-vs-human';
-    startGame();
+    
+    setTimeout(() => {
+      startGame();
+      setButtonLoading(btn, false, originalHTML);
+    }, 300);
   });
   
-  document.getElementById('join-game-btn').addEventListener('click', () => {
+  document.getElementById('join-game-btn').addEventListener('click', function() {
+    const btn = this;
+    const originalHTML = btn.innerHTML;
+    setButtonLoading(btn, true);
+    
     console.log('🤝 Joining multiplayer game...');
-    playerName = document.getElementById('player-name-input').value || 'Player ' + Math.floor(Math.random() * 1000);
+    playerName = validateAndGetPlayerName();
     gameMode = 'join-vs-human';
-    startGame();
+    
+    setTimeout(() => {
+      startGame();
+      setButtonLoading(btn, false, originalHTML);
+    }, 300);
   });
   
   document.getElementById('tournament-btn').addEventListener('click', () => {
-    alert('Tournament mode coming soon!\n\nTournament functionality is implemented on the server but needs UI integration.');
+    showInfoModal('Tournament Mode', 
+      'Tournament functionality is implemented on the server but needs UI integration.',
+      'fa-trophy',
+      'warning'
+    );
   });
   
   document.getElementById('spectate-btn').addEventListener('click', () => {
-    alert('Spectator mode coming soon!\n\nSpectator functionality is implemented on the server but needs UI integration.');
+    showInfoModal('Spectator Mode',
+      'Spectator functionality is implemented on the server but needs UI integration.',
+      'fa-eye',
+      'info'
+    );
   });
   
   document.getElementById('evolution-guide-btn').addEventListener('click', () => {
-    alert('Evolution Guide coming soon!\n\nBasic rules:\n- Pawns gain 1 point for crossing equator\n- Capture pieces to gain their value\n- Evolve pieces with points:\n  • Pawn → Splitter (2 pts)\n  • Splitter → Bishop/Knight (3 pts)\n  • And many more!');
+    showEvolutionGuide();
   });
   
   // Game over screen button
@@ -169,15 +240,71 @@ function startGame() {
   window.globalSocket = socket;
   console.log('Socket.io initialized, waiting for connection...');
   
+  // Add connection timeout
+  const connectionTimeout = setTimeout(() => {
+    showInfoModal('Connection Failed', 
+      'Unable to connect to the game server. Please check your internet connection and try again.',
+      'fa-exclamation-triangle',
+      'error'
+    );
+    returnToMenu();
+  }, 10000); // 10 second timeout
+  
+  // Handle connection errors
+  socket.on('connect_error', (error) => {
+    console.error('Connection error:', error);
+    clearTimeout(connectionTimeout);
+    showInfoModal('Connection Error',
+      'Failed to connect to the game server. Please try again later.',
+      'fa-wifi',
+      'error'
+    );
+    returnToMenu();
+  });
+  
   // Wait for connection, then send appropriate game mode request
   socket.on('connection-established', (data) => {
+    clearTimeout(connectionTimeout);
     console.log('✅ Connected to server:', data);
     
-    // Hide menu, show game UI and timer
-    menuScreen.style.display = 'none';
-    gameUI.style.display = 'block';
-    const timingUI = document.getElementById('timing-ui');
-    if (timingUI) timingUI.style.display = 'block';
+    // Smooth transition from menu to game
+    menuScreen.style.opacity = '0';
+    menuScreen.style.transition = 'opacity 0.3s ease';
+    
+    setTimeout(() => {
+      menuScreen.style.display = 'none';
+      gameUI.style.display = 'block';
+      gameUI.style.opacity = '0';
+      const timingUI = document.getElementById('timing-ui');
+      if (timingUI) {
+        timingUI.style.display = 'block';
+        timingUI.style.opacity = '0';
+      }
+      
+      // Chat UI is now hidden
+      const chatUI = document.getElementById('chat-ui');
+      // Keeping chat hidden during game
+      // if (chatUI) {
+      //   chatUI.style.display = 'block';
+      //   chatUI.style.opacity = '0';
+      // }
+      
+      // Fade in game UI
+      requestAnimationFrame(() => {
+        gameUI.style.transition = 'opacity 0.3s ease';
+        gameUI.style.opacity = '1';
+        if (timingUI) {
+          timingUI.style.transition = 'opacity 0.3s ease';
+          timingUI.style.opacity = '1';
+        }
+        // Chat UI fade-in removed
+        // if (chatUI) {
+        //   chatUI.style.transition = 'opacity 0.3s ease';
+        //   chatUI.style.opacity = '1';
+        // }
+      });
+    }, 300);
+    
     isInGame = true;
     
     // Send the appropriate game creation request based on mode
@@ -227,14 +354,47 @@ function returnToMenu() {
     currentTimer = null;
   }
   
-  // Hide game screens and timer
-  gameUI.style.display = 'none';
-  gameOverScreen.style.display = 'none';
+  // Smooth transition back to menu
   const timingUI = document.getElementById('timing-ui');
-  if (timingUI) timingUI.style.display = 'none';
+  const chatUI = document.getElementById('chat-ui');
   
-  // Show menu
-  menuScreen.style.display = 'flex';
+  // Fade out current screens
+  if (gameUI.style.display !== 'none') {
+    gameUI.style.transition = 'opacity 0.3s ease';
+    gameUI.style.opacity = '0';
+  }
+  
+  if (gameOverScreen.style.display !== 'none') {
+    gameOverScreen.style.transition = 'opacity 0.3s ease';
+    gameOverScreen.style.opacity = '0';
+  }
+  
+  if (timingUI && timingUI.style.display !== 'none') {
+    timingUI.style.transition = 'opacity 0.3s ease';
+    timingUI.style.opacity = '0';
+  }
+  
+  if (chatUI && chatUI.style.display !== 'none') {
+    chatUI.style.transition = 'opacity 0.3s ease';
+    chatUI.style.opacity = '0';
+  }
+  
+  setTimeout(() => {
+    // Hide game screens and timer
+    gameUI.style.display = 'none';
+    gameOverScreen.style.display = 'none';
+    if (timingUI) timingUI.style.display = 'none';
+    if (chatUI) chatUI.style.display = 'none';
+    
+    // Show menu with fade in
+    menuScreen.style.display = 'flex';
+    menuScreen.style.opacity = '0';
+    
+    requestAnimationFrame(() => {
+      menuScreen.style.transition = 'opacity 0.3s ease';
+      menuScreen.style.opacity = '1';
+    });
+  }, 300);
   isInGame = false;
   
   // Reset game state
@@ -7763,4 +7923,153 @@ function createHeirProductionEffect(worldPos) {
   };
   
   animateHeirEffect();
+}
+
+// Show info modal
+function showInfoModal(title, message, icon, type = 'info') {
+  const modal = document.createElement('div');
+  modal.className = 'modal modal-open';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  `;
+  
+  const modalBox = document.createElement('div');
+  modalBox.className = 'modal-box';
+  modalBox.style.cssText = `
+    background: #2a2a3e;
+    border-radius: 15px;
+    padding: 30px;
+    max-width: 500px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+  `;
+  
+  const colors = {
+    info: '#3ABFF8',
+    warning: '#FBBD23',
+    error: '#F87272',
+    success: '#36D399'
+  };
+  
+  modalBox.innerHTML = `
+    <h3 class="font-bold text-2xl mb-4 flex items-center gap-3">
+      <i class="fas ${icon}" style="color: ${colors[type]};"></i>
+      ${title}
+    </h3>
+    <p class="text-base-content/80 mb-6">${message}</p>
+    <div class="modal-action">
+      <button class="btn btn-primary" onclick="this.closest('.modal').remove()">
+        <i class="fas fa-check mr-2"></i>OK
+      </button>
+    </div>
+  `;
+  
+  modal.appendChild(modalBox);
+  document.body.appendChild(modal);
+  
+  // Animate in
+  requestAnimationFrame(() => {
+    modal.style.opacity = '1';
+    modalBox.style.transform = 'scale(1)';
+  });
+}
+
+// Show evolution guide
+function showEvolutionGuide() {
+  const modal = document.createElement('div');
+  modal.className = 'modal modal-open';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  `;
+  
+  const modalBox = document.createElement('div');
+  modalBox.className = 'modal-box';
+  modalBox.style.cssText = `
+    background: #2a2a3e;
+    border-radius: 15px;
+    padding: 30px;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+  `;
+  
+  modalBox.innerHTML = `
+    <h3 class="font-bold text-2xl mb-4 flex items-center gap-3">
+      <i class="fas fa-dna" style="color: #36D399;"></i>
+      Evolution Guide
+    </h3>
+    
+    <div class="space-y-4">
+      <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i>
+        <span>Capture pieces to gain evolution points equal to their value!</span>
+      </div>
+      
+      <h4 class="font-bold text-lg text-primary">Basic Rules:</h4>
+      <ul class="list-disc list-inside space-y-2 text-base-content/80">
+        <li>Pawns gain +1 point after 9 moves (crossing equator)</li>
+        <li>Pawns gain +8 points after 18 moves (circumnavigation)</li>
+        <li>Splitters gain +8 points when reaching poles</li>
+        <li>Right-click any piece to evolve with available points</li>
+      </ul>
+      
+      <h4 class="font-bold text-lg text-primary mt-4">Evolution Paths:</h4>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <div class="badge badge-lg gap-2">Pawn → Splitter (2 pts)</div>
+        <div class="badge badge-lg gap-2">Splitter → Bishop/Knight (3 pts)</div>
+        <div class="badge badge-lg gap-2">Bishop/Knight → Vaultbound (4 pts)</div>
+        <div class="badge badge-lg gap-2">Rook → Vaultseer (7 pts)</div>
+        <div class="badge badge-lg gap-2">Queen → Covenant Queen (12 pts)</div>
+      </div>
+      
+      <h4 class="font-bold text-lg text-primary mt-4">Special Abilities:</h4>
+      <ul class="list-disc list-inside space-y-2 text-base-content/80">
+        <li><strong>Splitter:</strong> Can split into copies</li>
+        <li><strong>Vault Pieces:</strong> Jump over enemies to capture</li>
+        <li><strong>Vaultmistress:</strong> Can produce heirs</li>
+        <li><strong>Covenant Queen:</strong> Dual movement modes + heir production</li>
+      </ul>
+    </div>
+    
+    <div class="modal-action mt-6">
+      <button class="btn btn-primary" onclick="this.closest('.modal').remove()">
+        <i class="fas fa-check mr-2"></i>Got it!
+      </button>
+    </div>
+  `;
+  
+  modal.appendChild(modalBox);
+  document.body.appendChild(modal);
+  
+  // Animate in
+  requestAnimationFrame(() => {
+    modal.style.opacity = '1';
+    modalBox.style.transform = 'scale(1)';
+  });
 } 
