@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EvoChess Embed Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #4CAF50;
+        }
+        .info {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        iframe {
+            width: 100%;
+            height: 600px;
+            border: 2px solid #4CAF50;
+            border-radius: 8px;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            background: #333;
+            border-radius: 4px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>EvoChess Embedding Test</h1>
+        
+        <div class="info">
+            <h2>Test Information</h2>
+            <p><strong>Current Page URL:</strong> <span id="current-url"></span></p>
+            <p><strong>Iframe Source:</strong> <span id="iframe-src"></span></p>
+            <p><strong>Status:</strong> <span id="status">Not loaded</span></p>
+        </div>
+        
+        <div>
+            <button onclick="loadLocal()">Load Local (localhost:3000)</button>
+            <button onclick="loadProduction()">Load Production (Fly.io)</button>
+            <button onclick="testCommunication()">Test Communication</button>
+        </div>
+        
+        <iframe id="game-iframe" src="" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
+        
+        <div class="status" id="console-output">
+            <h3>Console Output from iframe:</h3>
+            <pre id="iframe-console"></pre>
+        </div>
+    </div>
+    
+    <script>
+        // Display current URL
+        document.getElementById('current-url').textContent = window.location.href;
+        
+        // Listen for messages from iframe
+        window.addEventListener('message', (event) => {
+            console.log('Message from iframe:', event.data);
+            document.getElementById('iframe-console').innerHTML += JSON.stringify(event.data, null, 2) + '\n';
+        });
+        
+        function loadLocal() {
+            const iframe = document.getElementById('game-iframe');
+            iframe.src = 'http://localhost:3000';
+            document.getElementById('iframe-src').textContent = iframe.src;
+            document.getElementById('status').textContent = 'Loading local...';
+        }
+        
+        function loadProduction() {
+            const iframe = document.getElementById('game-iframe');
+            // Replace with your actual Fly.io URL
+            iframe.src = 'https://evochess.fly.dev';
+            document.getElementById('iframe-src').textContent = iframe.src;
+            document.getElementById('status').textContent = 'Loading production...';
+        }
+        
+        function testCommunication() {
+            const iframe = document.getElementById('game-iframe');
+            iframe.contentWindow.postMessage({ type: 'ping' }, '*');
+        }
+        
+        // Monitor iframe load
+        document.getElementById('game-iframe').onload = function() {
+            document.getElementById('status').textContent = 'Loaded successfully';
+            
+            // Try to access iframe console (may be blocked by CORS)
+            try {
+                const iframeWindow = this.contentWindow;
+                console.log('Iframe window accessible:', !!iframeWindow);
+            } catch (e) {
+                console.log('Cannot access iframe window (CORS):', e.message);
+            }
+        };
+        
+        document.getElementById('game-iframe').onerror = function(e) {
+            document.getElementById('status').textContent = 'Error loading: ' + e.message;
+        };
+    </script>
+</body>
+</html> 

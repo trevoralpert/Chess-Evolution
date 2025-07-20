@@ -20,11 +20,50 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 
+// CORS and embedding configuration for websites
+app.use((req, res, next) => {
+  // Allow embedding from any origin
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  
+  // Allow iframe embedding
+  res.setHeader('X-Frame-Options', 'ALLOWALL');
+  res.setHeader('Content-Security-Policy', "frame-ancestors *");
+  
+  // Log embedded requests for debugging
+  const referer = req.get('Referer');
+  if (referer && !referer.includes(req.get('host'))) {
+    console.log('🌐 Request from embedded context:', {
+      referer,
+      resource: req.url,
+      method: req.method
+    });
+  }
+  
+  next();
+});
+
 // Serve static files from /public
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Serve chess piece models from /chess piece models
 app.use('/chess piece models', express.static(path.join(__dirname, '../chess piece models')));
+
+// Health check endpoint for deployment verification
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    gameState: {
+      players: Object.keys(gameState.players).length,
+      pieces: Object.keys(gameState.pieces).length,
+      activeGames: Object.values(gameState.players).filter(p => !p.eliminated).length
+    }
+  });
+});
 
 // Game state
 const gameState = {

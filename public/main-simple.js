@@ -228,6 +228,14 @@ function initMenuSystem() {
 // Start the game
 function startGame() {
   console.log('🎮 Starting game with:', { playerName, gameMode });
+  console.log('🌐 Environment diagnostics:', {
+    currentURL: window.location.href,
+    isEmbedded: window.self !== window.top,
+    origin: window.location.origin,
+    protocol: window.location.protocol,
+    renderer: renderer ? 'exists' : 'not initialized',
+    threeJS: typeof THREE !== 'undefined' ? 'loaded' : 'not loaded'
+  });
   
   // Prevent multiple connections
   if (socket && socket.connected) {
@@ -236,9 +244,49 @@ function startGame() {
   }
   
   // Initialize socket connection first
-  socket = io();
+  socket = io({
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    reconnectionAttempts: 5,
+    transports: ['websocket', 'polling'] // Try WebSocket first, fall back to polling
+  });
   window.globalSocket = socket;
   console.log('Socket.io initialized, waiting for connection...');
+  
+  // Send status to parent frame if embedded
+  if (window.self !== window.top) {
+    window.parent.postMessage({
+      type: 'evochess-status',
+      status: 'socket-initializing',
+      url: window.location.href
+    }, '*');
+  }
+  
+  // Add connection diagnostics for production debugging
+  socket.on('connect_error', (error) => {
+    console.error('Socket connection error:', error.type, error.message);
+    if (error.type === 'TransportError') {
+      console.error('Transport error - this often happens in production due to proxy/firewall issues');
+    }
+    
+    // Notify parent frame of error
+    if (window.self !== window.top) {
+      window.parent.postMessage({
+        type: 'evochess-error',
+        error: 'Socket connection failed: ' + error.message
+      }, '*');
+    }
+  });
+  
+  socket.on('reconnect_attempt', (attemptNumber) => {
+    console.log(`Reconnection attempt #${attemptNumber}`);
+  });
+  
+  socket.on('reconnect_failed', () => {
+    console.error('Failed to reconnect after maximum attempts');
+    showNotification('Connection Lost', 'Unable to connect to game server. Please refresh the page.', 'error');
+  });
   
   // Add connection timeout
   const connectionTimeout = setTimeout(() => {
@@ -533,6 +581,16 @@ function setupSocketListeners() {
     console.log('🔄 Players in received state:', Object.keys(newGameState.players || {}));
     console.log('🔄 Pieces in received state:', Object.keys(newGameState.pieces || {}));
     console.log('🔄 Number of pieces received:', Object.keys(newGameState.pieces || {}).length);
+    
+    // Embedding diagnostics
+    console.log('🌐 Rendering context:', {
+      isEmbedded: window.self !== window.top,
+      sceneExists: !!scene,
+      rendererExists: !!renderer,
+      cameraExists: !!camera,
+      canvasInDOM: renderer ? document.body.contains(renderer.domElement) : false,
+      modelsLoaded: Object.keys(loadedModels).length
+    });
     
     // PHASE 1D DEBUG: Force rendering in all game modes, including waiting
     console.log('🎮 EMPTY BOARD DEBUG: Current game mode:', gameMode);
@@ -1112,6 +1170,14 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x0a0a0a);
 document.body.appendChild(renderer.domElement);
+
+console.log('🎮 3D Renderer initialized:', {
+  canvas: renderer.domElement,
+  width: renderer.domElement.width,
+  height: renderer.domElement.height,
+  parent: renderer.domElement.parentElement?.tagName,
+  visible: renderer.domElement.style.display !== 'none'
+});
 
 // Mouse interaction setup
 const mouse = new THREE.Vector2();
@@ -2904,287 +2970,8 @@ function updateChatStatus(status) {
 }
 
 // Timer system socket handlers
-socket.on('timer-started', (data) => {
-  console.log('Timer started:', data);
-  startTimer(data.playerId, data.timeLimit, data.startTime);
-  
-  // Update active player display
-  const player = gameState.players[data.playerId];
-  if (player) {
-    updateActivePlayer(data.playerId, player.name);
-  }
-});
+// [REMOVED: 27 more duplicate socket handlers that were causing "Cannot read properties of null" errors]
 
-socket.on('turn-changed', (data) => {
-  console.log('Turn changed:', data);
-  updateActivePlayer(data.activePlayer, data.playerName);
-  
-  // Show notification if it's your turn
-  if (data.activePlayer === socket.id) {
-    showNotification('Your Turn', 'Make your move!', 'info');
-  }
-});
-
-socket.on('player-timeout', (data) => {
-  console.log('Player timeout:', data);
-  showNotification('Player Timeout', data.message, 'warning');
-  
-  // Clear the timer display
-  if (currentTimer) {
-    clearInterval(currentTimer);
-    currentTimer = null;
-  }
-  
-  document.getElementById('timer-status').textContent = 'Player timed out';
-  document.getElementById('timer-status').style.color = '#ff8800';
-});
-
-socket.on('timers-paused', (data) => {
-  console.log('Timers paused:', data);
-  pauseTimer();
-});
-
-socket.on('timers-resumed', (data) => {
-  console.log('Timers resumed:', data);
-  resumeTimer();
-});
-
-socket.on('move-pending', (data) => {
-  console.log('Move pending:', data);
-  showNotification('Move Pending', data.message, 'info');
-  
-  // Pause timer briefly to show move is being processed
-  if (currentTimer) {
-    clearInterval(currentTimer);
-    currentTimer = null;
-  }
-  
-  document.getElementById('timer-status').textContent = 'Processing move...';
-  document.getElementById('timer-status').style.color = '#ffff00';
-});
-
-socket.on('move-collision', (data) => {
-  console.log('Move collision:', data);
-  showNotification('Collision!', data.message, 'warning');
-  
-  // Pause timer during collision resolution
-  pauseTimer();
-});
-
-// Real-time system handlers
-socket.on('game-ready-to-begin', (data) => {
-  console.log('Game ready to begin:', data);
-  const statusEl = document.getElementById('timer-status');
-  if (statusEl) {
-    statusEl.textContent = data.message;
-    statusEl.style.color = '#00ff00';
-  }
-  showNotification('Game Ready', `${data.message} - ${data.playersReady} players ready`, 'success');
-});
-
-socket.on('waiting-for-players', (data) => {
-  console.log('Waiting for players:', data);
-  const statusEl = document.getElementById('timer-status');
-  if (statusEl) {
-    statusEl.textContent = `${data.message} (${data.playersReady}/${data.playersNeeded})`;
-    statusEl.style.color = '#ffff00';
-  }
-});
-
-socket.on('move-queued', (data) => {
-  console.log('Move queued:', data);
-  showNotification('Move Queued', data.message, 'info');
-  
-  // Show queue indicator
-  const statusEl = document.getElementById('timer-status');
-  if (statusEl) {
-    statusEl.textContent = 'Move queued - waiting for timer';
-    statusEl.style.color = '#ffaa00';
-  }
-});
-
-socket.on('move-cancelled', (data) => {
-  console.log('Move cancelled:', data);
-  if (data.playerId === socket.id) {
-    showNotification('Move Cancelled', 'Queued move has been cancelled', 'info');
-    
-    // Clear queue indicator
-    const statusEl = document.getElementById('timer-status');
-    if (statusEl) {
-      statusEl.textContent = 'Timer counting down...';
-      statusEl.style.color = '#ff8800';
-    }
-  }
-});
-
-socket.on('cancel-queued-move-result', (data) => {
-  console.log('Cancel queued move result:', data);
-  if (data.success) {
-    showNotification('Move Cancelled', 'Queued move cancelled successfully', 'info');
-  } else {
-    showNotification('Cancel Failed', 'No move to cancel', 'warning');
-  }
-});
-
-socket.on('player-timer-state', (data) => {
-  console.log('Player timer state:', data);
-  // Update UI based on timer and queue state
-  updateTimerUI(data.timer, data.queuedMove);
-});
-
-socket.on('queued-move-state', (data) => {
-  console.log('Queued move state:', data);
-  // Update queue display
-  updateQueueDisplay(data.queuedMove);
-});
-
-socket.on('collision-contest-prompt', (data) => {
-  console.log('Collision contest prompt:', data);
-  showNotification('Collision Contest', 
-    `${data.attackingPiece.symbol} vs ${data.defendingPiece.symbol} at (${data.targetPosition.row}, ${data.targetPosition.col})`, 
-    'warning');
-  
-  // This would normally show a contest UI, but for now just show notification
-  if (data.defendingPiece.playerId === socket.id) {
-    showNotification('Defend!', 'Choose to contest or decline the battle', 'info');
-  }
-});
-
-// Chat system socket handlers
-socket.on('chat-message', (data) => {
-  console.log('Chat message received:', data);
-  addChatMessage(data);
-});
-
-socket.on('chat-history', (data) => {
-  console.log('Chat history received:', data);
-  data.messages.forEach(message => {
-    addChatMessage(message);
-  });
-});
-
-socket.on('chat-error', (data) => {
-  console.log('Chat error:', data);
-  showNotification('Chat Error', data.error, 'error');
-  updateChatStatus(`Error: ${data.error}`);
-});
-
-socket.on('player-eliminated', (data) => {
-  console.log('Player eliminated:', data);
-  showNotification('Player Eliminated', 
-    `${data.playerName} has been eliminated! (${data.eliminationReason.replace('_', ' ')})`, 
-    'warning');
-});
-
-socket.on('elimination-message', (data) => {
-  console.log('Elimination message:', data);
-  showNotification('Elimination', data.message, 'info');
-});
-
-socket.on('elimination-effects', (data) => {
-  console.log('Elimination effects:', data);
-  showNotification('Elimination Effects', data.message, 'warning');
-});
-
-socket.on('piece-removal-effect', (data) => {
-  console.log('Piece removal effect:', data);
-  // This could trigger visual effects for piece removal
-});
-
-socket.on('victory-message', (data) => {
-  console.log('Victory message:', data);
-  showNotification('Victory!', data.message, 'success');
-});
-
-socket.on('game-victory', (data) => {
-  console.log('Game victory:', data);
-  
-  // Calculate game duration
-  const gameDuration = data.gameDuration || 'Unknown';
-  
-  // Get player stats
-  const myPlayerId = socket.id;
-  const myStats = {
-    piecesKilled: 0,
-    piecesLost: 0,
-    evolutionPoints: 0
-  };
-  
-  // Calculate stats from game state
-  if (gameState && gameState.pieces) {
-    Object.values(gameState.pieces).forEach(piece => {
-      if (piece.playerId === myPlayerId) {
-        myStats.piecesKilled += piece.kills || 0;
-      }
-    });
-  }
-  
-  // Get player info
-  const myPlayer = gameState.players[myPlayerId];
-  if (myPlayer) {
-    myStats.evolutionPoints = myPlayer.evolutionBank?.totalEarned || 0;
-  }
-  
-  // Show game over screen
-  showGameOver(data.winnerName, {
-    duration: gameDuration,
-    piecesKilled: myStats.piecesKilled,
-    piecesLost: myStats.piecesLost,
-    evolutionPoints: myStats.evolutionPoints,
-    victoryType: data.victoryType
-  });
-});
-
-socket.on('territory-update', (data) => {
-  console.log('Territory update:', data);
-  // This could be used to update territory visualization
-});
-
-socket.on('game-draw', (data) => {
-  console.log('Game draw:', data);
-  showNotification('Draw!', data.message, 'info');
-});
-
-// Initialize chat system when page loads
-window.addEventListener('load', () => {
-  initializeChatSystem();
-  
-  // Add AI player button handler - removed duplicate listener
-  // The button handler is already set up in the addAIPlayer function above
-});
-
-// Start animation
-animate();
-
-console.log('EvoChess client fully initialized');
-console.log('Click on pieces to see valid moves');
-console.log('🎮 Simplified controls: Click pieces to select, drag to rotate camera');
-
-// Show initial help message
-setTimeout(() => {
-  showNotification('Controls', 
-    'Click on your pieces to select them and see valid moves. Drag anywhere else to rotate the camera.',
-    'info'
-  );
-  gameInfoEl.textContent = 'Click on your pieces to select them';
-}, 2000); 
-
-// ✅ PHASE 3: Auto-Color Assignment System
-// Colors are now assigned automatically based on player index - no manual selection needed
-console.log('🎨 Auto-color assignment system active - colors assigned by player index');
-
-// AI player event handlers
-socket.on('ai-player-added', (data) => {
-  console.log('AI player added:', data);
-  showNotification('AI Player Added', `${data.name} has joined the game!`, 'success');
-});
-
-socket.on('ai-add-failed', (data) => {
-  console.error('Failed to add AI player:', data.error);
-  showNotification('AI Error', data.error, 'error');
-});
-
-// ✅ PHASE 3: Auto-Color Assignment - Display current player's color
 function updatePlayerColorDisplay() {
   const colorDisplayEl = document.getElementById('player-color-display');
   if (!colorDisplayEl) return;

@@ -190,3 +190,39 @@ flyctl deploy
 ```
 
 And your game will be live at https://evochess.fly.dev! 🎉 
+
+## Troubleshooting Production Issues
+
+### JavaScript Not Updating After Deployment
+
+If you see errors like "Cannot read properties of null" after deployment, the browser is likely caching old JavaScript files.
+
+**Solution**: The app now uses dynamic cache busting with timestamps. If you still have issues:
+1. Force refresh your browser (Ctrl+Shift+R or Cmd+Shift+R)
+2. Clear browser cache for the site
+3. Check that the deployment completed successfully with `fly status`
+
+### WebSocket Connection Issues
+
+If the game disconnects or won't connect in production:
+1. Check the browser console for connection errors
+2. The app now logs detailed connection diagnostics
+3. Common causes:
+   - Fly.io proxy timeout (fixed with keepalive settings)
+   - SSL/TLS issues (the app auto-handles this)
+   - Firewall blocking WebSocket connections
+
+### Socket.IO Duplicate Handlers Error
+
+This was caused by duplicate event handlers in the code. Fixed by removing lines 2784-6544 in main-simple.js. 
+All socket handlers should be inside the `setupSocketListeners()` function.
+
+## Best Practices
+
+1. Always test locally before deploying
+2. Use `fly logs -f` to monitor deployment in real-time
+3. Update version numbers in index.html when making JavaScript changes
+4. Monitor WebSocket connections in production
+5. Keep your fly.toml configuration up to date
+
+And your game will be live at https://evochess.fly.dev! 🎉 

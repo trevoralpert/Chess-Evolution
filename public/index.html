@@ -654,6 +654,12 @@
       }
     });
   </script>
-  <script src="./main-simple.js?v=23&debug=true"></script>
+  <script>
+      // Dynamic cache busting for production deployments
+      const version = new Date().getTime(); // Use timestamp for automatic cache busting
+      const script = document.createElement('script');
+      script.src = `./main-simple.js?v=${version}&debug=true`;
+      document.body.appendChild(script);
+    </script>
 </body>
 </html> 
