@@ -55,6 +55,9 @@ import { showLobbyUI, hideLobbyUI, showLobbyCreation, hideLobbyCreation, showLob
 import { showStatisticsUI, hideStatisticsUI, showPersonalStats, showLeaderboard, showAchievements, showGlobalStats, updateStatsButtonStyles, refreshLeaderboard, displayPersonalStats, displayLeaderboard, displayAchievements, displayGlobalStats } from './modules/statisticsUI.js';
 import { showEvolutionUI, hideEvolutionUI, refreshEvolutionBank, updateEvolutionBank, showEvolutionChoice, hideEvolutionChoice, handleEvolutionCompleted, chooseEvolution, bankEvolutionPoints, closeEvolutionDialog, showEvolutionContextMenu, hideEvolutionContextMenu } from './modules/evolutionUI.js';
 import { showTournamentUI, hideTournamentUI, showTournamentCreation, hideTournamentCreation, createTournament, showTournamentList, updateTournamentList, updateTournamentStatus, updateBracketsDisplay } from './modules/tournamentUI.js';
+import { initializeGameState, getGameState, updateGameState, getCurrentPlayerId, setCurrentPlayerId, getGameMode, setGameMode, getIsGameActive, setGameActive, addOrUpdatePlayer, addOrUpdatePiece, getPiece, getAllPieces, getPlayerPieces, isPositionOccupied, getActivePlayer, setActivePlayer, isGameOver, resetGameState } from './modules/gameStateManager.js';
+import { setValidMoves, getValidMoves, clearValidMoves, setSelectedPieceId, getSelectedPieceId, clearSelectedPiece, setMovementMode, getMovementMode, executeMove, executeSplit, showBattleContestPrompt, hideBattleContestPrompt, showDiceBattleAnimation, showMoveChoiceDialog, closeMoveChoiceDialog } from './modules/movementBattleSystem.js';
+import { initializeGame, startGame, startGameInitialization, quitGame, resetGame, addAIPlayer, removeAIPlayer, removeAllAI, updateAIPlayersList, showAIStats, updateAIStats, startGameCountdown, handleGameOver, isGameInitialized } from './modules/gameInitialization.js';
 
 console.log('✅ Modules imported successfully');
 
