@@ -2928,7 +2928,7 @@ async function createPieceMeshOptimized(piece) {
 }
 
 // Optimized piece update function
-function updatePieceMeshOptimized(piece) {
+// ✅ REMOVED: updatePieceMeshOptimized - already imported from RenderingManager
   const mesh = pieceMeshes[piece.id];
   if (mesh) {
     const position = getWorldPosition(piece.row, piece.col);
@@ -3082,7 +3082,7 @@ function getModelHeightAdjustment(pieceType) {
 }
 
 // Helper function to create geometric shape fallbacks
-function createGeometricPiece(pieceType) {
+// ✅ REMOVED: createGeometricPiece - already imported from RenderingManager
   let geometry;
   
   switch (pieceType) {
@@ -3152,7 +3152,7 @@ function createGeometricPiece(pieceType) {
   return new THREE.Mesh(geometry);
 }
 
-function updatePieceMesh(piece) {
+// ✅ REMOVED: updatePieceMesh - already imported from RenderingManager
   const mesh = pieceMeshes[piece.id];
   if (mesh) {
     const position = getWorldPosition(piece.row, piece.col);
@@ -3205,7 +3205,7 @@ function updateUI() {
   updatePlayerColorIndicators();
 }
 
-function updatePlayerColorIndicators() {
+// ✅ REMOVED: updatePlayerColorIndicators - already imported from ColorManager
   // Find or create player color indicator div
   let colorIndicator = document.getElementById('player-color-indicator');
   if (!colorIndicator) {
