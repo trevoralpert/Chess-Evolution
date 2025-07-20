@@ -1277,31 +1277,9 @@ if (typeof THREE !== 'undefined' && THREE.TrackballControls) {
     manualCameraControls.handleWheel(e);
   });
 }
-// Set initial camera position to show both poles better
-camera.position.set(5, 5, 10);
-camera.lookAt(0, 0, 0);
-
-// Globe setup
-const globeRadius = 5;
-const sphereGeometry = new THREE.SphereGeometry(globeRadius, 64, 64);
-const sphereMaterial = new THREE.MeshStandardMaterial({ 
-  color: 0x2266aa, 
-  wireframe: false,
-  transparent: true,
-  opacity: 0.8
-});
-const globe = new THREE.Mesh(sphereGeometry, sphereMaterial);
-scene.add(globe);
-
-console.log('Globe created and added to scene');
-
-// Grid overlay
-const gridSquares = [];
-const poleMarkers = [];
-
-function createGridOverlay() {
-  try {
-    console.log('🚨 CREATEGRIDSOVERLAY FUNCTION CALLED - THIS SHOULD DEFINITELY SHOW UP! 🚨');
+// ✅ REMOVED: Duplicated Three.js setup code - already handled above
+// ✅ REMOVED: Duplicated globe and grid setup
+// ✅ REMOVED: Duplicated createGridOverlay function - already defined above
     console.log('🔧 Starting grid overlay creation...');
     
     // Use correct grid configuration
@@ -3057,42 +3035,9 @@ function createCachedTextLabel(symbol) {
   return texture;
 }
 
-// Get evolution points for a piece - PHASE 1C: Display piece BASE VALUES, not player evolution bank
-function getEvolutionPointsForPiece(piece) {
-  // Debug logging to see what data we have
-  console.log('🔍 Getting evolution points for piece:', piece.id, 'type:', piece.type);
-  console.log('🔍 Piece player ID:', piece.playerId);
-  
-  // King pieces don't have evolution points - hide their labels
-  if (piece.type === 'KING') {
-    console.log('🔍 King pieces do not have evolution points');
-    return 0;
-  }
-  
-  // PHASE 1C: Always display piece BASE VALUES (intrinsic to piece type)
-  // These are the inherent point values of pieces, NOT the player's evolution bank
-  const pieceBaseValues = {
-    'PAWN': 1,        // ✅ Pawns always show 1 point (their base value)
-    'ROOK': 5,
-    'KNIGHT': 3,
-    'BISHOP': 3,
-    'QUEEN': 9,
-    'JUMPER': 3,
-    'SUPER_JUMPER': 5,
-    'HYPER_JUMPER': 7,
-    'SPLITTER': 2,    // ✅ Splitters always show 2 points (their base value)
-    'HYBRID_QUEEN': 12,
-    'MISTRESS_JUMPER': 8
-  };
-  
-  const baseValue = pieceBaseValues[piece.type] || 1;
-  console.log('🔍 Using piece base value for', piece.type, ':', baseValue);
-  return baseValue;
-}
+// ✅ REMOVED: getEvolutionPointsForPiece - already imported from EvolutionManager
 
-// Create evolution points label with team color styling
-function createEvolutionPointsLabel(evolutionPoints, playerId) {
-  console.log('🎨 Creating evolution points label with points:', evolutionPoints, 'for player:', playerId);
+// ✅ REMOVED: createEvolutionPointsLabel - already imported from EvolutionManager
   
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
