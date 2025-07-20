@@ -4083,6 +4083,23 @@ function getValidMoves(pieceId) {
     }
   }
   
+  // Filter: Pawns and Splitters cannot move onto an occupied pole square
+  if (piece.type === 'PAWN' || piece.type === 'SPLITTER') {
+    const filtered = [];
+    validMoves.forEach(mv => {
+      const isPole = (mv.row === 0 || mv.row === GAME_CONFIG.GRID_ROWS - 1);
+      if (isPole) {
+        const key = GridUtils.getPositionKey(mv.row, mv.col);
+        if (!gameState.grid[key]) {
+          filtered.push(mv); // only keep if pole square empty
+        }
+      } else {
+        filtered.push(mv);
+      }
+    });
+    return filtered;
+  }
+  
   return validMoves;
 }
 
