@@ -58,6 +58,7 @@ import { showTournamentUI, hideTournamentUI, showTournamentCreation, hideTournam
 import { initializeGameState, getGameState, updateGameState, getCurrentPlayerId, setCurrentPlayerId, getGameMode, setGameMode, getIsGameActive, setGameActive, addOrUpdatePlayer, addOrUpdatePiece, getPiece, getAllPieces, getPlayerPieces, isPositionOccupied, getActivePlayer, setActivePlayer, isGameOver, resetGameState } from './modules/gameStateManager.js';
 import { setValidMoves, getValidMoves, clearValidMoves, setSelectedPieceId, getSelectedPieceId, clearSelectedPiece, setMovementMode, getMovementMode, executeMove, executeSplit, showBattleContestPrompt, hideBattleContestPrompt, showDiceBattleAnimation, showMoveChoiceDialog, closeMoveChoiceDialog } from './modules/movementBattleSystem.js';
 import { initializeGame, startGame, startGameInitialization, quitGame, resetGame, addAIPlayer, removeAIPlayer, removeAllAI, updateAIPlayersList, showAIStats, updateAIStats, startGameCountdown, handleGameOver, isGameInitialized } from './modules/gameInitialization.js';
+import { initializeSocket, getSocket, isSocketConnected, emitEvent, cleanupSocket, getConnectionStatus } from './modules/socketCommunication.js';
 
 console.log('✅ Modules imported successfully');
 
