@@ -32,6 +32,7 @@ import {
 } from './modules/modelUtils.js';
 
 import { PerformanceOptimizer } from './modules/performanceOptimizer.js';
+import { TransitionManager } from './modules/transitionManager.js';
 
 console.log('✅ Modules imported successfully');
 
@@ -1591,78 +1592,7 @@ let visualEffects = null;
 // Text label cache - MOVED HERE TO FIX INITIALIZATION ORDER
 const textLabelCache = new Map();
 
-// CLASS DEFINITIONS - MOVED HERE TO FIX INITIALIZATION ORDER
-// Transition manager for smooth UI transitions
-class TransitionManager {
-  constructor() {
-    this.activeTransitions = new Map();
-  }
-  
-  fadeIn(element, duration = 500) {
-    element.style.opacity = '0';
-    element.style.display = 'block';
-    
-    const startTime = Date.now();
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      element.style.opacity = progress.toString();
-      
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-    
-    animate();
-  }
-  
-  fadeOut(element, duration = 500) {
-    const startTime = Date.now();
-    const startOpacity = parseFloat(element.style.opacity) || 1;
-    
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      element.style.opacity = (startOpacity * (1 - progress)).toString();
-      
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      } else {
-        element.style.display = 'none';
-      }
-    };
-    
-    animate();
-  }
-  
-  slideIn(element, direction = 'left', duration = 500) {
-    const startTime = Date.now();
-    const startPos = direction === 'left' ? -element.offsetWidth : element.offsetWidth;
-    
-    element.style.transform = `translateX(${startPos}px)`;
-    element.style.display = 'block';
-    
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      const currentPos = startPos * (1 - this.easeOutCubic(progress));
-      element.style.transform = `translateX(${currentPos}px)`;
-      
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-    
-    animate();
-  }
-  
-  easeOutCubic(t) {
-    return 1 - Math.pow(1 - t, 3);
-  }
-}
+// CLASS DEFINITIONS - TransitionManager now imported from transitionManager.js module
 
 // Enhanced Visual Effects System
 class VisualEffectsManager {
