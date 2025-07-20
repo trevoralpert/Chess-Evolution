@@ -8,6 +8,9 @@ let mouseDownTime = 0;
 let isDragging = false;
 let mouseStartPos = { x: 0, y: 0 };
 
+// ✅ PHASE 5 FIX: Store right-click position for context menu
+let lastRightClickEvent = null;
+
 // Touch interaction state
 let touchStartTime = 0;
 let touchStartPos = { x: 0, y: 0 };
@@ -99,6 +102,17 @@ function handleMouseUp(e) {
  */
 function onRightClick(event) {
   console.log('🖱️ Right-click event triggered - onRightClick called');
+  
+  // ✅ PHASE 5: Store right-click position for context menu
+  lastRightClickEvent = {
+    clientX: event.clientX,
+    clientY: event.clientY,
+    pageX: event.pageX,
+    pageY: event.pageY
+  };
+  
+  // Make it globally accessible for other modules
+  window.lastRightClickEvent = lastRightClickEvent;
   
   // Calculate mouse position
   const rect = renderer.domElement.getBoundingClientRect();
@@ -517,5 +531,6 @@ export {
   resetMouseState,
   isCurrentlyDragging,
   mouse,
-  raycaster
+  raycaster,
+  lastRightClickEvent
 };
