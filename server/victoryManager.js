@@ -227,22 +227,34 @@ class VictoryManager {
       return validPieceCount > 0;
     });
     
-    console.log(`Victory check: ${alivePlayers.length} alive players out of ${activePlayers.length} active, ${players.length} total`);
-    alivePlayers.forEach(p => {
-      const validPieces = p.pieces.filter(pieceId => {
-        const piece = this.gameState.pieces[pieceId];
-        return piece && piece.playerId === p.id;
+    // ✅ FIXED: Only log anything if there's a meaningful victory condition to check
+    // During normal gameplay (2+ players), don't spam logs
+    const hasVictoryCondition = alivePlayers.length <= 1 || this.evolutionInProgress;
+    
+    if (hasVictoryCondition) {
+      console.log(`Victory check: ${alivePlayers.length} alive players out of ${activePlayers.length} active, ${players.length} total`);
+      alivePlayers.forEach(p => {
+        const validPieces = p.pieces.filter(pieceId => {
+          const piece = this.gameState.pieces[pieceId];
+          return piece && piece.playerId === p.id;
+        });
+        console.log(`  Player ${p.name} (${p.id}): ${validPieces.length} valid pieces, isAI: ${p.isAI}`);
+        
+        // Log piece details if evolution was recent or no pieces
+        if (this.evolutionInProgress || validPieces.length === 0) {
+          console.log(`    Piece details:`, validPieces.map(pid => {
+            const piece = this.gameState.pieces[pid];
+            return { id: pid, type: piece?.type, exists: !!piece };
+          }));
+        }
       });
-      console.log(`  Player ${p.name} (${p.id}): ${validPieces.length} valid pieces, isAI: ${p.isAI}`);
-      
-      // Log piece details if evolution was recent
-      if (this.evolutionInProgress || validPieces.length === 0) {
-        console.log(`    Piece details:`, validPieces.map(pid => {
-          const piece = this.gameState.pieces[pid];
-          return { id: pid, type: piece?.type, exists: !!piece };
-        }));
-      }
-    });
+    }
+    
+    // ✅ EARLY EXIT: If no victory condition exists, skip the rest of the checks
+    // This prevents unnecessary processing during normal gameplay
+    if (!hasVictoryCondition) {
+      return; // No logging, no processing - clean and efficient
+    }
     
     // CRITICAL FIX: Don't declare victory during active gameplay
     // Only check victory conditions if it's been at least 10 minutes since game start
