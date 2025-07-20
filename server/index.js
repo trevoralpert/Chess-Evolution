@@ -448,6 +448,7 @@ io.on('connection', (socket) => {
       playersNeeded: 1
     });
     
+    // Broadcast initial game state so the first player can see their pieces while waiting
     broadcastGameState();
   });
   
@@ -1690,7 +1691,8 @@ function startGameFromLobby(lobbyId) {
 function createStartingPieces(player) {
   const { baseRow, baseCol } = player.spawnArea;
   
-  console.log(`Creating pieces for Player ${player.index + 1} at spawn area (${baseRow}, ${baseCol})`);
+  console.log(`🎯 Creating pieces for Player ${player.index + 1} at spawn area (${baseRow}, ${baseCol})`);
+  console.log(`🎯 Player details:`, { id: player.id, name: player.name, color: player.color });
   
   // Create King
   const kingPos = GAME_CONFIG.STARTING_FORMATION.KING;
@@ -1751,6 +1753,9 @@ function createStartingPieces(player) {
     // Track piece birth for evolution system
     evolutionManager.trackPieceBirth(pawn.id, pawn);
   });
+  
+  console.log(`🎯 Created ${player.pieces.length} pieces for player ${player.name}:`, player.pieces);
+  console.log(`🎯 Total pieces in gameState:`, Object.keys(gameState.pieces).length);
 }
 
 function handleDualMovementQueen(playerId, pieceId, matchingMove, targetRow, targetCol) {
@@ -2082,6 +2087,41 @@ function handlePieceMove(playerId, moveData) {
   
   broadcastGameState();
   
+  // Check for checkmate after the move
+  for (const opponentId of Object.keys(gameState.players)) {
+    if (opponentId !== playerId) {
+      if (isKingInCheck(opponentId)) {
+        console.log(`👑 Player ${opponentId} is in CHECK!`);
+        
+        // Notify players about check
+        io.emit('player-in-check', {
+          playerId: opponentId,
+          inCheck: true
+        });
+        
+        // Check for checkmate
+        if (isPlayerInCheckmate(opponentId)) {
+          console.log(`♔ CHECKMATE! Player ${opponentId} has been checkmated!`);
+          
+          // Handle checkmate like king capture
+          victoryManager.handlePlayerElimination(opponentId, 'checkmate');
+          
+          // Notify about checkmate
+          io.emit('checkmate', {
+            playerId: opponentId,
+            checkmatedBy: playerId
+          });
+        }
+      } else {
+        // Clear check status if player is no longer in check
+        io.emit('player-in-check', {
+          playerId: opponentId,
+          inCheck: false
+        });
+      }
+    }
+  }
+  
   return { 
     success: true, 
     message: successMsg,
@@ -2183,7 +2223,7 @@ function checkMoveBasedBonuses(piece) {
     // Offer evolution choice to human players
     const pieceOwner = gameState.players[piece.playerId];
     if (pieceOwner && !pieceOwner.isAI) {
-      offerEvolution(piece.playerId, piece.id, 'equator_bonus');
+      offerEvolutionChoice(piece.playerId, piece.id, 'equator_bonus');
     }
   }
   
@@ -2212,7 +2252,7 @@ function checkMoveBasedBonuses(piece) {
     // Offer evolution choice to human players
     const pieceOwner = gameState.players[piece.playerId];
     if (pieceOwner && !pieceOwner.isAI) {
-      offerEvolution(piece.playerId, piece.id, 'circumnavigation_bonus');
+      offerEvolutionChoice(piece.playerId, piece.id, 'circumnavigation_bonus');
     }
   }
 }
@@ -3319,6 +3359,105 @@ function generateMovesForPattern(piece, pattern, mode) {
   return validMoves;
 }
 
+// Check if a position is under attack by the opponent
+function isPositionUnderAttack(row, col, byPlayerId) {
+  // Check all opponent pieces to see if any can attack this position
+  for (const pieceId in gameState.pieces) {
+    const piece = gameState.pieces[pieceId];
+    if (piece.playerId === byPlayerId) {
+      const moves = getValidMoves(pieceId);
+      for (const move of moves) {
+        if (move.row === row && move.col === col && (move.type === 'attack' || move.type === 'multi-jump-capture')) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+// Check if a player's king is in check
+function isKingInCheck(playerId) {
+  // Find the player's king
+  let kingPiece = null;
+  for (const pieceId in gameState.pieces) {
+    const piece = gameState.pieces[pieceId];
+    if (piece.type === 'KING' && piece.playerId === playerId) {
+      kingPiece = piece;
+      break;
+    }
+  }
+  
+  if (!kingPiece) return false; // No king found
+  
+  // Get all opponent player IDs
+  const opponentIds = Object.keys(gameState.players).filter(id => id !== playerId);
+  
+  // Check if any opponent can attack the king's position
+  for (const opponentId of opponentIds) {
+    if (isPositionUnderAttack(kingPiece.row, kingPiece.col, opponentId)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+// Check if a player is in checkmate
+function isPlayerInCheckmate(playerId) {
+  // First check if the king is in check
+  if (!isKingInCheck(playerId)) {
+    return false; // Not in check, so not checkmate
+  }
+  
+  // Try all possible moves for all player's pieces
+  for (const pieceId in gameState.pieces) {
+    const piece = gameState.pieces[pieceId];
+    if (piece.playerId !== playerId) continue;
+    
+    const moves = getValidMoves(pieceId);
+    for (const move of moves) {
+      // Try the move
+      const originalRow = piece.row;
+      const originalCol = piece.col;
+      const originalGridKey = GridUtils.getPositionKey(originalRow, originalCol);
+      const targetGridKey = GridUtils.getPositionKey(move.row, move.col);
+      const capturedPieceId = gameState.grid[targetGridKey];
+      let capturedPiece = null;
+      
+      // Make the move temporarily
+      piece.row = move.row;
+      piece.col = move.col;
+      gameState.grid[originalGridKey] = null;
+      if (capturedPieceId) {
+        capturedPiece = gameState.pieces[capturedPieceId];
+        delete gameState.pieces[capturedPieceId];
+      }
+      gameState.grid[targetGridKey] = pieceId;
+      
+      // Check if still in check
+      const stillInCheck = isKingInCheck(playerId);
+      
+      // Undo the move
+      piece.row = originalRow;
+      piece.col = originalCol;
+      gameState.grid[originalGridKey] = pieceId;
+      gameState.grid[targetGridKey] = capturedPieceId;
+      if (capturedPiece) {
+        gameState.pieces[capturedPieceId] = capturedPiece;
+      }
+      
+      // If this move gets us out of check, not checkmate
+      if (!stillInCheck) {
+        return false;
+      }
+    }
+  }
+  
+  // No moves get us out of check - it's checkmate
+  return true;
+}
+
 function getValidMoves(pieceId) {
   const piece = gameState.pieces[pieceId];
   if (!piece) return [];
@@ -3448,8 +3587,8 @@ function getValidMoves(pieceId) {
   } else {
     // Standard movement patterns (omnidirectional, diagonal, orthogonal, etc.)
     
-    // Special handling for jumping pieces (Jumpers and evolved jumpers)
-    if (movementPattern.jumpOver && (piece.type === 'JUMPER' || piece.type === 'SUPER_JUMPER' || piece.type === 'HYPER_JUMPER' || piece.type === 'MISTRESS_JUMPER' || piece.type === 'HYBRID_QUEEN')) {
+    // Special handling for jumping pieces (Jumpers and evolved jumpers, including vault pieces)
+    if (movementPattern.jumpOver && (piece.type === 'JUMPER' || piece.type === 'SUPER_JUMPER' || piece.type === 'HYPER_JUMPER' || piece.type === 'MISTRESS_JUMPER' || piece.type === 'HYBRID_QUEEN' || piece.type === 'VAULTBOUND' || piece.type === 'VAULTSEER' || piece.type === 'VAULTARCHER' || piece.type === 'VAULTMISTRESS' || piece.type === 'COVENANT_QUEEN')) {
       // Evolved jumpers use multi-capture system
       movementPattern.directions.forEach(dir => {
         const landingRow = piece.row + dir.row; // Landing position
@@ -3568,6 +3707,12 @@ function getValidMoves(pieceId) {
 let lastBroadcastState = null;
 
 function broadcastGameState() {
+  console.log('📡 Broadcasting game state with:', {
+    playerCount: Object.keys(gameState.players).length,
+    pieceCount: Object.keys(gameState.pieces).length,
+    pieces: Object.keys(gameState.pieces)
+  });
+  
   // Include evolution points from evolutionManager in the game state
   const playersWithEvolutionPoints = {};
   Object.keys(gameState.players).forEach(playerId => {

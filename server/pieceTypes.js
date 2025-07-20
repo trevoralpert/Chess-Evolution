@@ -128,6 +128,57 @@ const PIECE_TYPES = {
     evolutionPath: [], // Maximum evolution
     movementPattern: 'hybridQueen',
     color: '#F39C12'
+  },
+  
+  // Vault pieces - Alternative evolution path with jump abilities
+  VAULTBOUND: {
+    symbol: '🦘',
+    name: 'Vaultbound',
+    points: 4,
+    description: 'Enhanced jumping ability - Knight with extended range',
+    evolutionPath: ['VAULTSEER'],
+    movementPattern: 'vaultbound',
+    color: '#FF8C42'
+  },
+  
+  VAULTSEER: {
+    symbol: '🦘✨',
+    name: 'Vaultseer',
+    points: 7,
+    description: 'Advanced jumping ability - Can see and jump further',
+    evolutionPath: ['VAULTARCHER'],
+    movementPattern: 'vaultseer',
+    color: '#F4A460'
+  },
+  
+  VAULTARCHER: {
+    symbol: '🦘🏹',
+    name: 'Vaultarcher',
+    points: 9,
+    description: 'Master jumping ability - Precise long-range jumps',
+    evolutionPath: ['VAULTMISTRESS'],
+    movementPattern: 'vaultarcher',
+    color: '#DAA520'
+  },
+  
+  VAULTMISTRESS: {
+    symbol: '🦘👑',
+    name: 'Vaultmistress',
+    points: 10,
+    description: 'Supreme jumping mastery - Can land on enemies',
+    evolutionPath: ['COVENANT_QUEEN'],
+    movementPattern: 'vaultmistress',
+    color: '#B8860B'
+  },
+  
+  COVENANT_QUEEN: {
+    symbol: '♛🦘',
+    name: 'Covenant Queen',
+    points: 12,
+    description: 'Ultimate evolution - Queen movement with Vault abilities',
+    evolutionPath: [], // Maximum evolution
+    movementPattern: 'covenantQueen',
+    color: '#8B4513'
   }
 };
 
@@ -371,6 +422,198 @@ const MOVEMENT_PATTERNS = {
         multiCapture: {
           maxCaptures: 7, // Can capture up to 7 pieces (ALL in 2x3 area + landing)
           canLandOnEnemy: true
+        }
+      }
+    }
+  },
+  
+  // Vault pieces movement patterns
+  vaultbound: {
+    type: 'vault_knight',
+    directions: [
+      // Standard knight moves
+      { row: -2, col: -1 }, { row: -2, col: 1 },
+      { row: -1, col: -2 }, { row: -1, col: 2 },
+      { row: 1, col: -2 },  { row: 1, col: 2 },
+      { row: 2, col: -1 },  { row: 2, col: 1 },
+      // Extended vault moves (3-square L-shapes)
+      { row: -3, col: -1 }, { row: -3, col: 1 },
+      { row: -1, col: -3 }, { row: -1, col: 3 },
+      { row: 1, col: -3 },  { row: 1, col: 3 },
+      { row: 3, col: -1 },  { row: 3, col: 1 }
+    ],
+    maxDistance: 1,
+    jumpOver: true,
+    multiCapture: {
+      maxCaptures: 2,
+      canLandOnEnemy: false,
+      captureArea: '3x4' // Larger area than standard knight
+    }
+  },
+  
+  vaultseer: {
+    type: 'vault_seer',
+    directions: [
+      // All vaultbound moves
+      { row: -2, col: -1 }, { row: -2, col: 1 },
+      { row: -1, col: -2 }, { row: -1, col: 2 },
+      { row: 1, col: -2 },  { row: 1, col: 2 },
+      { row: 2, col: -1 },  { row: 2, col: 1 },
+      { row: -3, col: -1 }, { row: -3, col: 1 },
+      { row: -1, col: -3 }, { row: -1, col: 3 },
+      { row: 1, col: -3 },  { row: 1, col: 3 },
+      { row: 3, col: -1 },  { row: 3, col: 1 },
+      // Seer vision jumps (4-square patterns)
+      { row: -4, col: -1 }, { row: -4, col: 1 },
+      { row: -1, col: -4 }, { row: -1, col: 4 },
+      { row: 1, col: -4 },  { row: 1, col: 4 },
+      { row: 4, col: -1 },  { row: 4, col: 1 },
+      { row: -3, col: -2 }, { row: -3, col: 2 },
+      { row: -2, col: -3 }, { row: -2, col: 3 },
+      { row: 2, col: -3 },  { row: 2, col: 3 },
+      { row: 3, col: -2 },  { row: 3, col: 2 }
+    ],
+    maxDistance: 1,
+    jumpOver: true,
+    multiCapture: {
+      maxCaptures: 3,
+      canLandOnEnemy: false,
+      captureArea: '4x5'
+    }
+  },
+  
+  vaultarcher: {
+    type: 'vault_archer',
+    directions: [
+      // All vaultseer moves
+      { row: -2, col: -1 }, { row: -2, col: 1 },
+      { row: -1, col: -2 }, { row: -1, col: 2 },
+      { row: 1, col: -2 },  { row: 1, col: 2 },
+      { row: 2, col: -1 },  { row: 2, col: 1 },
+      { row: -3, col: -1 }, { row: -3, col: 1 },
+      { row: -1, col: -3 }, { row: -1, col: 3 },
+      { row: 1, col: -3 },  { row: 1, col: 3 },
+      { row: 3, col: -1 },  { row: 3, col: 1 },
+      { row: -4, col: -1 }, { row: -4, col: 1 },
+      { row: -1, col: -4 }, { row: -1, col: 4 },
+      { row: 1, col: -4 },  { row: 1, col: 4 },
+      { row: 4, col: -1 },  { row: 4, col: 1 },
+      { row: -3, col: -2 }, { row: -3, col: 2 },
+      { row: -2, col: -3 }, { row: -2, col: 3 },
+      { row: 2, col: -3 },  { row: 2, col: 3 },
+      { row: 3, col: -2 },  { row: 3, col: 2 },
+      // Archer precision jumps (5-square patterns)
+      { row: -5, col: -1 }, { row: -5, col: 1 },
+      { row: -1, col: -5 }, { row: -1, col: 5 },
+      { row: 1, col: -5 },  { row: 1, col: 5 },
+      { row: 5, col: -1 },  { row: 5, col: 1 },
+      { row: -4, col: -2 }, { row: -4, col: 2 },
+      { row: -2, col: -4 }, { row: -2, col: 4 },
+      { row: 2, col: -4 },  { row: 2, col: 4 },
+      { row: 4, col: -2 },  { row: 4, col: 2 }
+    ],
+    maxDistance: 1,
+    jumpOver: true,
+    multiCapture: {
+      maxCaptures: 4,
+      canLandOnEnemy: false,
+      captureArea: '5x6'
+    }
+  },
+  
+  vaultmistress: {
+    type: 'vault_mistress',
+    directions: [
+      // All vaultarcher moves
+      { row: -2, col: -1 }, { row: -2, col: 1 },
+      { row: -1, col: -2 }, { row: -1, col: 2 },
+      { row: 1, col: -2 },  { row: 1, col: 2 },
+      { row: 2, col: -1 },  { row: 2, col: 1 },
+      { row: -3, col: -1 }, { row: -3, col: 1 },
+      { row: -1, col: -3 }, { row: -1, col: 3 },
+      { row: 1, col: -3 },  { row: 1, col: 3 },
+      { row: 3, col: -1 },  { row: 3, col: 1 },
+      { row: -4, col: -1 }, { row: -4, col: 1 },
+      { row: -1, col: -4 }, { row: -1, col: 4 },
+      { row: 1, col: -4 },  { row: 1, col: 4 },
+      { row: 4, col: -1 },  { row: 4, col: 1 },
+      { row: -3, col: -2 }, { row: -3, col: 2 },
+      { row: -2, col: -3 }, { row: -2, col: 3 },
+      { row: 2, col: -3 },  { row: 2, col: 3 },
+      { row: 3, col: -2 },  { row: 3, col: 2 },
+      { row: -5, col: -1 }, { row: -5, col: 1 },
+      { row: -1, col: -5 }, { row: -1, col: 5 },
+      { row: 1, col: -5 },  { row: 1, col: 5 },
+      { row: 5, col: -1 },  { row: 5, col: 1 },
+      { row: -4, col: -2 }, { row: -4, col: 2 },
+      { row: -2, col: -4 }, { row: -2, col: 4 },
+      { row: 2, col: -4 },  { row: 2, col: 4 },
+      { row: 4, col: -2 },  { row: 4, col: 2 },
+      // Mistress mastery jumps (6-square patterns)
+      { row: -6, col: -1 }, { row: -6, col: 1 },
+      { row: -1, col: -6 }, { row: -1, col: 6 },
+      { row: 1, col: -6 },  { row: 1, col: 6 },
+      { row: 6, col: -1 },  { row: 6, col: 1 }
+    ],
+    maxDistance: 1,
+    jumpOver: true,
+    multiCapture: {
+      maxCaptures: 5,
+      canLandOnEnemy: true, // Like Mistress Jumper, can land on enemies
+      captureArea: '6x7+landing'
+    }
+  },
+  
+  covenantQueen: {
+    type: 'covenant_queen_dual',
+    dualMovement: true,
+    modes: {
+      queen: {
+        type: 'omnidirectional',
+        directions: [
+          { row: -1, col: -1 }, { row: -1, col: 0 }, { row: -1, col: 1 },
+          { row: 0, col: -1 },                        { row: 0, col: 1 },
+          { row: 1, col: -1 },  { row: 1, col: 0 },  { row: 1, col: 1 }
+        ],
+        maxDistance: 8,
+        continuous: true
+      },
+      vault: {
+        type: 'vault_ultimate',
+        directions: [
+          // All vault patterns combined
+          { row: -2, col: -1 }, { row: -2, col: 1 },
+          { row: -1, col: -2 }, { row: -1, col: 2 },
+          { row: 1, col: -2 },  { row: 1, col: 2 },
+          { row: 2, col: -1 },  { row: 2, col: 1 },
+          { row: -3, col: -1 }, { row: -3, col: 1 },
+          { row: -1, col: -3 }, { row: -1, col: 3 },
+          { row: 1, col: -3 },  { row: 1, col: 3 },
+          { row: 3, col: -1 },  { row: 3, col: 1 },
+          { row: -4, col: -1 }, { row: -4, col: 1 },
+          { row: -1, col: -4 }, { row: -1, col: 4 },
+          { row: 1, col: -4 },  { row: 1, col: 4 },
+          { row: 4, col: -1 },  { row: 4, col: 1 },
+          { row: -5, col: -1 }, { row: -5, col: 1 },
+          { row: -1, col: -5 }, { row: -1, col: 5 },
+          { row: 1, col: -5 },  { row: 1, col: 5 },
+          { row: 5, col: -1 },  { row: 5, col: 1 },
+          { row: -6, col: -1 }, { row: -6, col: 1 },
+          { row: -1, col: -6 }, { row: -1, col: 6 },
+          { row: 1, col: -6 },  { row: 1, col: 6 },
+          { row: 6, col: -1 },  { row: 6, col: 1 },
+          // Covenant-exclusive patterns
+          { row: -7, col: -1 }, { row: -7, col: 1 },
+          { row: -1, col: -7 }, { row: -1, col: 7 },
+          { row: 1, col: -7 },  { row: 1, col: 7 },
+          { row: 7, col: -1 },  { row: 7, col: 1 }
+        ],
+        jumpOver: true,
+        maxDistance: 1,
+        multiCapture: {
+          maxCaptures: 7, // Ultimate capture ability
+          canLandOnEnemy: true,
+          captureArea: '7x8+landing'
         }
       }
     }

@@ -463,6 +463,37 @@ function setupSocketListeners() {
     const { winner, loser, battleType } = data;
     console.log(`Battle result: ${winner} defeated ${loser} (${battleType})`);
   });
+  
+  // Handle check notification
+  socket.on('player-in-check', (data) => {
+    console.log('👑 Check notification:', data);
+    
+    if (data.inCheck) {
+      if (data.playerId === socket.id) {
+        showNotification('CHECK!', 'Your king is under attack!', 'warning');
+      } else {
+        const player = gameState.players[data.playerId];
+        if (player) {
+          showNotification('Check!', `${player.name}'s king is in check`, 'info');
+        }
+      }
+    }
+  });
+  
+  // Handle checkmate notification
+  socket.on('checkmate', (data) => {
+    console.log('♔ Checkmate notification:', data);
+    
+    if (data.playerId === socket.id) {
+      showNotification('CHECKMATE!', 'You have been checkmated!', 'error');
+    } else {
+      const player = gameState.players[data.playerId];
+      const checkmater = gameState.players[data.checkmatedBy];
+      if (player && checkmater) {
+        showNotification('Checkmate!', `${checkmater.name} checkmated ${player.name}!`, 'success');
+      }
+    }
+  });
 
   socket.on('piece-evolution', (data) => {
     const { pieceId, oldType, newType, position } = data;

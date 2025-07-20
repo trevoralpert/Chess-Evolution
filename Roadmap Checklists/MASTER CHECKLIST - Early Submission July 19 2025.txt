@@ -228,16 +228,18 @@ Create a fully playable, polished version of EvoChess that demonstrates complete
 - Visual yellow equator line added for clarity
 - All bonuses trigger evolution menu for human players
 
-### **Phase 8: King Circle Movement Rules (20 minutes) - 🎯 MOVEMENT RULE FIX!**
+### **Phase 8: Vault Pieces & Checkmate Logic (20 minutes) - ✅ COMPLETED!**
 - [x] **🐛 Fix Evolution Points Bug**: ✅ Fixed missing awardCircumnavigationBonus function causing NaN evolution points
 - [x] **🔧 Fix Client-Server Field Mismatch**: ✅ Fixed 'points' vs 'amount' field mismatch in evolution-point-award event
 - [x] **🖱️ Fix Right-Click Evolution**: ✅ Fixed JavaScript "before initialization" error - context menus now work perfectly!
-- [ ] **👑 King Circle Movement Rules**: Implement proper King Circle movement (move when vacant, no diagonal attacks on King)
-- [ ] **🧪 Test King Circle Mechanics**: Verify pawns can only move into King circle when vacant, not attack diagonally
-**Impact**: MEDIUM - Fixes specific movement rule violation (pawn attacking into occupied King circle)
-**Dependencies**: Phase 7 (move-based evolution system working for testing) 
-**Risk**: Medium - King Circle rules affect core movement validation
-**User Discovery**: Pawn can move into King's circle while King present - should only move when vacant
+- [x] **🦘 Implement Vault Pieces**: ✅ Added Vaultbound, Vaultseer, Vaultarcher, Vaultmistress, and Covenant Queen with jumping abilities
+- [x] **♔ Implement Checkmate Logic**: ✅ Added proper check and checkmate detection with position evaluation
+**Status**: **PHASE COMPLETE! All vault pieces implemented with unique jump patterns and checkmate system working!** ✅
+**Implementation**: 
+- Vault pieces added as alternative evolution path with knight-like jumping
+- Each vault piece has progressively larger jump patterns and capture areas
+- Checkmate detection evaluates all possible moves to escape check
+- Check notifications sent to players in real-time
 
 ### **Phase 9: Menu Polish (35 minutes) - UI ONLY, NO BACKEND CHANGES**
 - [ ] **💫 Polish Menu UI/UX**: Responsive design, smooth interactions
