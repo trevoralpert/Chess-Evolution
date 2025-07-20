@@ -260,9 +260,9 @@ const MOVEMENT_PATTERNS = {
       { row: 0, col: -1 }, // Left
       { row: 0, col: 1 }   // Right
     ],
+    // Splitter cannot capture diagonally – only orthogonally left/right
     attackDirections: [
-      { row: 1, col: -1 }, { row: 1, col: 1 },
-      { row: 0, col: -1 },  { row: 0, col: 1 }
+      { row: 0, col: -1 }, { row: 0, col: 1 }
     ],
     splitDirections: [
       { row: 1, col: 0 }, // Can split forward
@@ -431,11 +431,11 @@ const MOVEMENT_PATTERNS = {
   vaultbound: {
     type: 'vault_knight',
     directions: [
-      // Standard knight moves ONLY (2x3 L-shapes)
-      { row: -2, col: -1 }, { row: -2, col: 1 },
-      { row: -1, col: -2 }, { row: -1, col: 2 },
-      { row: 1, col: -2 },  { row: 1, col: 2 },
-      { row: 2, col: -1 },  { row: 2, col: 1 }
+      // True 2×3 L-shape (±2,±3) and (±3,±2)
+      { row: -2, col: -3 }, { row: -2, col: 3 },
+      { row: -3, col: -2 }, { row: -3, col: 2 },
+      { row: 2, col: -3 },  { row: 2, col: 3 },
+      { row: 3, col: -2 },  { row: 3, col: 2 }
     ],
     maxDistance: 1,
     jumpOver: true,
@@ -449,11 +449,10 @@ const MOVEMENT_PATTERNS = {
   vaultseer: {
     type: 'vault_seer',
     directions: [
-      // Standard knight moves ONLY (2x3 L-shapes)
-      { row: -2, col: -1 }, { row: -2, col: 1 },
-      { row: -1, col: -2 }, { row: -1, col: 2 },
-      { row: 1, col: -2 },  { row: 1, col: 2 },
-      { row: 2, col: -1 },  { row: 2, col: 1 }
+      { row: -2, col: -3 }, { row: -2, col: 3 },
+      { row: -3, col: -2 }, { row: -3, col: 2 },
+      { row: 2, col: -3 },  { row: 2, col: 3 },
+      { row: 3, col: -2 },  { row: 3, col: 2 }
     ],
     maxDistance: 1,
     jumpOver: true,
@@ -467,11 +466,10 @@ const MOVEMENT_PATTERNS = {
   vaultarcher: {
     type: 'vault_archer',
     directions: [
-      // Standard knight moves ONLY (2x3 L-shapes)
-      { row: -2, col: -1 }, { row: -2, col: 1 },
-      { row: -1, col: -2 }, { row: -1, col: 2 },
-      { row: 1, col: -2 },  { row: 1, col: 2 },
-      { row: 2, col: -1 },  { row: 2, col: 1 }
+      { row: -2, col: -3 }, { row: -2, col: 3 },
+      { row: -3, col: -2 }, { row: -3, col: 2 },
+      { row: 2, col: -3 },  { row: 2, col: 3 },
+      { row: 3, col: -2 },  { row: 3, col: 2 }
     ],
     maxDistance: 1,
     jumpOver: true,
@@ -485,11 +483,10 @@ const MOVEMENT_PATTERNS = {
   vaultmistress: {
     type: 'vault_mistress',
     directions: [
-      // Standard knight moves ONLY (2x3 L-shapes)
-      { row: -2, col: -1 }, { row: -2, col: 1 },
-      { row: -1, col: -2 }, { row: -1, col: 2 },
-      { row: 1, col: -2 },  { row: 1, col: 2 },
-      { row: 2, col: -1 },  { row: 2, col: 1 }
+      { row: -2, col: -3 }, { row: -2, col: 3 },
+      { row: -3, col: -2 }, { row: -3, col: 2 },
+      { row: 2, col: -3 },  { row: 2, col: 3 },
+      { row: 3, col: -2 },  { row: 3, col: 2 }
     ],
     maxDistance: 1,
     jumpOver: true,
@@ -519,11 +516,10 @@ const MOVEMENT_PATTERNS = {
       vault: {
         type: 'vault_ultimate',
         directions: [
-          // Standard knight moves ONLY (2x3 L-shapes)
-          { row: -2, col: -1 }, { row: -2, col: 1 },
-          { row: -1, col: -2 }, { row: -1, col: 2 },
-          { row: 1, col: -2 },  { row: 1, col: 2 },
-          { row: 2, col: -1 },  { row: 2, col: 1 }
+          { row: -2, col: -3 }, { row: -2, col: 3 },
+          { row: -3, col: -2 }, { row: -3, col: 2 },
+          { row: 2, col: -3 },  { row: 2, col: 3 },
+          { row: 3, col: -2 },  { row: 3, col: 2 }
         ],
         jumpOver: true,
         maxDistance: 1,

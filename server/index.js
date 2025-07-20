@@ -2049,6 +2049,18 @@ function handlePieceMove(playerId, moveData) {
   const targetPosKey = GridUtils.getPositionKey(targetRow, targetCol);
   const targetPieceId = gameState.grid[targetPosKey];
   
+  // Early block: Pawns/Splitters cannot move onto an occupied pole square (even enemy).
+  const destinationIsPole = (targetRow === 0 || targetRow === GAME_CONFIG.GRID_ROWS - 1);
+  if (destinationIsPole && (piece.type === 'PAWN' || piece.type === 'SPLITTER') && targetPieceId) {
+    const errorMsg = `Invalid move: ${piece.type} cannot enter occupied pole square (${targetRow}, ${targetCol})`;
+    console.log(errorMsg);
+    const playerSocket = io.sockets.sockets.get(playerId);
+    if (playerSocket) {
+      playerSocket.emit('move-result', { success: false, message: errorMsg });
+    }
+    return null;
+  }
+  
   if (targetPieceId) {
     // Position occupied - battle!
     const targetPiece = gameState.pieces[targetPieceId];
@@ -2147,6 +2159,27 @@ function handlePieceMove(playerId, moveData) {
           inCheck: false
         });
       }
+    }
+  }
+  
+  // ✅ PHASE 7: Check circumnavigation (reaching opposite pole) for all standard moves
+  const circumnavigatedPlayer = checkCircumnavigation(piece);
+  if (circumnavigatedPlayer) {
+    awardCircumnavigationBonus(circumnavigatedPlayer, piece);
+  }
+  
+  // Disallow Pawns and Splitters from entering an occupied pole square (row 0 or 19)
+  const isPoleDestination = (targetRow === 0 || targetRow === GAME_CONFIG.GRID_ROWS - 1);
+  if (isPoleDestination && (piece.type === 'PAWN' || piece.type === 'SPLITTER')) {
+    const destPosKey = GridUtils.getPositionKey(targetRow, targetCol);
+    if (gameState.grid[destPosKey]) {
+      const errorMsg = `Invalid move: ${piece.type} cannot enter occupied pole square (${targetRow}, ${targetCol})`;
+      console.log(errorMsg);
+      const playerSocket = io.sockets.sockets.get(playerId);
+      if (playerSocket) {
+        playerSocket.emit('move-result', { success: false, message: errorMsg });
+      }
+      return null;
     }
   }
   
@@ -2305,6 +2338,7 @@ function checkSplitterPositionBonus(piece) {
       playerId: piece.playerId,
       points: 8,
       piecePoints: piece.evolutionPoints,  // Send the piece's total points
+      moveCount: piece.moveCount || 0,
       position: { row: piece.row, col: piece.col }
     });
     
@@ -2341,29 +2375,41 @@ function checkCircumnavigation(piece) {
 
 // ✅ PHASE 6 BUG FIX: Add missing awardCircumnavigationBonus function
 function awardCircumnavigationBonus(player, piece) {
+  // ✅ PHASE 7 UPDATE: Award circumnavigation bonus directly to the piece rather than banking to the player
+  // Only Pawns and Splitters are eligible for circumnavigation bonus
+  if (piece.type !== 'PAWN' && piece.type !== 'SPLITTER') {
+    return; // Other piece types do not receive this bonus
+  }
   if (!player || !piece) {
     console.warn('⚠️ awardCircumnavigationBonus called with invalid parameters');
     return;
   }
   
-  // Award 8 evolution points for circumnavigation
-  const bank = evolutionManager.addEvolutionPoints(player.id, 8, 'circumnavigation');
-  console.log(`${piece.symbol} completed circumnavigation! +8 evolution points (${bank.points} total)`);
+  // Only award once per piece
+  if (piece.hasCircumnavigationBonus) return;
+  piece.hasCircumnavigationBonus = true;
+
+  // Add 8 evolution points to the piece itself
+  piece.evolutionPoints = (piece.evolutionPoints || PIECE_TYPES[piece.type].points) + 8;
+  console.log(`🎯 PHASE 7: ${piece.symbol} completed circumnavigation! Now has ${piece.evolutionPoints} evolution points`);
   
-  // Broadcast evolution point award
-  io.emit('evolution-point-award', {
+  // Broadcast circumnavigation bonus event so clients can update UI
+  io.emit('circumnavigation-bonus', {
     pieceId: piece.id,
     pieceType: piece.type,
     playerId: player.id,
     points: 8,
-    totalPoints: bank.points,
-    reason: 'circumnavigation',
+    piecePoints: piece.evolutionPoints,
+    moveCount: piece.moveCount || 0,
     position: { row: piece.row, col: piece.col }
   });
   
-  // Offer evolution choice if player has enough points and is human
-  if (player && !player.isAI && bank.points > 0) {
-    offerEvolutionChoice(player.id, piece.id, 'circumnavigation');
+  // Push updated game state so floating numbers & labels refresh
+  broadcastGameState();
+  
+  // Offer evolution choice to a human player if they own this piece
+  if (!player.isAI) {
+    offerEvolutionChoice(player.id, piece.id, 'circumnavigation_bonus');
   }
 }
 
@@ -2655,7 +2701,18 @@ function handleMultiJumpCapture(playerId, pieceId, matchingMove, targetRow, targ
   
   // Check if this is a vault piece that needs player selection
   const isVaultPiece = ['VAULTBOUND', 'VAULTSEER', 'VAULTARCHER', 'VAULTMISTRESS'].includes(piece.type);
-  const needsSelection = isVaultPiece && enemyPiecesInArea.length > 0 && maxCaptures !== 'all' && !selectedCaptures;
+  // New rule: vault pieces auto-capture lowest-value targets, no UI selection
+  const needsSelection = false;
+  if (isVaultPiece && !selectedCaptures) {
+    // Sort enemy pieces by point value ascending, then choose up to maxCaptures
+    const sortedByValue = enemyPiecesInArea.sort((a, b) => {
+      const av = PIECE_TYPES[a.piece.type]?.points || 0;
+      const bv = PIECE_TYPES[b.piece.type]?.points || 0;
+      return av - bv;
+    });
+    selectedCaptures = maxCaptures === 'all' ? sortedByValue.map(ep => ep.id)
+      : sortedByValue.slice(0, maxCaptures).map(ep => ep.id);
+  }
   
   if (needsSelection && gameState.players[playerId] && !gameState.players[playerId].isAI) {
     // Pause timers and request player selection
@@ -4075,6 +4132,9 @@ function broadcastGameState() {
   
   // Store for delta updates
   lastBroadcastState = JSON.parse(JSON.stringify(clientGameState));
+  
+  // Update check / checkmate status for all players
+  evaluateCheckStates();
 }
 
 // Optimized broadcast for specific updates
@@ -4248,3 +4308,20 @@ server.listen(PORT, () => {
   console.log(`Grid system: ${GAME_CONFIG.GRID_ROWS}x${GAME_CONFIG.GRID_COLS}`);
   console.log(`Max players: ${GAME_CONFIG.MAX_PLAYERS}`);
 });
+
+// ---------- Check / Checkmate Utilities ----------
+function evaluateCheckStates() {
+  // Loop through every player and broadcast current check / checkmate status
+  Object.keys(gameState.players).forEach(playerId => {
+    const inCheck = isKingInCheck(playerId);
+    io.emit('player-in-check', { playerId, inCheck });
+
+    // If player in check, test for checkmate
+    if (inCheck && isPlayerInCheckmate(playerId)) {
+      console.log(`♔ CHECKMATE detected against ${playerId}`);
+      const attackerId = Object.keys(gameState.players).find(id => id !== playerId);
+      victoryManager.handlePlayerElimination(playerId, 'checkmate');
+      io.emit('checkmate', { playerId, checkmatedBy: attackerId });
+    }
+  });
+}

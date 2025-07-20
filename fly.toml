@@ -1,6 +1,6 @@
 # === File: fly.toml ===
 
-app = "EvoChess"
+app = "evochess"
 primary_region = "ord"
 
 [build]
