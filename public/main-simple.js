@@ -47,6 +47,9 @@ import {
 } from './modules/gameConfig.js';
 import { initializeThreeJS, startAnimationLoop } from './modules/sceneConfig.js';
 import { initializeUIElements, getElement, setElementText, setTemporaryElementColor } from './modules/uiReferences.js';
+import { getWorldPosition } from './modules/gridFunctions.js';
+import { getEvolutionPointsForPiece, createEvolutionPointsLabel, createCachedTextLabel, createGeometricPiece, getPieceColorForPlayer } from './modules/pieceFunctions.js';
+import { formatTime, formatTimeWithColor, createTimerDisplay, formatCountdown } from './modules/timerFunctions.js';
 
 console.log('✅ Modules imported successfully');
 
@@ -620,7 +623,7 @@ function setupSocketListeners() {
         }
         
         // Create evolution effect at the piece position
-        const worldPos = getWorldPosition(piece.row, piece.col);
+        const worldPos = getWorldPosition(piece.row, piece.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
         if (visualEffects) {
           visualEffects.createEvolutionEffect(worldPos, oldType, newType);
         }
@@ -1758,8 +1761,8 @@ socket.on('piece-split', (data) => {
   showNotification(`Player ${playerIndex} Splitter Split!`, player.color, 2000);
   
   // Create split effect animation
-  const originalWorldPos = getWorldPosition(originalPosition.row, originalPosition.col);
-  const newWorldPos = getWorldPosition(newPosition.row, newPosition.col);
+  const originalWorldPos = getWorldPosition(originalPosition.row, originalPosition.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
+  const newWorldPos = getWorldPosition(newPosition.row, newPosition.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
   
   // Create splitting effect - line between original and new position
   const splitLineGeometry = new THREE.BufferGeometry().setFromPoints([
@@ -1830,8 +1833,8 @@ socket.on('jump-capture', (data) => {
   }
   
   // Create jump capture animation
-  const jumperWorldPos = getWorldPosition(jumperPosition.row, jumperPosition.col);
-  const capturedWorldPos = getWorldPosition(capturedPosition.row, capturedPosition.col);
+  const jumperWorldPos = getWorldPosition(jumperPosition.row, jumperPosition.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
+  const capturedWorldPos = getWorldPosition(capturedPosition.row, capturedPosition.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
   
   // Create arc effect showing the jump
   const jumpArcGeometry = new THREE.BufferGeometry();
@@ -1911,11 +1914,11 @@ socket.on('multi-jump-capture', (data) => {
   }
   
   // Create multi-capture visual effects
-  const jumperWorldPos = getWorldPosition(jumperPosition.row, jumperPosition.col);
+  const jumperWorldPos = getWorldPosition(jumperPosition.row, jumperPosition.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
   
   // Create effects for each captured piece
   capturedPieces.forEach((capturedPiece, index) => {
-    const capturedWorldPos = getWorldPosition(capturedPiece.row, capturedPiece.col);
+    const capturedWorldPos = getWorldPosition(capturedPiece.row, capturedPiece.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
     
     // Create lightning effect from captured piece to jumper
     const lightningGeometry = new THREE.BufferGeometry();
@@ -2230,7 +2233,7 @@ async function createPieceMesh(piece) {
 
 async function createPieceMeshOptimized(piece) {
   const player = gameState.players[piece.playerId];
-  const position = getWorldPosition(piece.row, piece.col);
+  const position = getWorldPosition(piece.row, piece.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
   
   // Get player index for consistent coloring
   const playerIndex = player.index !== undefined ? player.index : 
@@ -2345,7 +2348,7 @@ async function createPieceMeshOptimized(piece) {
   }
   
   // Add text label with piece symbol (cached)
-  const labelTexture = createCachedTextLabel(piece.symbol);
+  const labelTexture = createCachedTextLabel(piece.symbol, textLabelCache);
   const labelMaterial = new THREE.SpriteMaterial({ map: labelTexture });
   const label = new THREE.Sprite(labelMaterial);
   label.scale.set(0.5, 0.5, 1);
@@ -2359,7 +2362,7 @@ async function createPieceMeshOptimized(piece) {
     console.log('🎯 Creating evolution points label for piece:', piece.id);
     const evolutionPoints = getEvolutionPointsForPiece(piece);
     console.log('🎯 Evolution points retrieved:', evolutionPoints);
-    const evolutionLabelTexture = createEvolutionPointsLabel(evolutionPoints, piece.playerId);
+    const evolutionLabelTexture = createEvolutionPointsLabel(evolutionPoints, piece.playerId, gameState);
     console.log('🎯 Evolution label texture created:', evolutionLabelTexture);
     const evolutionLabelMaterial = new THREE.SpriteMaterial({ map: evolutionLabelTexture });
     const evolutionLabel = new THREE.Sprite(evolutionLabelMaterial);
@@ -2390,7 +2393,7 @@ async function createPieceMeshOptimized(piece) {
 function updatePieceMeshOptimized(piece) {
   const mesh = pieceMeshes[piece.id];
   if (mesh) {
-    const position = getWorldPosition(piece.row, piece.col);
+    const position = getWorldPosition(piece.row, piece.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
     console.log('🔄 POSITION UPDATE - Piece', piece.id, 'moved to:');
     console.log('  Grid position:', piece.row, piece.col);
     console.log('  World position:', position);
@@ -2419,7 +2422,7 @@ function updateEvolutionPointsLabel(mesh, piece) {
   
   if (evolutionLabel) {
     const evolutionPoints = getEvolutionPointsForPiece(piece);
-    const newTexture = createEvolutionPointsLabel(evolutionPoints, piece.playerId);
+    const newTexture = createEvolutionPointsLabel(evolutionPoints, piece.playerId, gameState);
     
     // Dispose of old texture to prevent memory leaks
     if (evolutionLabel.material.map) {
@@ -2443,104 +2446,11 @@ function updateAllEvolutionPointLabels() {
 
 // Cached text label creation - textLabelCache moved to top of file to fix initialization order
 
-function createCachedTextLabel(symbol) {
-  if (textLabelCache.has(symbol)) {
-    return textLabelCache.get(symbol);
-  }
-  
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
-  canvas.width = 64;
-  canvas.height = 64;
-  
-  context.fillStyle = 'white';
-  context.font = '32px Arial';
-  context.textAlign = 'center';
-  context.fillText(symbol, 32, 40);
-  
-  const texture = new THREE.CanvasTexture(canvas);
-  textLabelCache.set(symbol, texture);
-  
-  return texture;
-}
+// createCachedTextLabel function now imported from pieceFunctions.js module
 
-// Get evolution points for a piece - PHASE 1C: Display piece BASE VALUES, not player evolution bank
-function getEvolutionPointsForPiece(piece) {
-  // Debug logging to see what data we have
-  console.log('🔍 Getting evolution points for piece:', piece.id, 'type:', piece.type);
-  console.log('🔍 Piece player ID:', piece.playerId);
-  
-  // King pieces don't have evolution points - hide their labels
-  if (piece.type === 'KING') {
-    console.log('🔍 King pieces do not have evolution points');
-    return 0;
-  }
-  
-  // PHASE 1C: Always display piece BASE VALUES (intrinsic to piece type)
-  // These are the inherent point values of pieces, NOT the player's evolution bank
-  const pieceBaseValues = {
-    'PAWN': 1,        // ✅ Pawns always show 1 point (their base value)
-    'ROOK': 5,
-    'KNIGHT': 3,
-    'BISHOP': 3,
-    'QUEEN': 9,
-    'JUMPER': 3,
-    'SUPER_JUMPER': 5,
-    'HYPER_JUMPER': 7,
-    'SPLITTER': 2,    // ✅ Splitters always show 2 points (their base value)
-    'HYBRID_QUEEN': 12,
-    'MISTRESS_JUMPER': 8
-  };
-  
-  const baseValue = pieceBaseValues[piece.type] || 1;
-  console.log('🔍 Using piece base value for', piece.type, ':', baseValue);
-  return baseValue;
-}
+// getEvolutionPointsForPiece function now imported from pieceFunctions.js module
 
-// Create evolution points label with team color styling
-function createEvolutionPointsLabel(evolutionPoints, playerId) {
-  console.log('🎨 Creating evolution points label with points:', evolutionPoints, 'for player:', playerId);
-  
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
-  canvas.width = 128; // Double the width for better quality
-  canvas.height = 64; // Double the height for better quality
-  
-  // Get player color for styling
-  const player = gameState.players[playerId];
-  const playerIndex = player?.index !== undefined ? player.index : 
-                     Object.keys(gameState.players).indexOf(playerId);
-  
-  console.log('🎨 Player index:', playerIndex, 'Player object:', player);
-  
-  // Determine text color based on player
-  let textColor = '#FFD700'; // Gold default
-  if (playerIndex === 0) {
-    textColor = '#FF6B6B'; // Red team
-  } else if (playerIndex === 1) {
-    textColor = '#4ECDC4'; // Blue team
-  }
-  
-  console.log('🎨 Using text color:', textColor);
-  
-  // Create background with subtle glow
-  context.fillStyle = 'rgba(0, 0, 0, 0.6)';
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  
-  // Add text
-  context.fillStyle = textColor;
-  context.font = 'bold 20px Arial';
-  context.textAlign = 'center';
-  context.fillText(`${evolutionPoints}`, 32, 22);
-  
-  // Add small "pts" text
-  context.fillStyle = 'rgba(255, 255, 255, 0.7)';
-  context.font = '12px Arial';
-  context.fillText('pts', 32, 30);
-  
-  console.log('🎨 Canvas texture created successfully');
-  return new THREE.CanvasTexture(canvas);
-}
+// createEvolutionPointsLabel function now imported from pieceFunctions.js module
 
 // Model utility functions now imported from modelUtils.js module
 
@@ -2618,7 +2528,7 @@ function createGeometricPiece(pieceType) {
 function updatePieceMesh(piece) {
   const mesh = pieceMeshes[piece.id];
   if (mesh) {
-    const position = getWorldPosition(piece.row, piece.col);
+    const position = getWorldPosition(piece.row, piece.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
     mesh.position.set(position.x, position.y, position.z);
     mesh.userData.piece = piece;
     
@@ -2630,26 +2540,7 @@ function updatePieceMesh(piece) {
   }
 }
 
-function getWorldPosition(row, col) {
-  console.log('🌍 getWorldPosition called with:', {
-    row, col,
-    gridRows: gameState.gridConfig.rows,
-    gridCols: gameState.gridConfig.cols
-  });
-  
-  // Keep original piece positioning - pieces are at grid intersections/vertices
-  const { phi, theta } = gridToSpherical(
-    gameState.gridConfig.rows,
-    gameState.gridConfig.cols,
-    row,
-    col
-  );
-  
-  const position = sphericalToCartesian(WORLD_CONFIG.globeRadius + 0.35, phi, theta); // Positioned just above grid surface
-  console.log('🌍 Calculated position:', { phi, theta, position });
-  
-  return position;
-}
+// getWorldPosition function now imported from gridFunctions.js module
 
 function updateUI() {
   const playerCount = Object.keys(gameState.players).length;
@@ -2802,7 +2693,7 @@ function highlightValidMovesForMode(mode) {
   
   // Add highlights for filtered moves
   filteredMoves.forEach(move => {
-    const position = getWorldPosition(move.row, move.col);
+    const position = getWorldPosition(move.row, move.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
     
     let highlightColor, highlightGeometry;
     
@@ -2819,7 +2710,7 @@ function highlightValidMovesForMode(mode) {
         move.multiCapture.forEach(capturedPieceId => {
           const capturedPiece = gameState.pieces[capturedPieceId];
           if (capturedPiece) {
-            const capturedPosition = getWorldPosition(capturedPiece.row, capturedPiece.col);
+            const capturedPosition = getWorldPosition(capturedPiece.row, capturedPiece.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
             
             const captureGeometry = new THREE.OctahedronGeometry(0.1);
             const captureMaterial = new THREE.MeshBasicMaterial({
@@ -3538,7 +3429,7 @@ function highlightValidMoves() {
   
   // Add new highlights - create separate highlight for each move type
   validMoves.forEach(move => {
-    const position = getWorldPosition(move.row, move.col);
+    const position = getWorldPosition(move.row, move.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
     
     // Different colors and shapes for different move types
     let highlightColor, highlightGeometry;
@@ -3622,7 +3513,7 @@ function highlightSelectedPiece(pieceId) {
   const piece = gameState.pieces[pieceId];
   if (!piece) return;
   
-  const position = getWorldPosition(piece.row, piece.col);
+  const position = getWorldPosition(piece.row, piece.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
   
   // Create different selection highlights for different piece types
   if (piece.type === 'HYBRID_QUEEN') {
@@ -5749,7 +5640,7 @@ function forceRepositionAllPieces() {
   console.log('🔄 Forcing all pieces to reposition to correct height');
   Object.values(gameState.pieces || {}).forEach(piece => {
     if (pieceMeshes[piece.id]) {
-      const position = getWorldPosition(piece.row, piece.col);
+      const position = getWorldPosition(piece.row, piece.col, gameState.gridConfig.rows, gameState.gridConfig.cols);
       const mesh = pieceMeshes[piece.id];
       mesh.position.set(position.x, position.y, position.z);
       
